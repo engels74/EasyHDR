@@ -56,9 +56,11 @@ export component MainWindow inherits Window {
         }
 
         // Application list container (Requirements 5.2, 5.3, 5.4)
+        // Task 9.2: Implement application list display with proper styling
         Rectangle {
             border-width: 1px;
             border-color: #cccccc;
+            border-radius: 4px;
 
             // Empty state message (Requirement 5.4)
             if app-list.length == 0: Text {
@@ -69,47 +71,67 @@ export component MainWindow inherits Window {
 
             // Scrollable ListView for application list (Requirements 5.2, 5.3)
             if app-list.length > 0: ListView {
-                for item[index] in app-list: Rectangle {
-                    background: selected-index == index ? #e0e0e0 : Colors.transparent;
+                for item[index] in app-list: VerticalLayout {
+                    // List item row with visual highlight for selection
+                    Rectangle {
+                        // Visual highlight for selected row
+                        background: selected-index == index ? #e0e0e0 : Colors.transparent;
 
-                    HorizontalLayout {
-                        spacing: 8px;
-                        padding: 8px;
-
-                        // Application icon (32x32)
-                        Image {
-                            source: item.icon;
-                            width: 32px;
-                            height: 32px;
-                        }
-
-                        // Application name and path
-                        VerticalLayout {
-                            Text {
-                                text: item.display-name;
-                                font-weight: 600;
-                            }
-                            Text {
-                                text: item.exe-path;
-                                font-size: 11px;
-                                color: #666666;
+                        // Touch area for row click handling - covers entire row
+                        TouchArea {
+                            clicked => {
+                                selected-index = index;
                             }
                         }
 
-                        // Enabled checkbox
-                        CheckBox {
-                            checked: item.enabled;
-                            toggled => {
-                                toggle-enabled(index, self.checked);
+                        HorizontalLayout {
+                            spacing: 8px;
+                            padding: 8px;
+
+                            // Application icon (32x32)
+                            Image {
+                                source: item.icon;
+                                width: 32px;
+                                height: 32px;
+                            }
+
+                            // Application name and path with truncation
+                            VerticalLayout {
+                                spacing: 2px;
+
+                                Text {
+                                    text: item.display-name;
+                                    font-weight: 600;
+                                    font-size: 13px;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: item.exe-path;
+                                    font-size: 11px;
+                                    color: #666666;
+                                    overflow: elide;
+                                }
+                            }
+
+                            // Spacer to push checkbox to the right
+                            Rectangle {
+                                horizontal-stretch: 1;
+                            }
+
+                            // Enabled checkbox aligned to the right
+                            CheckBox {
+                                checked: item.enabled;
+                                toggled => {
+                                    toggle-enabled(index, self.checked);
+                                }
                             }
                         }
                     }
 
-                    // Touch area for row selection
-                    TouchArea {
-                        clicked => {
-                            selected-index = index;
-                        }
+                    // Row separator line
+                    Rectangle {
+                        height: 1px;
+                        background: #e5e5e5;
                     }
                 }
             }
