@@ -111,5 +111,164 @@ mod tests {
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(config.preferences.auto_start, deserialized.preferences.auto_start);
     }
+
+    #[test]
+    fn test_monitored_app_serialization_round_trip() {
+        // Create a MonitoredApp with all fields populated
+        let app = MonitoredApp {
+            id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
+            display_name: "Test Application".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\Test\\test.exe"),
+            process_name: "test".to_string(),
+            enabled: true,
+            icon_data: Some(vec![1, 2, 3, 4]), // Should be skipped in serialization
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&app).unwrap();
+
+        // Verify icon_data is not in JSON (due to #[serde(skip)])
+        assert!(!json.contains("icon_data"));
+
+        // Deserialize back
+        let deserialized: MonitoredApp = serde_json::from_str(&json).unwrap();
+
+        // Verify all fields except icon_data
+        assert_eq!(app.id, deserialized.id);
+        assert_eq!(app.display_name, deserialized.display_name);
+        assert_eq!(app.exe_path, deserialized.exe_path);
+        assert_eq!(app.process_name, deserialized.process_name);
+        assert_eq!(app.enabled, deserialized.enabled);
+
+        // icon_data should be None after deserialization
+        assert!(deserialized.icon_data.is_none());
+    }
+
+    #[test]
+    fn test_app_config_serialization_round_trip() {
+        // Create a full AppConfig with monitored apps
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
+            display_name: "Cyberpunk 2077".to_string(),
+            exe_path: PathBuf::from("C:\\Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe"),
+            process_name: "cyberpunk2077".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(),
+            display_name: "Red Dead Redemption 2".to_string(),
+            exe_path: PathBuf::from("D:\\Games\\RDR2\\RDR2.exe"),
+            process_name: "rdr2".to_string(),
+            enabled: false,
+            icon_data: None,
+        });
+        config.preferences.auto_start = true;
+        config.preferences.monitoring_interval_ms = 500;
+        config.preferences.startup_delay_ms = 5000;
+        config.preferences.show_tray_notifications = false;
+        config.window_state.x = 200;
+        config.window_state.y = 150;
+        config.window_state.width = 800;
+        config.window_state.height = 600;
+
+        // Serialize to JSON
+        let json = serde_json::to_string_pretty(&config).unwrap();
+
+        // Deserialize back
+        let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
+
+        // Verify monitored apps
+        assert_eq!(config.monitored_apps.len(), deserialized.monitored_apps.len());
+        assert_eq!(config.monitored_apps[0].id, deserialized.monitored_apps[0].id);
+        assert_eq!(config.monitored_apps[0].display_name, deserialized.monitored_apps[0].display_name);
+        assert_eq!(config.monitored_apps[0].exe_path, deserialized.monitored_apps[0].exe_path);
+        assert_eq!(config.monitored_apps[0].process_name, deserialized.monitored_apps[0].process_name);
+        assert_eq!(config.monitored_apps[0].enabled, deserialized.monitored_apps[0].enabled);
+
+        assert_eq!(config.monitored_apps[1].id, deserialized.monitored_apps[1].id);
+        assert_eq!(config.monitored_apps[1].enabled, deserialized.monitored_apps[1].enabled);
+
+        // Verify preferences
+        assert_eq!(config.preferences.auto_start, deserialized.preferences.auto_start);
+        assert_eq!(config.preferences.monitoring_interval_ms, deserialized.preferences.monitoring_interval_ms);
+        assert_eq!(config.preferences.startup_delay_ms, deserialized.preferences.startup_delay_ms);
+        assert_eq!(config.preferences.show_tray_notifications, deserialized.preferences.show_tray_notifications);
+
+        // Verify window state
+        assert_eq!(config.window_state.x, deserialized.window_state.x);
+        assert_eq!(config.window_state.y, deserialized.window_state.y);
+        assert_eq!(config.window_state.width, deserialized.window_state.width);
+        assert_eq!(config.window_state.height, deserialized.window_state.height);
+    }
+
+    #[test]
+    fn test_user_preferences_serialization_round_trip() {
+        let prefs = UserPreferences {
+            auto_start: true,
+            monitoring_interval_ms: 2000,
+            startup_delay_ms: 10000,
+            show_tray_notifications: false,
+        };
+
+        let json = serde_json::to_string(&prefs).unwrap();
+        let deserialized: UserPreferences = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(prefs.auto_start, deserialized.auto_start);
+        assert_eq!(prefs.monitoring_interval_ms, deserialized.monitoring_interval_ms);
+        assert_eq!(prefs.startup_delay_ms, deserialized.startup_delay_ms);
+        assert_eq!(prefs.show_tray_notifications, deserialized.show_tray_notifications);
+    }
+
+    #[test]
+    fn test_window_state_serialization_round_trip() {
+        let window_state = WindowState {
+            x: -100,  // Test negative coordinates
+            y: -50,
+            width: 1920,
+            height: 1080,
+        };
+
+        let json = serde_json::to_string(&window_state).unwrap();
+        let deserialized: WindowState = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(window_state.x, deserialized.x);
+        assert_eq!(window_state.y, deserialized.y);
+        assert_eq!(window_state.width, deserialized.width);
+        assert_eq!(window_state.height, deserialized.height);
+    }
+
+    #[test]
+    fn test_default_user_preferences() {
+        let prefs = UserPreferences::default();
+
+        assert_eq!(prefs.auto_start, false);
+        assert_eq!(prefs.monitoring_interval_ms, 1000);
+        assert_eq!(prefs.startup_delay_ms, 3000);
+        assert_eq!(prefs.show_tray_notifications, true);
+    }
+
+    #[test]
+    fn test_default_window_state() {
+        let window_state = WindowState::default();
+
+        assert_eq!(window_state.x, 100);
+        assert_eq!(window_state.y, 100);
+        assert_eq!(window_state.width, 600);
+        assert_eq!(window_state.height, 500);
+    }
+
+    #[test]
+    fn test_empty_config_serialization() {
+        // Test that an empty config serializes and deserializes correctly
+        let config = AppConfig::default();
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(config.monitored_apps.len(), deserialized.monitored_apps.len());
+        assert_eq!(0, deserialized.monitored_apps.len());
+    }
 }
 
