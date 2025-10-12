@@ -112,6 +112,17 @@ impl GuiController {
             Self::show_file_picker(&controller_clone);
         });
 
+        // Task 10.3: Implement application management callbacks
+        let controller_clone = controller.clone();
+        main_window.on_remove_application(move |index| {
+            Self::remove_app_at_index(&controller_clone, index);
+        });
+
+        let controller_clone = controller.clone();
+        main_window.on_toggle_enabled(move |index, enabled| {
+            Self::toggle_app_enabled(&controller_clone, index, enabled);
+        });
+
         info!("GUI callbacks connected");
 
         Ok(Self {
@@ -202,6 +213,153 @@ impl GuiController {
     #[cfg(not(windows))]
     fn show_file_picker(_controller: &Arc<Mutex<AppController>>) {
         Self::show_error_dialog("File picker is only supported on Windows");
+    }
+
+    /// Remove application at the specified index
+    ///
+    /// Gets the application UUID from the config at the specified index,
+    /// then calls controller.remove_application() to remove it.
+    ///
+    /// # Arguments
+    ///
+    /// * `controller` - Shared reference to the AppController
+    /// * `index` - Index of the application in the app list
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 5.7: Remove application from list when user clicks "Remove Selected"
+    ///
+    /// # Implementation Details
+    ///
+    /// 1. Lock the controller to access the config
+    /// 2. Get the app UUID at the specified index
+    /// 3. Call controller.remove_application() with the UUID
+    /// 4. Show error dialog if removal fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
+    /// use easyhdr::controller::AppController;
+    /// use easyhdr::gui::GuiController;
+    ///
+    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// GuiController::remove_app_at_index(&controller, 0);
+    /// ```
+    #[cfg(windows)]
+    fn remove_app_at_index(controller: &Arc<Mutex<AppController>>, index: i32) {
+        use tracing::{info, warn};
+
+        info!("Removing application at index: {}", index);
+
+        // Get the app UUID at the specified index
+        let mut controller_guard = controller.lock();
+
+        // Access the config to get the app UUID
+        let app_id = {
+            let config = controller_guard.config.lock();
+            if index < 0 || index as usize >= config.monitored_apps.len() {
+                warn!("Invalid index: {}", index);
+                drop(config);
+                drop(controller_guard);
+                Self::show_error_dialog("Invalid application index");
+                return;
+            }
+            config.monitored_apps[index as usize].id
+        };
+
+        // Remove the application
+        match controller_guard.remove_application(app_id) {
+            Ok(()) => {
+                info!("Application removed successfully");
+            }
+            Err(e) => {
+                warn!("Failed to remove application: {}", e);
+                drop(controller_guard);
+                Self::show_error_dialog(&format!("Failed to remove application: {}", e));
+            }
+        }
+    }
+
+    /// Stub implementation for non-Windows platforms
+    #[cfg(not(windows))]
+    fn remove_app_at_index(_controller: &Arc<Mutex<AppController>>, _index: i32) {
+        Self::show_error_dialog("Application management is only supported on Windows");
+    }
+
+    /// Toggle the enabled state of an application at the specified index
+    ///
+    /// Gets the application UUID from the config at the specified index,
+    /// then calls controller.toggle_app_enabled() to update the enabled state.
+    ///
+    /// # Arguments
+    ///
+    /// * `controller` - Shared reference to the AppController
+    /// * `index` - Index of the application in the app list
+    /// * `enabled` - New enabled state
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 5.7: Toggle application enabled state when user changes checkbox
+    ///
+    /// # Implementation Details
+    ///
+    /// 1. Lock the controller to access the config
+    /// 2. Get the app UUID at the specified index
+    /// 3. Call controller.toggle_app_enabled() with the UUID and new state
+    /// 4. Show error dialog if toggle fails
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
+    /// use easyhdr::controller::AppController;
+    /// use easyhdr::gui::GuiController;
+    ///
+    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// GuiController::toggle_app_enabled(&controller, 0, true);
+    /// ```
+    #[cfg(windows)]
+    fn toggle_app_enabled(controller: &Arc<Mutex<AppController>>, index: i32, enabled: bool) {
+        use tracing::{info, warn};
+
+        info!("Toggling application at index {} to enabled={}", index, enabled);
+
+        // Get the app UUID at the specified index
+        let mut controller_guard = controller.lock();
+
+        // Access the config to get the app UUID
+        let app_id = {
+            let config = controller_guard.config.lock();
+            if index < 0 || index as usize >= config.monitored_apps.len() {
+                warn!("Invalid index: {}", index);
+                drop(config);
+                drop(controller_guard);
+                Self::show_error_dialog("Invalid application index");
+                return;
+            }
+            config.monitored_apps[index as usize].id
+        };
+
+        // Toggle the enabled state
+        match controller_guard.toggle_app_enabled(app_id, enabled) {
+            Ok(()) => {
+                info!("Application enabled state updated successfully");
+            }
+            Err(e) => {
+                warn!("Failed to toggle application enabled state: {}", e);
+                drop(controller_guard);
+                Self::show_error_dialog(&format!("Failed to update application: {}", e));
+            }
+        }
+    }
+
+    /// Stub implementation for non-Windows platforms
+    #[cfg(not(windows))]
+    fn toggle_app_enabled(_controller: &Arc<Mutex<AppController>>, _index: i32, _enabled: bool) {
+        Self::show_error_dialog("Application management is only supported on Windows");
     }
 
     /// Show error dialog to the user
