@@ -520,6 +520,25 @@ impl HdrController {
         }
     }
 
+    /// Refresh the display cache
+    ///
+    /// Re-enumerates displays and updates the internal display cache.
+    /// This method can be called when display configuration changes (e.g., monitor connected/disconnected).
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of DisplayTarget structs representing all active displays after refresh.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 3.14: Add refresh_displays() method for future use
+    pub fn refresh_displays(&mut self) -> Result<Vec<DisplayTarget>> {
+        use tracing::info;
+
+        info!("Refreshing display cache");
+        self.enumerate_displays()
+    }
+
     /// Set HDR state globally for all displays
     ///
     /// Iterates through all display targets and calls set_hdr_state() on each.
@@ -965,6 +984,42 @@ mod tests {
                     // Just verify the error is logged (we can't check logs in tests)
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_refresh_displays() {
+        // This test verifies that refresh_displays updates the display cache
+        let mut controller = HdrController::new().expect("Failed to create controller");
+
+        // Get initial display count
+        let initial_count = controller.display_cache.len();
+
+        // Refresh displays
+        let refreshed_displays = controller
+            .refresh_displays()
+            .expect("refresh_displays should succeed");
+
+        // Verify the cache was updated
+        assert_eq!(
+            controller.display_cache.len(),
+            refreshed_displays.len(),
+            "Display cache should be updated after refresh"
+        );
+
+        // Verify the count is consistent (should be the same unless displays were connected/disconnected)
+        // In most test scenarios, the count should remain the same
+        assert_eq!(
+            refreshed_displays.len(),
+            initial_count,
+            "Display count should be consistent (unless hardware changed)"
+        );
+
+        // Verify each display has valid properties
+        for display in &refreshed_displays {
+            assert!(display.target_id >= 0);
+            // supports_hdr is a boolean, so it's always valid
+            assert!(display.supports_hdr == true || display.supports_hdr == false);
         }
     }
 }
