@@ -196,13 +196,15 @@ impl GuiController {
                         }
                         Err(e) => {
                             warn!("Failed to add application: {}", e);
-                            Self::show_error_dialog(&format!("Failed to add application: {}", e));
+                            // Requirement 7.1, 7.4: Show user-friendly error dialog
+                            Self::show_error_dialog_from_error(&e);
                         }
                     }
                 }
                 Err(e) => {
                     warn!("Failed to extract metadata from {:?}: {}", path, e);
-                    Self::show_error_dialog(&format!("Failed to extract application metadata: {}", e));
+                    // Requirement 7.1, 7.4: Show user-friendly error dialog
+                    Self::show_error_dialog_from_error(&e);
                 }
             }
         } else {
@@ -278,7 +280,8 @@ impl GuiController {
             Err(e) => {
                 warn!("Failed to remove application: {}", e);
                 drop(controller_guard);
-                Self::show_error_dialog(&format!("Failed to remove application: {}", e));
+                // Requirement 7.1, 7.4: Show user-friendly error dialog
+                Self::show_error_dialog_from_error(&e);
             }
         }
     }
@@ -352,7 +355,8 @@ impl GuiController {
             Err(e) => {
                 warn!("Failed to toggle application enabled state: {}", e);
                 drop(controller_guard);
-                Self::show_error_dialog(&format!("Failed to update application: {}", e));
+                // Requirement 7.1, 7.4: Show user-friendly error dialog
+                Self::show_error_dialog_from_error(&e);
             }
         }
     }
@@ -363,7 +367,7 @@ impl GuiController {
         Self::show_error_dialog("Application management is only supported on Windows");
     }
 
-    /// Show error dialog to the user
+    /// Show error dialog to the user with a string message
     ///
     /// Displays a modal error dialog with the provided message.
     ///
@@ -390,7 +394,7 @@ impl GuiController {
         info!("Showing error dialog: {}", message);
 
         rfd::MessageDialog::new()
-            .set_title("Error")
+            .set_title("EasyHDR - Error")
             .set_description(message)
             .set_buttons(rfd::MessageButtons::Ok)
             .show();
@@ -400,6 +404,62 @@ impl GuiController {
     #[cfg(not(windows))]
     fn show_error_dialog(message: &str) {
         eprintln!("Error: {}", message);
+    }
+
+    /// Show error dialog with user-friendly error message from EasyHdrError
+    ///
+    /// Displays a modal error dialog with a user-friendly message generated
+    /// from the EasyHdrError. This function uses get_user_friendly_error()
+    /// to convert technical errors into messages suitable for end users.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The EasyHdrError to display
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 7.1: Show modal dialog with user-friendly error message
+    /// - Requirement 7.2: Show "Your display doesn't support HDR" for HdrNotSupported
+    /// - Requirement 7.3: Show "Unable to control HDR - check display drivers" for driver issues
+    /// - Requirement 7.4: Show error dialog with context for config errors
+    /// - Requirement 7.5: Provide troubleshooting hints in error messages
+    /// - Requirement 7.6: Include OK button to dismiss
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use easyhdr::gui::GuiController;
+    /// use easyhdr::error::EasyHdrError;
+    ///
+    /// let error = EasyHdrError::HdrNotSupported;
+    /// GuiController::show_error_dialog_from_error(&error);
+    /// ```
+    #[cfg(windows)]
+    fn show_error_dialog_from_error(error: &easyhdr::error::EasyHdrError) {
+        use easyhdr::error::get_user_friendly_error;
+        use tracing::{info, error as log_error};
+
+        // Log the technical error details
+        log_error!("Error occurred: {}", error);
+
+        // Get user-friendly message
+        let message = get_user_friendly_error(error);
+
+        info!("Showing error dialog with user-friendly message: {}", message);
+
+        // Show the dialog with the user-friendly message
+        rfd::MessageDialog::new()
+            .set_title("EasyHDR - Error")
+            .set_description(&message)
+            .set_buttons(rfd::MessageButtons::Ok)
+            .show();
+    }
+
+    /// Stub implementation for non-Windows platforms
+    #[cfg(not(windows))]
+    fn show_error_dialog_from_error(error: &easyhdr::error::EasyHdrError) {
+        use easyhdr::error::get_user_friendly_error;
+        eprintln!("Error: {}", get_user_friendly_error(error));
     }
 
     /// Run the GUI event loop with state synchronization
@@ -522,6 +582,168 @@ impl GuiController {
 
         info!("GUI event loop stopped");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use easyhdr::error::EasyHdrError;
+
+    /// Test that error messages are properly formatted for different error types
+    ///
+    /// This test verifies that the get_user_friendly_error function returns
+    /// appropriate user-friendly messages for each error type.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 7.2: Show "Your display doesn't support HDR" for HdrNotSupported
+    /// - Requirement 7.3: Show "Unable to control HDR - check display drivers" for driver issues
+    /// - Requirement 7.4: Show error dialog with context for config errors
+    /// - Requirement 7.5: Provide troubleshooting hints in error messages
+    #[test]
+    fn test_user_friendly_error_messages() {
+        use easyhdr::error::get_user_friendly_error;
+
+        // Test HDR not supported error
+        let error = EasyHdrError::HdrNotSupported;
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("display doesn't support HDR"),
+            "Expected HDR not supported message, got: {}", message);
+        assert!(message.contains("hardware specifications"),
+            "Expected troubleshooting hint about hardware, got: {}", message);
+
+        // Test HDR control failed error
+        let error = EasyHdrError::HdrControlFailed("test error".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Unable to control HDR"),
+            "Expected HDR control error message, got: {}", message);
+        assert!(message.contains("display drivers"),
+            "Expected troubleshooting hint about drivers, got: {}", message);
+
+        // Test driver error
+        let error = EasyHdrError::DriverError("test driver error".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Unable to control HDR"),
+            "Expected driver error message, got: {}", message);
+        assert!(message.contains("display drivers"),
+            "Expected troubleshooting hint about drivers, got: {}", message);
+
+        // Test configuration error
+        let error = EasyHdrError::ConfigError("test config error".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("configuration"),
+            "Expected configuration error message, got: {}", message);
+        assert!(message.contains("settings may not persist"),
+            "Expected troubleshooting hint about persistence, got: {}", message);
+
+        // Test process monitor error
+        let error = EasyHdrError::ProcessMonitorError("test monitor error".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("monitor processes"),
+            "Expected process monitor error message, got: {}", message);
+        assert!(message.contains("may not function correctly"),
+            "Expected troubleshooting hint about functionality, got: {}", message);
+    }
+
+    /// Test that error messages contain appropriate troubleshooting hints
+    ///
+    /// This test verifies that error messages include helpful guidance
+    /// for users to resolve common issues.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 7.5: Provide troubleshooting hints in error messages
+    #[test]
+    fn test_error_messages_contain_troubleshooting_hints() {
+        use easyhdr::error::get_user_friendly_error;
+
+        // HDR not supported should mention hardware
+        let error = EasyHdrError::HdrNotSupported;
+        let message = get_user_friendly_error(&error);
+        assert!(message.to_lowercase().contains("hardware") ||
+                message.to_lowercase().contains("specifications"),
+            "Expected hardware troubleshooting hint, got: {}", message);
+
+        // Driver errors should mention updating drivers
+        let error = EasyHdrError::DriverError("test".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.to_lowercase().contains("driver"),
+            "Expected driver troubleshooting hint, got: {}", message);
+
+        // Config errors should mention settings persistence
+        let error = EasyHdrError::ConfigError("test".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.to_lowercase().contains("settings") ||
+                message.to_lowercase().contains("persist"),
+            "Expected settings troubleshooting hint, got: {}", message);
+    }
+
+    /// Test that error messages are user-friendly and not overly technical
+    ///
+    /// This test verifies that error messages avoid technical jargon
+    /// and are suitable for end users.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 7.1: Show modal dialog with user-friendly error message
+    #[test]
+    fn test_error_messages_are_user_friendly() {
+        use easyhdr::error::get_user_friendly_error;
+
+        let errors = vec![
+            EasyHdrError::HdrNotSupported,
+            EasyHdrError::HdrControlFailed("test".to_string()),
+            EasyHdrError::DriverError("test".to_string()),
+            EasyHdrError::ConfigError("test".to_string()),
+            EasyHdrError::ProcessMonitorError("test".to_string()),
+        ];
+
+        for error in errors {
+            let message = get_user_friendly_error(&error);
+
+            // Message should not be empty
+            assert!(!message.is_empty(), "Error message should not be empty");
+
+            // Message should be reasonably long (at least 20 characters)
+            assert!(message.len() >= 20,
+                "Error message too short: {}", message);
+
+            // Message should not contain raw error details (like "Error: ")
+            // unless it's a fallback message
+            if !message.starts_with("An unexpected error occurred") {
+                assert!(!message.contains("Error: "),
+                    "User-friendly message should not contain 'Error: ' prefix: {}", message);
+            }
+        }
+    }
+
+    /// Test that specific error types produce specific messages
+    ///
+    /// This test verifies the exact requirements for specific error messages.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 7.2: Show "Your display doesn't support HDR" for HdrNotSupported
+    /// - Requirement 7.3: Show "Unable to control HDR - check display drivers" for driver issues
+    #[test]
+    fn test_specific_error_messages() {
+        use easyhdr::error::get_user_friendly_error;
+
+        // Requirement 7.2: HDR not supported message
+        let error = EasyHdrError::HdrNotSupported;
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("display doesn't support HDR") ||
+                message.contains("display does not support HDR"),
+            "Expected 'display doesn't support HDR' message, got: {}", message);
+
+        // Requirement 7.3: Driver error message
+        let error = EasyHdrError::DriverError("test".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Unable to control HDR"),
+            "Expected 'Unable to control HDR' message, got: {}", message);
+        assert!(message.to_lowercase().contains("driver"),
+            "Expected message to mention drivers, got: {}", message);
     }
 }
 
