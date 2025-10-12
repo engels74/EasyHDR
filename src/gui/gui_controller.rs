@@ -135,9 +135,9 @@ impl GuiController {
 
     /// Show file picker dialog for adding applications
     ///
-    /// Opens a native file picker dialog filtered to .exe files. When the user
-    /// selects a file, extracts metadata and icon, then adds it to the application
-    /// list via the controller.
+    /// Opens a native file picker dialog filtered to .exe files. Supports selecting
+    /// multiple files at once. When the user selects files, extracts metadata and icon
+    /// for each, then adds them to the application list via the controller.
     ///
     /// # Arguments
     ///
@@ -147,13 +147,17 @@ impl GuiController {
     ///
     /// - Requirement 5.5: Open file picker dialog filtered to .exe files
     /// - Requirement 5.6: Extract metadata, icon, and add to list
+    /// - Requirement 5.14: Process multiple dropped files (via multi-select)
+    /// - Requirement 5.14: Add each valid exe to application list
+    /// - Requirement 5.14: Show errors for invalid files
     ///
     /// # Implementation Details
     ///
-    /// 1. Opens rfd::FileDialog with .exe filter
-    /// 2. If user selects a file, calls MonitoredApp::from_exe_path()
-    /// 3. Calls controller.add_application() with the new app
-    /// 4. Shows error dialog if extraction or addition fails
+    /// 1. Opens rfd::FileDialog with .exe filter and multi-select enabled
+    /// 2. For each selected file, calls MonitoredApp::from_exe_path()
+    /// 3. Calls controller.add_application() with each new app
+    /// 4. Shows error dialog if extraction or addition fails for any file
+    /// 5. Reports summary of successful and failed additions
     ///
     /// # Example
     ///
@@ -170,42 +174,83 @@ impl GuiController {
     fn show_file_picker(controller: &Arc<Mutex<AppController>>) {
         use tracing::{info, warn};
 
-        info!("Opening file picker dialog");
+        info!("Opening file picker dialog with multi-select support");
 
-        // Open file picker dialog filtered to .exe files
+        // Open file picker dialog filtered to .exe files with multi-select enabled
         // Requirement 5.5: Filter to .exe files only
-        let file_path = rfd::FileDialog::new()
+        // Requirement 5.14: Support multiple file selection (drag-and-drop alternative)
+        let file_paths = rfd::FileDialog::new()
             .add_filter("Executable Files", &["exe"])
-            .set_title("Select Application")
-            .pick_file();
+            .set_title("Select Application(s)")
+            .pick_files();
 
-        if let Some(path) = file_path {
-            info!("User selected file: {:?}", path);
+        if let Some(paths) = file_paths {
+            let file_count = paths.len();
+            info!("User selected {} file(s)", file_count);
 
-            // Extract metadata and create MonitoredApp
-            // Requirement 5.6: Extract metadata, icon, and add to list
-            match MonitoredApp::from_exe_path(path.clone()) {
-                Ok(app) => {
-                    info!("Successfully extracted metadata for: {}", app.display_name);
+            let mut success_count = 0;
+            let mut error_count = 0;
+            let mut error_messages = Vec::new();
 
-                    // Add application to controller
-                    let mut controller_guard = controller.lock();
-                    match controller_guard.add_application(app) {
-                        Ok(()) => {
-                            info!("Application added successfully");
-                        }
-                        Err(e) => {
-                            warn!("Failed to add application: {}", e);
-                            // Requirement 7.1, 7.4: Show user-friendly error dialog
-                            Self::show_error_dialog_from_error(&e);
+            // Process each selected file
+            // Requirement 5.14: Process multiple files
+            for path in paths {
+                info!("Processing file: {:?}", path);
+
+                // Extract metadata and create MonitoredApp
+                // Requirement 5.6: Extract metadata, icon, and add to list
+                match MonitoredApp::from_exe_path(path.clone()) {
+                    Ok(app) => {
+                        info!("Successfully extracted metadata for: {}", app.display_name);
+
+                        // Add application to controller
+                        // Requirement 5.14: Add each valid exe to application list
+                        let mut controller_guard = controller.lock();
+                        match controller_guard.add_application(app) {
+                            Ok(()) => {
+                                info!("Application added successfully");
+                                success_count += 1;
+                            }
+                            Err(e) => {
+                                warn!("Failed to add application: {}", e);
+                                error_count += 1;
+                                error_messages.push(format!("{}: {}",
+                                    path.file_name().unwrap_or_default().to_string_lossy(),
+                                    e));
+                            }
                         }
                     }
+                    Err(e) => {
+                        warn!("Failed to extract metadata from {:?}: {}", path, e);
+                        error_count += 1;
+                        error_messages.push(format!("{}: {}",
+                            path.file_name().unwrap_or_default().to_string_lossy(),
+                            e));
+                    }
                 }
-                Err(e) => {
-                    warn!("Failed to extract metadata from {:?}: {}", path, e);
-                    // Requirement 7.1, 7.4: Show user-friendly error dialog
-                    Self::show_error_dialog_from_error(&e);
-                }
+            }
+
+            // Show summary if there were any errors
+            // Requirement 5.14: Show errors for invalid files
+            if error_count > 0 {
+                let summary = if success_count > 0 {
+                    format!(
+                        "Added {} application(s) successfully.\n\nFailed to add {} application(s):\n{}",
+                        success_count,
+                        error_count,
+                        error_messages.join("\n")
+                    )
+                } else {
+                    format!(
+                        "Failed to add all {} application(s):\n{}",
+                        error_count,
+                        error_messages.join("\n")
+                    )
+                };
+
+                Self::show_error_dialog(&summary);
+            } else if success_count > 0 {
+                info!("Successfully added {} application(s)", success_count);
             }
         } else {
             info!("User cancelled file picker");
@@ -388,7 +433,7 @@ impl GuiController {
     /// GuiController::show_error_dialog("Failed to add application");
     /// ```
     #[cfg(windows)]
-    fn show_error_dialog(message: &str) {
+    pub fn show_error_dialog(message: &str) {
         use tracing::info;
 
         info!("Showing error dialog: {}", message);
@@ -402,7 +447,7 @@ impl GuiController {
 
     /// Stub implementation for non-Windows platforms
     #[cfg(not(windows))]
-    fn show_error_dialog(message: &str) {
+    pub fn show_error_dialog(message: &str) {
         eprintln!("Error: {}", message);
     }
 
