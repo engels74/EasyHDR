@@ -1,21 +1,136 @@
 // Main window UI definition for EasyHDR
-// This is a placeholder that will be fully implemented in task 9
+// Implements task 9.1: Create main window UI definition
+// Requirements: 5.1, 5.2, 5.3, 5.4, 5.8, 5.9
 
-import { Button } from "std-widgets.slint";
+import { Button, ListView, CheckBox } from "std-widgets.slint";
+
+// AppListItem struct represents a configured application in the list
+// Fields: id (UUID), display-name (app name), exe-path (full path), enabled (checkbox state), icon (app icon)
+export struct AppListItem {
+    id: string,
+    display-name: string,
+    exe-path: string,
+    enabled: bool,
+    icon: image,
+}
 
 export component MainWindow inherits Window {
     title: "EasyHDR";
     preferred-width: 600px;
     preferred-height: 500px;
-    
+
+    // Properties
+    in-out property <[AppListItem]> app-list: [];
+    in-out property <bool> hdr-enabled: false;
+    in-out property <int> selected-index: -1;
+
+    // Callbacks
+    callback add-application();
+    callback remove-application(int);
+    callback toggle-enabled(int, bool);
+    callback minimize-to-tray();
+
     VerticalLayout {
         padding: 16px;
-        Text {
-            text: "EasyHDR - Placeholder UI";
-            font-size: 18px;
+        spacing: 12px;
+
+        // HDR Status indicator (Requirement 5.8)
+        // Shows colored circle (green for ON, red for OFF) and text label
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "HDR Status:";
+                font-size: 14px;
+            }
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                background: hdr-enabled ? #00ff00 : #ff0000;
+            }
+            Text {
+                text: hdr-enabled ? "ON" : "OFF";
+                font-size: 14px;
+                font-weight: 700;
+            }
         }
-        Text {
-            text: "Full UI will be implemented in task 9";
+
+        // Application list container (Requirements 5.2, 5.3, 5.4)
+        Rectangle {
+            border-width: 1px;
+            border-color: #cccccc;
+
+            // Empty state message (Requirement 5.4)
+            if app-list.length == 0: Text {
+                text: "No applications configured. Click 'Add Application' to get started.";
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            // Scrollable ListView for application list (Requirements 5.2, 5.3)
+            if app-list.length > 0: ListView {
+                for item[index] in app-list: Rectangle {
+                    background: selected-index == index ? #e0e0e0 : Colors.transparent;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        padding: 8px;
+
+                        // Application icon (32x32)
+                        Image {
+                            source: item.icon;
+                            width: 32px;
+                            height: 32px;
+                        }
+
+                        // Application name and path
+                        VerticalLayout {
+                            Text {
+                                text: item.display-name;
+                                font-weight: 600;
+                            }
+                            Text {
+                                text: item.exe-path;
+                                font-size: 11px;
+                                color: #666666;
+                            }
+                        }
+
+                        // Enabled checkbox
+                        CheckBox {
+                            checked: item.enabled;
+                            toggled => {
+                                toggle-enabled(index, self.checked);
+                            }
+                        }
+                    }
+
+                    // Touch area for row selection
+                    TouchArea {
+                        clicked => {
+                            selected-index = index;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom toolbar with buttons (Requirement 5.9)
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Add Application";
+                clicked => {
+                    add-application();
+                }
+            }
+            Button {
+                text: "Remove Selected";
+                enabled: selected-index >= 0;
+                clicked => {
+                    remove-application(selected-index);
+                }
+            }
         }
     }
 }
