@@ -2,6 +2,8 @@
 //!
 //! This module defines the data structures used for application configuration.
 
+use crate::error::Result;
+use crate::utils::{extract_display_name_from_exe, extract_icon_from_exe};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -22,6 +24,107 @@ pub struct MonitoredApp {
     /// Cached icon data (not persisted to config file)
     #[serde(skip)]
     pub icon_data: Option<Vec<u8>>,
+}
+
+impl MonitoredApp {
+    /// Create a MonitoredApp from an executable path
+    ///
+    /// This factory method extracts all metadata from the executable:
+    /// - Display name from file metadata (FileDescription) or filename
+    /// - Icon from executable resources
+    /// - Process name from filename (lowercase, without extension)
+    ///
+    /// # Arguments
+    ///
+    /// * `exe_path` - Path to the executable file
+    ///
+    /// # Returns
+    ///
+    /// Returns a fully populated MonitoredApp instance with:
+    /// - A new UUID
+    /// - Display name extracted from metadata
+    /// - Icon data cached in memory
+    /// - Process name extracted from filename
+    /// - Enabled state set to true by default
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The path does not exist
+    /// - The path is not a file
+    /// - The filename cannot be extracted
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 1.1: Store display name, executable path, process name, UUID, and enabled state
+    /// - Requirement 1.2: Extract display name from file metadata with fallback to filename
+    /// - Requirement 1.3: Extract and cache application icon
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::path::PathBuf;
+    /// use easyhdr::config::models::MonitoredApp;
+    ///
+    /// let path = PathBuf::from("C:\\Games\\MyGame\\game.exe");
+    /// let app = MonitoredApp::from_exe_path(path)?;
+    /// assert_eq!(app.process_name, "game");
+    /// assert!(app.enabled);
+    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
+    /// ```
+    pub fn from_exe_path(exe_path: PathBuf) -> Result<Self> {
+        use crate::error::EasyHdrError;
+
+        // Validate that the path exists and is a file
+        if !exe_path.exists() {
+            return Err(EasyHdrError::ConfigError(format!(
+                "Executable path does not exist: {:?}",
+                exe_path
+            )));
+        }
+
+        if !exe_path.is_file() {
+            return Err(EasyHdrError::ConfigError(format!(
+                "Path is not a file: {:?}",
+                exe_path
+            )));
+        }
+
+        // Extract display name from metadata (with fallback to filename)
+        let display_name = extract_display_name_from_exe(&exe_path)?;
+
+        // Extract process name from filename (lowercase, without extension)
+        let process_name = exe_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| {
+                EasyHdrError::ConfigError(format!(
+                    "Failed to extract filename from path: {:?}",
+                    exe_path
+                ))
+            })?
+            .to_lowercase();
+
+        // Extract icon from executable (gracefully handles failures)
+        let icon_data = match extract_icon_from_exe(&exe_path) {
+            Ok(data) if !data.is_empty() => Some(data),
+            Ok(_) => None, // Empty data means extraction failed gracefully
+            Err(e) => {
+                // Log warning but don't fail - icon is optional
+                tracing::warn!("Failed to extract icon from {:?}: {}", exe_path, e);
+                None
+            }
+        };
+
+        Ok(Self {
+            id: Uuid::new_v4(),
+            display_name,
+            exe_path,
+            process_name,
+            enabled: true, // Default to enabled
+            icon_data,
+        })
+    }
 }
 
 /// Top-level application configuration
@@ -269,6 +372,85 @@ mod tests {
 
         assert_eq!(config.monitored_apps.len(), deserialized.monitored_apps.len());
         assert_eq!(0, deserialized.monitored_apps.len());
+    }
+
+    #[test]
+    fn test_from_exe_path_nonexistent_file() {
+        // Test that from_exe_path returns an error for a nonexistent file
+        let path = PathBuf::from("C:\\NonExistent\\Path\\app.exe");
+        let result = MonitoredApp::from_exe_path(path);
+
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("does not exist"));
+        }
+    }
+
+    #[test]
+    fn test_from_exe_path_process_name_extraction() {
+        // Test process name extraction from various path formats
+        // This test uses the current executable as a real file that exists
+        let current_exe = std::env::current_exe().unwrap();
+
+        let result = MonitoredApp::from_exe_path(current_exe.clone());
+
+        // Should succeed
+        assert!(result.is_ok());
+
+        let app = result.unwrap();
+
+        // Process name should be lowercase filename without extension
+        let expected_process_name = current_exe
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap()
+            .to_lowercase();
+
+        assert_eq!(app.process_name, expected_process_name);
+        assert_eq!(app.exe_path, current_exe);
+        assert!(app.enabled); // Should default to enabled
+        assert!(!app.display_name.is_empty()); // Should have a display name
+    }
+
+    #[test]
+    fn test_from_exe_path_default_enabled() {
+        // Test that newly created apps are enabled by default
+        let current_exe = std::env::current_exe().unwrap();
+        let result = MonitoredApp::from_exe_path(current_exe);
+
+        assert!(result.is_ok());
+        let app = result.unwrap();
+        assert!(app.enabled);
+    }
+
+    #[test]
+    fn test_from_exe_path_unique_uuid() {
+        // Test that each call to from_exe_path generates a unique UUID
+        let current_exe = std::env::current_exe().unwrap();
+
+        let app1 = MonitoredApp::from_exe_path(current_exe.clone()).unwrap();
+        let app2 = MonitoredApp::from_exe_path(current_exe).unwrap();
+
+        // UUIDs should be different
+        assert_ne!(app1.id, app2.id);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_from_exe_path_stub_implementation() {
+        // On non-Windows platforms, test that the stub implementation works
+        let current_exe = std::env::current_exe().unwrap();
+        let result = MonitoredApp::from_exe_path(current_exe.clone());
+
+        // Should succeed even on non-Windows
+        assert!(result.is_ok());
+
+        let app = result.unwrap();
+
+        // Should have basic metadata
+        assert!(!app.display_name.is_empty());
+        assert!(!app.process_name.is_empty());
+        assert_eq!(app.exe_path, current_exe);
     }
 }
 
