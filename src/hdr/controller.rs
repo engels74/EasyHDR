@@ -397,18 +397,205 @@ impl HdrController {
     }
 
     /// Set HDR state for a single display
+    ///
+    /// Uses DisplayConfigSetDeviceInfo with version-specific structures to enable
+    /// or disable HDR on a single display.
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The display target to control
+    /// * `enable` - True to enable HDR, false to disable
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) if the operation succeeded, or an error if it failed.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 3.8: Use DISPLAYCONFIG_SET_HDR_STATE for Windows 11 24H2+
+    /// - Requirement 3.9: Use DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE for older Windows
+    /// - Requirement 3.11: Add 100ms delay after DisplayConfigSetDeviceInfo call
     #[allow(dead_code)]
-    pub fn set_hdr_state(&self, _target: &DisplayTarget, _enable: bool) -> Result<()> {
-        // TODO: Implement HDR control
-        // This will be implemented in task 4
-        Ok(())
+    pub fn set_hdr_state(&self, target: &DisplayTarget, enable: bool) -> Result<()> {
+        #[cfg(windows)]
+        {
+            use crate::hdr::windows_api::{
+                DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE, DISPLAYCONFIG_SET_HDR_STATE,
+            };
+            use tracing::{debug, info};
+            use windows::Win32::Graphics::Gdi::DisplayConfigSetDeviceInfo;
+
+            match self.windows_version {
+                WindowsVersion::Windows11_24H2 => {
+                    // Windows 11 24H2+: Use DISPLAYCONFIG_SET_HDR_STATE
+                    let mut set_state = DISPLAYCONFIG_SET_HDR_STATE::new(
+                        target.adapter_id,
+                        target.target_id,
+                        enable,
+                    );
+
+                    debug!(
+                        "Setting HDR state (24H2+) for display (adapter={:#x}:{:#x}, target={}): {}",
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id,
+                        if enable { "ON" } else { "OFF" }
+                    );
+
+                    unsafe {
+                        DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _)
+                            .map_err(|e| {
+                                EasyHdrError::HdrControlFailed(format!(
+                                    "Failed to set HDR state (24H2+): {}",
+                                    e
+                                ))
+                            })?;
+                    }
+
+                    // Add 100ms delay after DisplayConfigSetDeviceInfo call
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+
+                    info!(
+                        "Successfully set HDR {} for display (adapter={:#x}:{:#x}, target={})",
+                        if enable { "ON" } else { "OFF" },
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id
+                    );
+
+                    Ok(())
+                }
+                WindowsVersion::Windows10 | WindowsVersion::Windows11 => {
+                    // Windows 10/11 (before 24H2): Use DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE
+                    let mut set_state = DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE::new(
+                        target.adapter_id,
+                        target.target_id,
+                        enable,
+                    );
+
+                    debug!(
+                        "Setting HDR state (legacy) for display (adapter={:#x}:{:#x}, target={}): {}",
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id,
+                        if enable { "ON" } else { "OFF" }
+                    );
+
+                    unsafe {
+                        DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _)
+                            .map_err(|e| {
+                                EasyHdrError::HdrControlFailed(format!(
+                                    "Failed to set advanced color state: {}",
+                                    e
+                                ))
+                            })?;
+                    }
+
+                    // Add 100ms delay after DisplayConfigSetDeviceInfo call
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+
+                    info!(
+                        "Successfully set HDR {} for display (adapter={:#x}:{:#x}, target={})",
+                        if enable { "ON" } else { "OFF" },
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id
+                    );
+
+                    Ok(())
+                }
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            // For non-Windows platforms (testing), just log and return success
+            use tracing::debug;
+            debug!(
+                "Mock: Setting HDR state for display (target={}): {}",
+                target.target_id,
+                if enable { "ON" } else { "OFF" }
+            );
+            Ok(())
+        }
     }
 
     /// Set HDR state globally for all displays
-    pub fn set_hdr_global(&self, _enable: bool) -> Result<Vec<(DisplayTarget, Result<()>)>> {
-        // TODO: Implement global HDR control
-        // This will be implemented in task 4
-        Ok(Vec::new())
+    ///
+    /// Iterates through all display targets and calls set_hdr_state() on each.
+    /// Returns a vector of results for each display, allowing partial success scenarios.
+    ///
+    /// # Arguments
+    ///
+    /// * `enable` - True to enable HDR, false to disable
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of tuples containing (DisplayTarget, Result<()>) for each display.
+    /// This allows tracking which displays succeeded and which failed.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 3.10: Iterate through all display targets and call DisplayConfigSetDeviceInfo on each
+    /// - Requirement 3.11: Add 100ms delays between changes (handled by set_hdr_state)
+    /// - Requirement 3.13: Handle partial success scenarios gracefully
+    pub fn set_hdr_global(&self, enable: bool) -> Result<Vec<(DisplayTarget, Result<()>)>> {
+        use tracing::{debug, info, warn};
+
+        info!(
+            "Setting HDR {} globally for {} display(s)",
+            if enable { "ON" } else { "OFF" },
+            self.display_cache.len()
+        );
+
+        let mut results = Vec::new();
+
+        for target in &self.display_cache {
+            // Only attempt to set HDR on displays that support it
+            if !target.supports_hdr {
+                debug!(
+                    "Skipping display (adapter={:#x}:{:#x}, target={}) - HDR not supported",
+                    target.adapter_id.LowPart,
+                    target.adapter_id.HighPart,
+                    target.target_id
+                );
+                continue;
+            }
+
+            let result = self.set_hdr_state(target, enable);
+
+            match &result {
+                Ok(()) => {
+                    info!(
+                        "Successfully set HDR {} for display (adapter={:#x}:{:#x}, target={})",
+                        if enable { "ON" } else { "OFF" },
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to set HDR {} for display (adapter={:#x}:{:#x}, target={}): {}",
+                        if enable { "ON" } else { "OFF" },
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id,
+                        e
+                    );
+                }
+            }
+
+            results.push((target.clone(), result));
+        }
+
+        info!(
+            "HDR global toggle complete: {} successful, {} failed",
+            results.iter().filter(|(_, r)| r.is_ok()).count(),
+            results.iter().filter(|(_, r)| r.is_err()).count()
+        );
+
+        Ok(results)
     }
 }
 
@@ -573,6 +760,211 @@ mod tests {
 
             // Results should be consistent (within a short time frame)
             assert_eq!(enabled1.unwrap(), enabled2.unwrap());
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_set_hdr_state() {
+        // This test verifies that set_hdr_state can be called without errors
+        // Note: This test may modify the actual HDR state of the display
+        let controller = HdrController::new().expect("Failed to create controller");
+
+        // Find an HDR-capable display
+        let hdr_display = controller
+            .display_cache
+            .iter()
+            .find(|d| d.supports_hdr);
+
+        if let Some(display) = hdr_display {
+            // Get current HDR state
+            let initial_state = controller
+                .is_hdr_enabled(display)
+                .expect("Failed to get initial HDR state");
+
+            // Try to toggle HDR off
+            let result = controller.set_hdr_state(display, false);
+            assert!(result.is_ok(), "set_hdr_state(false) should succeed");
+
+            // Wait a bit for the change to take effect
+            std::thread::sleep(std::time::Duration::from_millis(200));
+
+            // Verify state changed
+            let new_state = controller
+                .is_hdr_enabled(display)
+                .expect("Failed to get new HDR state");
+            assert_eq!(new_state, false, "HDR should be disabled");
+
+            // Restore original state
+            let result = controller.set_hdr_state(display, initial_state);
+            assert!(result.is_ok(), "set_hdr_state(restore) should succeed");
+
+            // Wait a bit for the change to take effect
+            std::thread::sleep(std::time::Duration::from_millis(200));
+
+            // Verify state restored
+            let restored_state = controller
+                .is_hdr_enabled(display)
+                .expect("Failed to get restored HDR state");
+            assert_eq!(
+                restored_state, initial_state,
+                "HDR state should be restored to initial value"
+            );
+        } else {
+            // No HDR-capable display found, skip test
+            println!("No HDR-capable display found, skipping test_set_hdr_state");
+        }
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_set_hdr_global() {
+        // This test verifies that set_hdr_global can be called without errors
+        // Note: This test may modify the actual HDR state of all displays
+        let controller = HdrController::new().expect("Failed to create controller");
+
+        // Check if we have any HDR-capable displays
+        let hdr_count = controller
+            .display_cache
+            .iter()
+            .filter(|d| d.supports_hdr)
+            .count();
+
+        if hdr_count == 0 {
+            println!("No HDR-capable displays found, skipping test_set_hdr_global");
+            return;
+        }
+
+        // Get initial states
+        let initial_states: Vec<_> = controller
+            .display_cache
+            .iter()
+            .filter(|d| d.supports_hdr)
+            .map(|d| {
+                (
+                    d.clone(),
+                    controller
+                        .is_hdr_enabled(d)
+                        .expect("Failed to get initial state"),
+                )
+            })
+            .collect();
+
+        // Disable HDR globally
+        let results = controller
+            .set_hdr_global(false)
+            .expect("set_hdr_global(false) should succeed");
+
+        // Verify results structure
+        assert_eq!(
+            results.len(),
+            hdr_count,
+            "Should return results for all HDR-capable displays"
+        );
+
+        // All results should be Ok
+        for (target, result) in &results {
+            assert!(
+                result.is_ok(),
+                "set_hdr_state should succeed for display (adapter={:#x}:{:#x}, target={})",
+                target.adapter_id.LowPart,
+                target.adapter_id.HighPart,
+                target.target_id
+            );
+        }
+
+        // Wait for changes to take effect
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // Verify all HDR-capable displays are disabled
+        for display in controller.display_cache.iter().filter(|d| d.supports_hdr) {
+            let state = controller
+                .is_hdr_enabled(display)
+                .expect("Failed to get HDR state");
+            assert_eq!(state, false, "HDR should be disabled globally");
+        }
+
+        // Restore original states
+        for (display, initial_state) in &initial_states {
+            controller
+                .set_hdr_state(display, *initial_state)
+                .expect("Failed to restore HDR state");
+        }
+
+        // Wait for changes to take effect
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // Verify states are restored
+        for (display, initial_state) in &initial_states {
+            let restored_state = controller
+                .is_hdr_enabled(display)
+                .expect("Failed to get restored state");
+            assert_eq!(
+                restored_state, *initial_state,
+                "HDR state should be restored to initial value"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn test_set_hdr_state_non_windows() {
+        // On non-Windows platforms, should succeed without errors
+        let controller = HdrController::new().expect("Failed to create controller");
+
+        let target = DisplayTarget {
+            adapter_id: LUID {
+                LowPart: 0,
+                HighPart: 0,
+            },
+            target_id: 0,
+            supports_hdr: true,
+        };
+
+        let result = controller.set_hdr_state(&target, true);
+        assert!(result.is_ok());
+
+        let result = controller.set_hdr_state(&target, false);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn test_set_hdr_global_non_windows() {
+        // On non-Windows platforms, should return empty results
+        let controller = HdrController::new().expect("Failed to create controller");
+
+        let results = controller.set_hdr_global(true);
+        assert!(results.is_ok());
+        assert_eq!(results.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_set_hdr_global_partial_success() {
+        // This test verifies that set_hdr_global handles partial success scenarios
+        // by returning results for each display
+        let controller = HdrController::new().expect("Failed to create controller");
+
+        let results = controller
+            .set_hdr_global(false)
+            .expect("set_hdr_global should succeed");
+
+        // Results should be a vector of (DisplayTarget, Result<()>)
+        for (target, result) in &results {
+            // Each result should have a valid target
+            assert!(target.target_id >= 0);
+
+            // Result should be Ok or Err (both are valid for partial success)
+            match result {
+                Ok(()) => {
+                    // Success case
+                    assert!(target.supports_hdr, "Only HDR-capable displays should succeed");
+                }
+                Err(_) => {
+                    // Failure case - this is acceptable for partial success
+                    // Just verify the error is logged (we can't check logs in tests)
+                }
+            }
         }
     }
 }
