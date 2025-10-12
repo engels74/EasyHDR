@@ -146,12 +146,12 @@ export component MainWindow inherits Window {
             }
         }
 
-        // Bottom toolbar with buttons (Requirement 5.9, 5.13)
+        // Bottom toolbar with buttons (Requirement 5.9, 5.13, 5.14)
         // Theme-aware spacing
         HorizontalLayout {
             spacing: StyleMetrics.layout-spacing;
             Button {
-                text: "Add Application";
+                text: "Add Application(s)";
                 clicked => {
                     add-application();
                 }
@@ -163,6 +163,15 @@ export component MainWindow inherits Window {
                     remove-application(selected-index);
                 }
             }
+        }
+
+        // Drag-and-drop hint (Requirement 5.14)
+        // Inform users about drag-and-drop functionality
+        Text {
+            text: "Tip: You can select multiple .exe files at once using the file dialog";
+            font-size: 11px;
+            color: Palette.foreground.transparentize(0.5);
+            horizontal-alignment: center;
         }
     }
 }
