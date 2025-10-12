@@ -6,16 +6,10 @@
 // Set Windows subsystem to hide console window
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// Module declarations
-mod config;
-mod controller;
-mod error;
+// GUI module is only in the binary, not the library
 mod gui;
-mod hdr;
-mod monitor;
-mod utils;
 
-use error::Result;
+use easyhdr::{config, error::Result, utils, EasyHdrError};
 
 // Include Slint-generated code
 slint::include_modules!();
@@ -33,12 +27,12 @@ fn main() -> Result<()> {
     // For now, just show a basic window
     // Full initialization will be implemented in task 13
     let main_window = MainWindow::new()
-        .map_err(|e| error::EasyHdrError::ConfigError(format!("Failed to create window: {}", e)))?;
+        .map_err(|e| EasyHdrError::ConfigError(format!("Failed to create window: {}", e)))?;
 
     tracing::info!("Main window created");
 
     main_window.run()
-        .map_err(|e| error::EasyHdrError::ConfigError(format!("Failed to run window: {}", e)))?;
+        .map_err(|e| EasyHdrError::ConfigError(format!("Failed to run window: {}", e)))?;
 
     tracing::info!("EasyHDR shutting down");
 
