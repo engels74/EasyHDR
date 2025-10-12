@@ -1,11 +1,11 @@
 {
   "monitored_apps": [
     {
-      "id": "e8909669-6a67-439b-babe-713464b4bbb6",
+      "id": "90790c35-82ac-4f06-982d-b589114ce560",
       "display_name": "Test App",
       "exe_path": "C:\\test\\app.exe",
       "process_name": "app",
-      "enabled": true
+      "enabled": false
     }
   ],
   "preferences": {

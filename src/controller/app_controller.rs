@@ -75,9 +75,56 @@ impl AppController {
     }
 
     /// Run the main event loop
+    ///
+    /// This method implements the main event loop that receives process events from the
+    /// ProcessMonitor and handles them appropriately. It implements an optional startup
+    /// delay to avoid boot race conditions.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 4.7: Implement optional startup delay of 2-5 seconds to avoid boot race conditions
+    ///
+    /// # Behavior
+    ///
+    /// 1. Applies startup delay if configured in preferences (startup_delay_ms)
+    /// 2. Enters main event loop, receiving events from event_receiver
+    /// 3. Calls handle_process_event() for each received event
+    /// 4. Handles channel disconnection gracefully by exiting the loop
+    /// 5. Logs all significant events and errors
     pub fn run(&mut self) {
-        // TODO: Implement main event loop
-        // This will be implemented in task 6
+        use tracing::{info, warn};
+
+        // Apply startup delay if configured
+        let startup_delay_ms = {
+            let config = self.config.lock();
+            config.preferences.startup_delay_ms
+        };
+
+        if startup_delay_ms > 0 {
+            info!("Applying startup delay of {}ms to avoid boot race conditions", startup_delay_ms);
+            std::thread::sleep(std::time::Duration::from_millis(startup_delay_ms));
+            info!("Startup delay complete, beginning process monitoring");
+        } else {
+            info!("No startup delay configured, beginning process monitoring immediately");
+        }
+
+        // Main event loop
+        info!("Entering main event loop");
+        loop {
+            match self.event_receiver.recv() {
+                Ok(event) => {
+                    // Handle the process event
+                    self.handle_process_event(event);
+                }
+                Err(e) => {
+                    // Channel disconnected - this means the ProcessMonitor thread has stopped
+                    warn!("Event receiver channel disconnected: {}. Exiting event loop.", e);
+                    break;
+                }
+            }
+        }
+
+        info!("Main event loop exited");
     }
 
     /// Handle a process event
@@ -832,6 +879,184 @@ mod tests {
         assert!(watch_list_guard.contains("app1"));
         assert!(!watch_list_guard.contains("app2")); // Disabled
         assert!(watch_list_guard.contains("app3"));
+    }
+
+    #[test]
+    fn test_run_applies_startup_delay() {
+        use std::time::Instant;
+
+        let mut config = AppConfig::default();
+        config.preferences.startup_delay_ms = 100; // Short delay for testing
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Spawn thread to run the event loop
+        let start_time = Instant::now();
+        let handle = std::thread::spawn(move || {
+            controller.run();
+            start_time.elapsed()
+        });
+
+        // Close the channel to exit the event loop
+        drop(event_tx);
+
+        // Wait for the thread to complete
+        let elapsed = handle.join().unwrap();
+
+        // Verify that at least the startup delay was applied
+        assert!(elapsed.as_millis() >= 100, "Startup delay should be at least 100ms, was {}ms", elapsed.as_millis());
+    }
+
+    #[test]
+    fn test_run_no_startup_delay_when_zero() {
+        use std::time::Instant;
+
+        let mut config = AppConfig::default();
+        config.preferences.startup_delay_ms = 0; // No delay
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Spawn thread to run the event loop
+        let start_time = Instant::now();
+        let handle = std::thread::spawn(move || {
+            controller.run();
+            start_time.elapsed()
+        });
+
+        // Close the channel to exit the event loop
+        drop(event_tx);
+
+        // Wait for the thread to complete
+        let elapsed = handle.join().unwrap();
+
+        // Verify that the delay is minimal (should be very quick)
+        assert!(elapsed.as_millis() < 50, "Should complete quickly without delay, took {}ms", elapsed.as_millis());
+    }
+
+    #[test]
+    fn test_run_processes_events() {
+        let mut config = AppConfig::default();
+        config.preferences.startup_delay_ms = 0; // No delay for faster test
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "Test App".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app.exe"),
+            process_name: "app".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let (state_tx, state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Spawn thread to run the event loop
+        let handle = std::thread::spawn(move || {
+            controller.run();
+        });
+
+        // Send a process started event
+        event_tx.send(ProcessEvent::Started("app".to_string())).unwrap();
+
+        // Wait a bit for the event to be processed
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        // Verify state update was sent
+        let state = state_rx.recv_timeout(std::time::Duration::from_millis(100)).unwrap();
+        assert_eq!(state.hdr_enabled, true);
+
+        // Close the channel to exit the event loop
+        drop(event_tx);
+
+        // Wait for the thread to complete
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_run_handles_channel_disconnection_gracefully() {
+        let mut config = AppConfig::default();
+        config.preferences.startup_delay_ms = 0; // No delay for faster test
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Spawn thread to run the event loop
+        let handle = std::thread::spawn(move || {
+            controller.run();
+        });
+
+        // Immediately close the channel
+        drop(event_tx);
+
+        // Wait for the thread to complete - should exit gracefully
+        let result = handle.join();
+        assert!(result.is_ok(), "Event loop should exit gracefully when channel disconnects");
+    }
+
+    #[test]
+    fn test_run_processes_multiple_events() {
+        let mut config = AppConfig::default();
+        config.preferences.startup_delay_ms = 0; // No delay for faster test
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "App 1".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app1.exe"),
+            process_name: "app1".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "App 2".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app2.exe"),
+            process_name: "app2".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (event_tx, event_rx) = mpsc::channel();
+        let (state_tx, state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Spawn thread to run the event loop
+        let handle = std::thread::spawn(move || {
+            controller.run();
+        });
+
+        // Send multiple events
+        event_tx.send(ProcessEvent::Started("app1".to_string())).unwrap();
+        event_tx.send(ProcessEvent::Started("app2".to_string())).unwrap();
+
+        // Wait for events to be processed
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Verify state updates were sent
+        let state1 = state_rx.recv_timeout(std::time::Duration::from_millis(100)).unwrap();
+        assert_eq!(state1.hdr_enabled, true);
+
+        let state2 = state_rx.recv_timeout(std::time::Duration::from_millis(100)).unwrap();
+        assert_eq!(state2.hdr_enabled, true);
+
+        // Close the channel to exit the event loop
+        drop(event_tx);
+
+        // Wait for the thread to complete
+        handle.join().unwrap();
     }
 }
 
