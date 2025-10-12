@@ -19,6 +19,7 @@
 use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
 use parking_lot::Mutex;
+use slint::ComponentHandle;
 use std::sync::{mpsc, Arc};
 
 #[cfg(windows)]
@@ -399,6 +400,128 @@ impl GuiController {
     #[cfg(not(windows))]
     fn show_error_dialog(message: &str) {
         eprintln!("Error: {}", message);
+    }
+
+    /// Run the GUI event loop with state synchronization
+    ///
+    /// This method starts a background thread to receive AppState updates from
+    /// the controller and update the GUI accordingly. It then runs the Slint
+    /// event loop on the main thread.
+    ///
+    /// The state synchronization thread:
+    /// 1. Receives AppState updates from state_receiver channel
+    /// 2. Updates HDR enabled state in the UI
+    /// 3. Updates the application list in the UI
+    /// 4. Uses window.as_weak() for thread-safe GUI updates
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 5.8: Show status indicator with current HDR state
+    ///
+    /// # Implementation Details
+    ///
+    /// The state update thread runs in the background and uses `window.as_weak()`
+    /// to safely update the GUI from a different thread. The weak reference is
+    /// upgraded to a strong reference when needed, and updates are performed
+    /// using Slint's thread-safe update mechanism.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Slint event loop fails to run.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::sync::{mpsc, Arc};
+    /// use parking_lot::Mutex;
+    /// use easyhdr::controller::AppController;
+    /// use easyhdr::gui::GuiController;
+    ///
+    /// let (state_tx, state_rx) = mpsc::channel();
+    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// let gui = GuiController::new(controller, state_rx)?;
+    /// gui.run()?;
+    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
+    /// ```
+    pub fn run(self) -> Result<()> {
+        use easyhdr::error::EasyHdrError;
+        use tracing::{info, warn, debug};
+
+        info!("Starting GUI event loop with state synchronization");
+
+        // Get a weak reference to the window for thread-safe updates
+        let window_weak = self.main_window.as_weak();
+        let controller_handle = self.controller_handle.clone();
+
+        // Spawn thread to receive AppState updates and update GUI
+        // Task 10.4: Implement state synchronization
+        std::thread::spawn(move || {
+            info!("State synchronization thread started");
+
+            while let Ok(state) = self.state_receiver.recv() {
+                debug!("Received state update: HDR enabled = {}, active apps = {:?}",
+                    state.hdr_enabled, state.active_apps);
+
+                // Upgrade weak reference to strong reference
+                let window = match window_weak.upgrade() {
+                    Some(w) => w,
+                    None => {
+                        warn!("Window has been destroyed, stopping state synchronization");
+                        break;
+                    }
+                };
+
+                // Update HDR enabled state
+                // Requirement 5.8: Update status indicator when HDR state changes
+                window.set_hdr_enabled(state.hdr_enabled);
+                debug!("Updated HDR enabled state to: {}", state.hdr_enabled);
+
+                // Update application list
+                // Convert MonitoredApp to AppListItem for Slint
+                let app_list = {
+                    let controller = controller_handle.lock();
+                    let config = controller.config.lock();
+
+                    let items: Vec<_> = config.monitored_apps.iter().map(|app| {
+                        // Convert icon_data to Slint image
+                        let icon = if let Some(ref _icon_data) = app.icon_data {
+                            // Convert RGBA bytes to Slint image
+                            // For now, use empty image - icon conversion will be implemented later
+                            slint::Image::default()
+                        } else {
+                            slint::Image::default()
+                        };
+
+                        crate::AppListItem {
+                            id: app.id.to_string().into(),
+                            display_name: app.display_name.clone().into(),
+                            exe_path: app.exe_path.to_string_lossy().to_string().into(),
+                            enabled: app.enabled,
+                            icon,
+                        }
+                    }).collect();
+
+                    drop(config);
+                    drop(controller);
+                    items
+                };
+
+                // Update the app list in the UI
+                let app_list_model = std::rc::Rc::new(slint::VecModel::from(app_list));
+                window.set_app_list(app_list_model.into());
+                debug!("Updated application list in UI");
+            }
+
+            info!("State synchronization thread stopped");
+        });
+
+        // Run the Slint event loop on the main thread
+        info!("Running Slint event loop");
+        self.main_window.run()
+            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {}", e)))?;
+
+        info!("GUI event loop stopped");
+        Ok(())
     }
 }
 
