@@ -3,14 +3,16 @@
 //! This module implements the main application logic controller that
 //! coordinates between process monitoring and HDR control.
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
 use crate::error::Result;
 use crate::hdr::HdrController;
 use crate::monitor::ProcessEvent;
 use parking_lot::Mutex;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::Instant;
+use uuid::Uuid;
 
 /// Application state for GUI updates
 #[derive(Debug, Clone)]
@@ -39,17 +41,27 @@ pub struct AppController {
     gui_state_sender: mpsc::Sender<AppState>,
     /// Last toggle time for debouncing
     last_toggle_time: Arc<Mutex<Instant>>,
+    /// Reference to ProcessMonitor's watch list for updating
+    process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
 }
 
 impl AppController {
     /// Create a new application controller
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Application configuration
+    /// * `event_receiver` - Channel receiver for process events from ProcessMonitor
+    /// * `gui_state_sender` - Channel sender for state updates to GUI
+    /// * `process_monitor_watch_list` - Shared reference to ProcessMonitor's watch list
     pub fn new(
         config: AppConfig,
         event_receiver: mpsc::Receiver<ProcessEvent>,
         gui_state_sender: mpsc::Sender<AppState>,
+        process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
     ) -> Result<Self> {
         let hdr_controller = HdrController::new()?;
-        
+
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
             hdr_controller,
@@ -58,6 +70,7 @@ impl AppController {
             event_receiver,
             gui_state_sender,
             last_toggle_time: Arc::new(Mutex::new(Instant::now())),
+            process_monitor_watch_list,
         })
     }
 
@@ -240,6 +253,193 @@ impl AppController {
             warn!("Failed to send state update to GUI: {}", e);
         }
     }
+
+    /// Add a new application to the configuration
+    ///
+    /// Adds the provided MonitoredApp to the configuration, saves the config to disk,
+    /// and updates the ProcessMonitor's watch list.
+    ///
+    /// # Arguments
+    ///
+    /// * `app` - The MonitoredApp to add
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) on success, or an error if saving the configuration fails.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 1.4: Update enabled state flag for applications
+    /// - Requirement 1.5: Delete applications from configuration
+    /// - Requirement 1.6: Persist data to config.json using atomic writes
+    pub fn add_application(&mut self, app: MonitoredApp) -> Result<()> {
+        use tracing::info;
+
+        info!("Adding application: {} ({})", app.display_name, app.process_name);
+
+        // Add to config
+        {
+            let mut config = self.config.lock();
+            config.monitored_apps.push(app);
+        }
+
+        // Save configuration
+        let config = self.config.lock();
+        ConfigManager::save(&config)?;
+        drop(config);
+
+        // Update ProcessMonitor watch list
+        self.update_process_monitor_watch_list();
+
+        info!("Application added successfully");
+        Ok(())
+    }
+
+    /// Remove an application from the configuration by UUID
+    ///
+    /// Removes the application with the specified UUID from the configuration,
+    /// saves the config to disk, and updates the ProcessMonitor's watch list.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The UUID of the application to remove
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) on success, or an error if saving the configuration fails.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 1.5: Delete applications from configuration
+    /// - Requirement 1.6: Persist data to config.json using atomic writes
+    pub fn remove_application(&mut self, id: Uuid) -> Result<()> {
+        use tracing::info;
+
+        info!("Removing application with ID: {}", id);
+
+        // Remove from config
+        {
+            let mut config = self.config.lock();
+            config.monitored_apps.retain(|app| app.id != id);
+        }
+
+        // Save configuration
+        let config = self.config.lock();
+        ConfigManager::save(&config)?;
+        drop(config);
+
+        // Update ProcessMonitor watch list
+        self.update_process_monitor_watch_list();
+
+        info!("Application removed successfully");
+        Ok(())
+    }
+
+    /// Toggle the enabled state of an application by UUID
+    ///
+    /// Updates the enabled flag for the application with the specified UUID,
+    /// saves the config to disk, and updates the ProcessMonitor's watch list.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The UUID of the application to toggle
+    /// * `enabled` - The new enabled state
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) on success, or an error if saving the configuration fails.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 1.4: Update enabled state flag for applications
+    /// - Requirement 1.6: Persist data to config.json using atomic writes
+    pub fn toggle_app_enabled(&mut self, id: Uuid, enabled: bool) -> Result<()> {
+        use tracing::info;
+
+        info!("Toggling application {} to enabled={}", id, enabled);
+
+        // Update enabled flag
+        {
+            let mut config = self.config.lock();
+            if let Some(app) = config.monitored_apps.iter_mut().find(|app| app.id == id) {
+                app.enabled = enabled;
+            }
+        }
+
+        // Save configuration
+        let config = self.config.lock();
+        ConfigManager::save(&config)?;
+        drop(config);
+
+        // Update ProcessMonitor watch list
+        self.update_process_monitor_watch_list();
+
+        info!("Application enabled state updated successfully");
+        Ok(())
+    }
+
+    /// Update user preferences
+    ///
+    /// Updates the user preferences in the configuration and saves to disk.
+    ///
+    /// # Arguments
+    ///
+    /// * `prefs` - The new UserPreferences to apply
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) on success, or an error if saving the configuration fails.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 1.6: Persist data to config.json using atomic writes
+    pub fn update_preferences(&mut self, prefs: UserPreferences) -> Result<()> {
+        use tracing::info;
+
+        info!("Updating user preferences");
+
+        // Update preferences
+        {
+            let mut config = self.config.lock();
+            config.preferences = prefs;
+        }
+
+        // Save configuration
+        let config = self.config.lock();
+        ConfigManager::save(&config)?;
+        drop(config);
+
+        info!("User preferences updated successfully");
+        Ok(())
+    }
+
+    /// Update the ProcessMonitor's watch list based on current configuration
+    ///
+    /// Extracts all enabled application process names from the configuration
+    /// and updates the ProcessMonitor's watch list.
+    ///
+    /// This is called after any configuration change that affects which applications
+    /// should be monitored.
+    fn update_process_monitor_watch_list(&self) {
+        use tracing::debug;
+
+        let config = self.config.lock();
+        let process_names: Vec<String> = config.monitored_apps.iter()
+            .filter(|app| app.enabled)
+            .map(|app| app.process_name.clone())
+            .collect();
+        drop(config);
+
+        debug!("Updating ProcessMonitor watch list with {} processes", process_names.len());
+
+        let mut watch_list = self.process_monitor_watch_list.lock();
+        watch_list.clear();
+        for name in process_names {
+            watch_list.insert(name.to_lowercase());
+        }
+
+        debug!("ProcessMonitor watch list updated");
+    }
 }
 
 #[cfg(test)]
@@ -254,8 +454,9 @@ mod tests {
         let config = AppConfig::default();
         let (_event_tx, event_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let controller = AppController::new(config, event_rx, state_tx);
+        let controller = AppController::new(config, event_rx, state_tx, watch_list);
         assert!(controller.is_ok());
     }
 
@@ -274,8 +475,9 @@ mod tests {
 
         let (_event_tx, event_rx) = mpsc::channel();
         let (state_tx, state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx).unwrap();
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
 
         // Initial count should be 0
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
@@ -306,8 +508,9 @@ mod tests {
 
         let (_event_tx, event_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx).unwrap();
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
 
         // Handle a started event with different case
         controller.handle_process_event(ProcessEvent::Started("APP".to_string()));
@@ -331,8 +534,9 @@ mod tests {
 
         let (_event_tx, event_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx).unwrap();
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
 
         // Handle a started event for the disabled app
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
@@ -356,8 +560,9 @@ mod tests {
 
         let (_event_tx, event_rx) = mpsc::channel();
         let (state_tx, state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx).unwrap();
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
 
         // Start the app first
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
@@ -403,8 +608,9 @@ mod tests {
 
         let (_event_tx, event_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx).unwrap();
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
 
         // Start first app
         controller.handle_process_event(ProcessEvent::Started("app1".to_string()));
@@ -431,6 +637,201 @@ mod tests {
         controller.handle_process_event(ProcessEvent::Stopped("app2".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
         assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), false);
+    }
+
+    #[test]
+    fn test_add_application() {
+        let config = AppConfig::default();
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+
+        // Create a new app to add
+        let app = MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "New App".to_string(),
+            exe_path: PathBuf::from("C:\\test\\newapp.exe"),
+            process_name: "newapp".to_string(),
+            enabled: true,
+            icon_data: None,
+        };
+
+        // Add the application
+        let result = controller.add_application(app.clone());
+        assert!(result.is_ok());
+
+        // Verify it was added to config
+        let config = controller.config.lock();
+        assert_eq!(config.monitored_apps.len(), 1);
+        assert_eq!(config.monitored_apps[0].display_name, "New App");
+        drop(config);
+
+        // Verify watch list was updated
+        let watch_list_guard = watch_list.lock();
+        assert!(watch_list_guard.contains("newapp"));
+    }
+
+    #[test]
+    fn test_remove_application() {
+        let mut config = AppConfig::default();
+        let app_id = Uuid::new_v4();
+        config.monitored_apps.push(MonitoredApp {
+            id: app_id,
+            display_name: "Test App".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app.exe"),
+            process_name: "app".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+
+        // Remove the application
+        let result = controller.remove_application(app_id);
+        assert!(result.is_ok());
+
+        // Verify it was removed from config
+        let config = controller.config.lock();
+        assert_eq!(config.monitored_apps.len(), 0);
+        drop(config);
+
+        // Verify watch list was updated
+        let watch_list_guard = watch_list.lock();
+        assert!(!watch_list_guard.contains("app"));
+    }
+
+    #[test]
+    fn test_toggle_app_enabled() {
+        let mut config = AppConfig::default();
+        let app_id = Uuid::new_v4();
+        config.monitored_apps.push(MonitoredApp {
+            id: app_id,
+            display_name: "Test App".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app.exe"),
+            process_name: "app".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+
+        // Initially populate watch list
+        controller.update_process_monitor_watch_list();
+        {
+            let watch_list_guard = watch_list.lock();
+            assert!(watch_list_guard.contains("app"));
+        }
+
+        // Disable the application
+        let result = controller.toggle_app_enabled(app_id, false);
+        assert!(result.is_ok());
+
+        // Verify enabled flag was updated
+        let config = controller.config.lock();
+        assert_eq!(config.monitored_apps[0].enabled, false);
+        drop(config);
+
+        // Verify watch list was updated (app should be removed)
+        let watch_list_guard = watch_list.lock();
+        assert!(!watch_list_guard.contains("app"));
+        drop(watch_list_guard);
+
+        // Re-enable the application
+        let result = controller.toggle_app_enabled(app_id, true);
+        assert!(result.is_ok());
+
+        // Verify enabled flag was updated
+        let config = controller.config.lock();
+        assert_eq!(config.monitored_apps[0].enabled, true);
+        drop(config);
+
+        // Verify watch list was updated (app should be added back)
+        let watch_list_guard = watch_list.lock();
+        assert!(watch_list_guard.contains("app"));
+    }
+
+    #[test]
+    fn test_update_preferences() {
+        let config = AppConfig::default();
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Create new preferences
+        let new_prefs = UserPreferences {
+            auto_start: true,
+            monitoring_interval_ms: 2000,
+            startup_delay_ms: 5000,
+            show_tray_notifications: false,
+        };
+
+        // Update preferences
+        let result = controller.update_preferences(new_prefs.clone());
+        assert!(result.is_ok());
+
+        // Verify preferences were updated
+        let config = controller.config.lock();
+        assert_eq!(config.preferences.auto_start, true);
+        assert_eq!(config.preferences.monitoring_interval_ms, 2000);
+        assert_eq!(config.preferences.startup_delay_ms, 5000);
+        assert_eq!(config.preferences.show_tray_notifications, false);
+    }
+
+    #[test]
+    fn test_update_process_monitor_watch_list() {
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "App 1".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app1.exe"),
+            process_name: "app1".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "App 2".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app2.exe"),
+            process_name: "app2".to_string(),
+            enabled: false, // Disabled
+            icon_data: None,
+        });
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "App 3".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app3.exe"),
+            process_name: "app3".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+
+        // Update watch list
+        controller.update_process_monitor_watch_list();
+
+        // Verify only enabled apps are in watch list
+        let watch_list_guard = watch_list.lock();
+        assert_eq!(watch_list_guard.len(), 2);
+        assert!(watch_list_guard.contains("app1"));
+        assert!(!watch_list_guard.contains("app2")); // Disabled
+        assert!(watch_list_guard.contains("app3"));
     }
 }
 

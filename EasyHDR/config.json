@@ -1,0 +1,23 @@
+{
+  "monitored_apps": [
+    {
+      "id": "e8909669-6a67-439b-babe-713464b4bbb6",
+      "display_name": "Test App",
+      "exe_path": "C:\\test\\app.exe",
+      "process_name": "app",
+      "enabled": true
+    }
+  ],
+  "preferences": {
+    "auto_start": false,
+    "monitoring_interval_ms": 1000,
+    "startup_delay_ms": 3000,
+    "show_tray_notifications": true
+  },
+  "window_state": {
+    "x": 100,
+    "y": 100,
+    "width": 600,
+    "height": 500
+  }
+}

@@ -61,6 +61,14 @@ impl ProcessMonitor {
         }
     }
 
+    /// Get a reference to the watch list
+    ///
+    /// Returns a cloned Arc reference to the watch list, which can be used
+    /// by other components (like AppController) to update the watch list.
+    pub fn get_watch_list_ref(&self) -> Arc<Mutex<HashSet<String>>> {
+        Arc::clone(&self.watch_list)
+    }
+
     /// Start the monitoring thread
     pub fn start(mut self) -> JoinHandle<()> {
         thread::spawn(move || {
