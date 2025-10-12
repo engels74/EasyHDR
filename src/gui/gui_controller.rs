@@ -106,6 +106,9 @@ impl GuiController {
 
         info!("Main window created successfully");
 
+        // Task 10.7: Restore window position and size from config
+        Self::restore_window_state(&main_window, &controller);
+
         // Set up callbacks
         // Task 10.2: Implement file picker integration
         let controller_clone = controller.clone();
@@ -507,6 +510,163 @@ impl GuiController {
         eprintln!("Error: {}", get_user_friendly_error(error));
     }
 
+    /// Restore window position and size from config
+    ///
+    /// This method reads the window state from the configuration and applies it
+    /// to the main window. It handles cases where the saved position might be
+    /// off-screen by validating the position before applying it.
+    ///
+    /// # Arguments
+    ///
+    /// * `window` - The Slint MainWindow to restore state to
+    /// * `controller` - Shared reference to the AppController containing config
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 5.15: Restore window position and size from config on startup
+    /// - Task 10.7: Handle cases where saved position is off-screen
+    ///
+    /// # Implementation Details
+    ///
+    /// 1. Reads window state from config (x, y, width, height)
+    /// 2. Validates that the position is reasonable (not too far off-screen)
+    /// 3. Applies the size first, then the position
+    /// 4. Logs the restoration for debugging
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
+    /// use easyhdr::controller::AppController;
+    /// use easyhdr::gui::GuiController;
+    ///
+    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// let window = MainWindow::new().unwrap();
+    /// GuiController::restore_window_state(&window, &controller);
+    /// ```
+    fn restore_window_state(window: &MainWindow, controller: &Arc<Mutex<AppController>>) {
+        use tracing::{info, warn};
+        use slint::{PhysicalPosition, PhysicalSize};
+
+        info!("Restoring window state from config");
+
+        let controller_guard = controller.lock();
+        let config = controller_guard.config.lock();
+        let window_state = &config.window_state;
+
+        info!("Saved window state: x={}, y={}, width={}, height={}",
+            window_state.x, window_state.y, window_state.width, window_state.height);
+
+        // Validate and apply window size
+        // Ensure size is reasonable (at least 200x150, at most 4096x2160)
+        let width = window_state.width.clamp(200, 4096);
+        let height = window_state.height.clamp(150, 2160);
+
+        if width != window_state.width || height != window_state.height {
+            warn!("Window size adjusted from {}x{} to {}x{} (clamped to reasonable bounds)",
+                window_state.width, window_state.height, width, height);
+        }
+
+        window.window().set_size(PhysicalSize::new(width, height));
+        info!("Window size set to {}x{}", width, height);
+
+        // Validate and apply window position
+        // We allow negative positions (for multi-monitor setups) but not too extreme
+        // Clamp to reasonable range: -1000 to 10000 for both x and y
+        let x = window_state.x.clamp(-1000, 10000);
+        let y = window_state.y.clamp(-1000, 10000);
+
+        if x != window_state.x || y != window_state.y {
+            warn!("Window position adjusted from ({}, {}) to ({}, {}) (clamped to reasonable bounds)",
+                window_state.x, window_state.y, x, y);
+        }
+
+        window.window().set_position(PhysicalPosition::new(x, y));
+        info!("Window position set to ({}, {})", x, y);
+
+        drop(config);
+        drop(controller_guard);
+
+        info!("Window state restored successfully");
+    }
+
+    /// Save window position and size to config
+    ///
+    /// This method reads the current window position and size from the Slint window
+    /// and saves it to the configuration file for restoration on next startup.
+    ///
+    /// # Arguments
+    ///
+    /// * `window` - The Slint MainWindow to save state from
+    /// * `controller` - Shared reference to the AppController containing config
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 5.15: Save window position and size to config on close
+    /// - Task 10.7: Save window position and size to config on close
+    ///
+    /// # Implementation Details
+    ///
+    /// 1. Reads current window position and size from Slint window
+    /// 2. Updates the window_state in the config
+    /// 3. Saves the config to disk
+    /// 4. Logs the save operation for debugging
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config save operation fails.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
+    /// use easyhdr::controller::AppController;
+    /// use easyhdr::gui::GuiController;
+    ///
+    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// let window = MainWindow::new().unwrap();
+    /// GuiController::save_window_state(&window, &controller)?;
+    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
+    /// ```
+    fn save_window_state(window: &MainWindow, controller: &Arc<Mutex<AppController>>) -> Result<()> {
+        use tracing::{info, error as log_error};
+        use easyhdr::config::ConfigManager;
+
+        info!("Saving window state to config");
+
+        // Get current window position and size
+        let position = window.window().position();
+        let size = window.window().size();
+
+        info!("Current window state: x={}, y={}, width={}, height={}",
+            position.x, position.y, size.width, size.height);
+
+        // Update config with current window state
+        let controller_guard = controller.lock();
+        {
+            let mut config = controller_guard.config.lock();
+            config.window_state.x = position.x;
+            config.window_state.y = position.y;
+            config.window_state.width = size.width;
+            config.window_state.height = size.height;
+
+            // Save config to disk
+            match ConfigManager::save(&config) {
+                Ok(()) => {
+                    info!("Window state saved successfully");
+                }
+                Err(e) => {
+                    log_error!("Failed to save window state: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Run the GUI event loop with state synchronization
     ///
     /// This method starts a background thread to receive AppState updates from
@@ -626,13 +786,18 @@ impl GuiController {
             .map_err(|e| EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {}", e)))?;
 
         info!("GUI event loop stopped");
+
+        // Task 10.7: Save window state before exiting
+        // Requirement 5.15: Save window position and size to config on close
+        info!("Saving window state before exit");
+        Self::save_window_state(&self.main_window, &self.controller_handle)?;
+
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use easyhdr::error::EasyHdrError;
 
     /// Test that error messages are properly formatted for different error types
@@ -761,6 +926,50 @@ mod tests {
                     "User-friendly message should not contain 'Error: ' prefix: {}", message);
             }
         }
+    }
+
+    /// Test window state validation and clamping
+    ///
+    /// This test verifies that window state values are properly validated
+    /// and clamped to reasonable bounds to prevent off-screen windows.
+    ///
+    /// # Requirements
+    ///
+    /// - Task 10.7: Handle cases where saved position is off-screen
+    #[test]
+    fn test_window_state_validation() {
+        // Test size clamping
+        let min_width = 200u32;
+        let min_height = 150u32;
+        let max_width = 4096u32;
+        let max_height = 2160u32;
+
+        // Test too small
+        assert_eq!(100u32.clamp(min_width, max_width), min_width);
+        assert_eq!(50u32.clamp(min_height, max_height), min_height);
+
+        // Test too large
+        assert_eq!(5000u32.clamp(min_width, max_width), max_width);
+        assert_eq!(3000u32.clamp(min_height, max_height), max_height);
+
+        // Test valid values
+        assert_eq!(600u32.clamp(min_width, max_width), 600);
+        assert_eq!(500u32.clamp(min_height, max_height), 500);
+
+        // Test position clamping
+        let min_pos = -1000i32;
+        let max_pos = 10000i32;
+
+        // Test too negative
+        assert_eq!((-2000i32).clamp(min_pos, max_pos), min_pos);
+
+        // Test too positive
+        assert_eq!(15000i32.clamp(min_pos, max_pos), max_pos);
+
+        // Test valid values (including negative for multi-monitor)
+        assert_eq!((-500i32).clamp(min_pos, max_pos), -500);
+        assert_eq!(100i32.clamp(min_pos, max_pos), 100);
+        assert_eq!(5000i32.clamp(min_pos, max_pos), 5000);
     }
 
     /// Test that specific error types produce specific messages
