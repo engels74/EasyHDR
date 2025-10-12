@@ -27,8 +27,8 @@ pub struct AppState {
 
 /// Application logic controller
 pub struct AppController {
-    /// Application configuration
-    config: Arc<Mutex<AppConfig>>,
+    /// Application configuration (public for GUI access)
+    pub config: Arc<Mutex<AppConfig>>,
     /// HDR controller
     hdr_controller: HdrController,
     /// Count of active monitored processes
@@ -338,6 +338,9 @@ impl AppController {
         // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
 
+        // Send state update to GUI
+        self.send_state_update();
+
         info!("Application added successfully");
         Ok(())
     }
@@ -377,6 +380,9 @@ impl AppController {
 
         // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
+
+        // Send state update to GUI
+        self.send_state_update();
 
         info!("Application removed successfully");
         Ok(())
@@ -420,6 +426,9 @@ impl AppController {
 
         // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
+
+        // Send state update to GUI
+        self.send_state_update();
 
         info!("Application enabled state updated successfully");
         Ok(())
