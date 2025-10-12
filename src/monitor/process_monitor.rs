@@ -439,5 +439,330 @@ mod tests {
         assert!(received.contains("game"));
         assert_eq!(received.len(), 2);
     }
+
+    // Additional comprehensive tests for task 5.5
+
+    /// Test process name extraction from various path formats
+    /// Requirement 2.3: Case-insensitive process name matching
+    #[test]
+    fn test_process_name_extraction_comprehensive() {
+        // Test various Windows path formats
+        assert_eq!(
+            extract_filename_without_extension("C:\\Games\\game.exe"),
+            "game"
+        );
+
+        assert_eq!(
+            extract_filename_without_extension("D:\\Program Files\\MyApp\\app.exe"),
+            "app"
+        );
+
+        // Test with spaces in path
+        assert_eq!(
+            extract_filename_without_extension("C:\\Program Files (x86)\\Game Name\\game.exe"),
+            "game"
+        );
+
+        // Test network path
+        assert_eq!(
+            extract_filename_without_extension("\\\\server\\share\\app.exe"),
+            "app"
+        );
+
+        // Test relative path
+        assert_eq!(
+            extract_filename_without_extension("..\\..\\game.exe"),
+            "game"
+        );
+
+        // Test filename only
+        assert_eq!(
+            extract_filename_without_extension("application.exe"),
+            "application"
+        );
+    }
+
+    /// Test case-insensitive matching with various case combinations
+    /// Requirement 2.3: Case-insensitive process name matching
+    #[test]
+    fn test_case_insensitive_matching_comprehensive() {
+        // Test that extraction always produces lowercase
+        assert_eq!(
+            extract_filename_without_extension("Game.exe"),
+            "game"
+        );
+
+        assert_eq!(
+            extract_filename_without_extension("GAME.EXE"),
+            "game"
+        );
+
+        assert_eq!(
+            extract_filename_without_extension("GaMe.ExE"),
+            "game"
+        );
+
+        assert_eq!(
+            extract_filename_without_extension("C:\\Games\\MyGame.EXE"),
+            "mygame"
+        );
+
+        // Test with mixed case in filename
+        assert_eq!(
+            extract_filename_without_extension("CyberPunk2077.exe"),
+            "cyberpunk2077"
+        );
+    }
+
+    /// Test that watch list matching is case-insensitive
+    /// Requirement 2.3: Case-insensitive process name matching
+    #[test]
+    fn test_watch_list_case_insensitive() {
+        let (tx, _rx) = mpsc::channel();
+        let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        // Add watch list with mixed case - should be converted to lowercase
+        monitor.update_watch_list(vec!["Game".to_string(), "APP".to_string()]);
+
+        let watch_list = monitor.watch_list.lock();
+        // Watch list should contain lowercase versions
+        assert!(watch_list.contains("game"));
+        assert!(watch_list.contains("app"));
+        assert!(!watch_list.contains("Game"));
+        assert!(!watch_list.contains("APP"));
+    }
+
+    /// Test state transition from NOT_RUNNING to RUNNING
+    /// Requirement 2.4: Detect NOT_RUNNING → RUNNING transition
+    #[test]
+    fn test_state_transition_not_running_to_running() {
+        let (tx, rx) = mpsc::channel();
+        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        monitor.update_watch_list(vec!["game".to_string()]);
+
+        // Initial state: process not running
+        monitor.running_processes = HashSet::new();
+
+        // Transition: process starts
+        let mut current = HashSet::new();
+        current.insert("game".to_string());
+
+        monitor.detect_changes(current);
+
+        // Verify Started event is sent
+        let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
+        match event {
+            ProcessEvent::Started(name) => {
+                assert_eq!(name, "game");
+            }
+            _ => panic!("Expected Started event for state transition"),
+        }
+    }
+
+    /// Test state transition from RUNNING to NOT_RUNNING
+    /// Requirement 2.5: Detect RUNNING → NOT_RUNNING transition
+    #[test]
+    fn test_state_transition_running_to_not_running() {
+        let (tx, rx) = mpsc::channel();
+        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        monitor.update_watch_list(vec!["game".to_string()]);
+
+        // Initial state: process running
+        let mut initial = HashSet::new();
+        initial.insert("game".to_string());
+        monitor.running_processes = initial;
+
+        // Transition: process stops
+        let current = HashSet::new();
+
+        monitor.detect_changes(current);
+
+        // Verify Stopped event is sent
+        let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
+        match event {
+            ProcessEvent::Stopped(name) => {
+                assert_eq!(name, "game");
+            }
+            _ => panic!("Expected Stopped event for state transition"),
+        }
+    }
+
+    /// Test multiple simultaneous state transitions
+    /// Requirements 2.4, 2.5: Detect state transitions
+    #[test]
+    fn test_multiple_state_transitions() {
+        let (tx, rx) = mpsc::channel();
+        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        monitor.update_watch_list(vec![
+            "app1".to_string(),
+            "app2".to_string(),
+            "app3".to_string(),
+        ]);
+
+        // Initial state: app1 and app2 running
+        let mut initial = HashSet::new();
+        initial.insert("app1".to_string());
+        initial.insert("app2".to_string());
+        monitor.running_processes = initial;
+
+        // New state: app2 and app3 running (app1 stopped, app3 started)
+        let mut current = HashSet::new();
+        current.insert("app2".to_string());
+        current.insert("app3".to_string());
+
+        monitor.detect_changes(current);
+
+        // Should receive both Started and Stopped events
+        let mut started = Vec::new();
+        let mut stopped = Vec::new();
+
+        for _ in 0..2 {
+            let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
+            match event {
+                ProcessEvent::Started(name) => started.push(name),
+                ProcessEvent::Stopped(name) => stopped.push(name),
+            }
+        }
+
+        assert_eq!(started.len(), 1);
+        assert_eq!(stopped.len(), 1);
+        assert!(started.contains(&"app3".to_string()));
+        assert!(stopped.contains(&"app1".to_string()));
+    }
+
+    /// Test that no events are sent when process state doesn't change
+    /// Requirement 2.6: Fire events only on state transitions
+    #[test]
+    fn test_no_events_when_no_state_change() {
+        let (tx, rx) = mpsc::channel();
+        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        monitor.update_watch_list(vec!["game".to_string()]);
+
+        // Initial state: game running
+        let mut initial = HashSet::new();
+        initial.insert("game".to_string());
+        monitor.running_processes = initial.clone();
+
+        // Current state: same as before (no change)
+        monitor.detect_changes(initial);
+
+        // Should not receive any events
+        assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+
+    /// Test that only monitored processes trigger events
+    /// Requirement 2.7: Match processes by name
+    #[test]
+    fn test_only_monitored_processes_trigger_events() {
+        let (tx, rx) = mpsc::channel();
+        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        // Only watch "game"
+        monitor.update_watch_list(vec!["game".to_string()]);
+
+        monitor.running_processes = HashSet::new();
+
+        // Start multiple processes, only one monitored
+        let mut current = HashSet::new();
+        current.insert("game".to_string());      // Monitored
+        current.insert("notepad".to_string());   // Not monitored
+        current.insert("explorer".to_string());  // Not monitored
+        current.insert("chrome".to_string());    // Not monitored
+
+        monitor.detect_changes(current);
+
+        // Should only receive one event for "game"
+        let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
+        match event {
+            ProcessEvent::Started(name) => assert_eq!(name, "game"),
+            _ => panic!("Expected Started event for game"),
+        }
+
+        // No more events should be received
+        assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+
+    /// Test edge case: empty watch list
+    #[test]
+    fn test_empty_watch_list() {
+        let (tx, rx) = mpsc::channel();
+        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        // Empty watch list
+        monitor.update_watch_list(vec![]);
+
+        monitor.running_processes = HashSet::new();
+
+        // Start some processes
+        let mut current = HashSet::new();
+        current.insert("game".to_string());
+        current.insert("notepad".to_string());
+
+        monitor.detect_changes(current);
+
+        // Should not receive any events
+        assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+
+    /// Test edge case: process name with special characters
+    #[test]
+    fn test_process_name_with_special_characters() {
+        assert_eq!(
+            extract_filename_without_extension("my-app.exe"),
+            "my-app"
+        );
+
+        assert_eq!(
+            extract_filename_without_extension("app_v2.exe"),
+            "app_v2"
+        );
+
+        assert_eq!(
+            extract_filename_without_extension("app (1).exe"),
+            "app (1)"
+        );
+
+        assert_eq!(
+            extract_filename_without_extension("app[test].exe"),
+            "app[test]"
+        );
+    }
+
+    /// Test edge case: very long path
+    #[test]
+    fn test_very_long_path() {
+        let long_path = "C:\\Very\\Long\\Path\\With\\Many\\Directories\\And\\Subdirectories\\That\\Goes\\On\\And\\On\\application.exe";
+        assert_eq!(
+            extract_filename_without_extension(long_path),
+            "application"
+        );
+    }
+
+    /// Test that process names are correctly normalized
+    /// Requirement 2.3: Case-insensitive matching
+    #[test]
+    fn test_process_name_normalization() {
+        let (tx, _rx) = mpsc::channel();
+        let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+        // Add processes with various cases
+        monitor.update_watch_list(vec![
+            "Game.exe".to_string(),
+            "NOTEPAD".to_string(),
+            "MyApp.EXE".to_string(),
+        ]);
+
+        let watch_list = monitor.watch_list.lock();
+
+        // All should be normalized to lowercase
+        assert!(watch_list.contains("game.exe"));
+        assert!(watch_list.contains("notepad"));
+        assert!(watch_list.contains("myapp.exe"));
+        assert_eq!(watch_list.len(), 3);
+    }
 }
 
