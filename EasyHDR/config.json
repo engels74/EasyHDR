@@ -1,0 +1,23 @@
+{
+  "monitored_apps": [
+    {
+      "id": "956574c7-8606-4d71-92f8-9eb585249d1d",
+      "display_name": "New App",
+      "exe_path": "C:\\test\\newapp.exe",
+      "process_name": "newapp",
+      "enabled": true
+    }
+  ],
+  "preferences": {
+    "auto_start": false,
+    "monitoring_interval_ms": 1000,
+    "startup_delay_ms": 3000,
+    "show_tray_notifications": true
+  },
+  "window_state": {
+    "x": 100,
+    "y": 100,
+    "width": 600,
+    "height": 500
+  }
+}
