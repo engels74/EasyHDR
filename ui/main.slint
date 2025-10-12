@@ -1,8 +1,9 @@
 // Main window UI definition for EasyHDR
 // Implements task 9.1: Create main window UI definition
-// Requirements: 5.1, 5.2, 5.3, 5.4, 5.8, 5.9
+// Implements task 9.4: Theme support with Palette and StyleMetrics
+// Requirements: 5.1, 5.2, 5.3, 5.4, 5.8, 5.9, 5.13
 
-import { Button, ListView, CheckBox } from "std-widgets.slint";
+import { Button, ListView, CheckBox, Palette, StyleMetrics } from "std-widgets.slint";
 
 // AppListItem struct represents a configured application in the list
 // Fields: id (UUID), display-name (app name), exe-path (full path), enabled (checkbox state), icon (app icon)
@@ -31,51 +32,58 @@ export component MainWindow inherits Window {
     callback minimize-to-tray();
 
     VerticalLayout {
-        padding: 16px;
-        spacing: 12px;
+        padding: StyleMetrics.layout-padding;
+        spacing: StyleMetrics.layout-spacing;
 
-        // HDR Status indicator (Requirement 5.8)
+        // HDR Status indicator (Requirement 5.8, 5.13)
         // Shows colored circle (green for ON, red for OFF) and text label
+        // Theme-aware colors with clear ON/OFF distinction
         HorizontalLayout {
-            spacing: 8px;
+            spacing: StyleMetrics.layout-spacing;
             Text {
                 text: "HDR Status:";
                 font-size: 14px;
+                color: Palette.foreground;
             }
             Rectangle {
                 width: 16px;
                 height: 16px;
                 border-radius: 8px;
-                background: hdr-enabled ? #00ff00 : #ff0000;
+                // Use semantic colors: success green for ON, error red for OFF
+                background: hdr-enabled ? #00cc00 : #cc0000;
             }
             Text {
                 text: hdr-enabled ? "ON" : "OFF";
                 font-size: 14px;
                 font-weight: 700;
+                color: Palette.foreground;
             }
         }
 
-        // Application list container (Requirements 5.2, 5.3, 5.4)
+        // Application list container (Requirements 5.2, 5.3, 5.4, 5.13)
         // Task 9.2: Implement application list display with proper styling
+        // Task 9.4: Theme-aware colors and spacing
         Rectangle {
             border-width: 1px;
-            border-color: #cccccc;
+            border-color: Palette.border;
             border-radius: 4px;
+            background: Palette.alternate-background;
 
             // Empty state message (Requirement 5.4)
             if app-list.length == 0: Text {
                 text: "No applications configured. Click 'Add Application' to get started.";
                 horizontal-alignment: center;
                 vertical-alignment: center;
+                color: Palette.foreground;
             }
 
-            // Scrollable ListView for application list (Requirements 5.2, 5.3)
+            // Scrollable ListView for application list (Requirements 5.2, 5.3, 5.13)
             if app-list.length > 0: ListView {
                 for item[index] in app-list: VerticalLayout {
                     // List item row with visual highlight for selection
                     Rectangle {
-                        // Visual highlight for selected row
-                        background: selected-index == index ? #e0e0e0 : Colors.transparent;
+                        // Visual highlight for selected row - theme-aware
+                        background: selected-index == index ? Palette.selection-background : Colors.transparent;
 
                         // Touch area for row click handling - covers entire row
                         TouchArea {
@@ -85,8 +93,8 @@ export component MainWindow inherits Window {
                         }
 
                         HorizontalLayout {
-                            spacing: 8px;
-                            padding: 8px;
+                            spacing: StyleMetrics.layout-spacing;
+                            padding: StyleMetrics.layout-padding;
 
                             // Application icon (32x32)
                             Image {
@@ -104,11 +112,12 @@ export component MainWindow inherits Window {
                                     font-weight: 600;
                                     font-size: 13px;
                                     overflow: elide;
+                                    color: Palette.foreground;
                                 }
                                 Text {
                                     text: item.exe-path;
                                     font-size: 11px;
-                                    color: #666666;
+                                    color: Palette.foreground.transparentize(0.4);
                                     overflow: elide;
                                 }
                             }
@@ -128,18 +137,19 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Row separator line
+                    // Row separator line - theme-aware
                     Rectangle {
                         height: 1px;
-                        background: #e5e5e5;
+                        background: Palette.border;
                     }
                 }
             }
         }
 
-        // Bottom toolbar with buttons (Requirement 5.9)
+        // Bottom toolbar with buttons (Requirement 5.9, 5.13)
+        // Theme-aware spacing
         HorizontalLayout {
-            spacing: 8px;
+            spacing: StyleMetrics.layout-spacing;
             Button {
                 text: "Add Application";
                 clicked => {
