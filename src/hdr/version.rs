@@ -140,6 +140,8 @@ impl WindowsVersion {
 
     /// Parse Windows build number to determine version variant
     ///
+    /// This method is public to allow for testing with specific build numbers.
+    ///
     /// # Arguments
     ///
     /// * `build_number` - The Windows build number from OSVERSIONINFOEXW
@@ -147,7 +149,25 @@ impl WindowsVersion {
     /// # Returns
     ///
     /// The corresponding WindowsVersion enum variant
-    fn parse_build_number(build_number: u32) -> Self {
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use easyhdr::hdr::version::WindowsVersion;
+    ///
+    /// // Windows 10 21H2
+    /// let version = WindowsVersion::parse_build_number(19044);
+    /// assert_eq!(version, WindowsVersion::Windows10);
+    ///
+    /// // Windows 11 22H2
+    /// let version = WindowsVersion::parse_build_number(22621);
+    /// assert_eq!(version, WindowsVersion::Windows11);
+    ///
+    /// // Windows 11 24H2
+    /// let version = WindowsVersion::parse_build_number(26100);
+    /// assert_eq!(version, WindowsVersion::Windows11_24H2);
+    /// ```
+    pub fn parse_build_number(build_number: u32) -> Self {
         if build_number >= 26100 {
             // Windows 11 24H2 or later
             WindowsVersion::Windows11_24H2
@@ -234,6 +254,52 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_build_number_comprehensive() {
+        // Test a comprehensive range of build numbers to ensure correct classification
+
+        // Very old Windows 10 builds
+        assert_eq!(WindowsVersion::parse_build_number(10240), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(14393), WindowsVersion::Windows10);
+
+        // Windows 10 1809 through 22H2
+        assert_eq!(WindowsVersion::parse_build_number(17763), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(18362), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(18363), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(19041), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(19042), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(19043), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(19044), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(19045), WindowsVersion::Windows10);
+
+        // Windows 11 versions
+        assert_eq!(WindowsVersion::parse_build_number(22000), WindowsVersion::Windows11);
+        assert_eq!(WindowsVersion::parse_build_number(22621), WindowsVersion::Windows11);
+        assert_eq!(WindowsVersion::parse_build_number(22631), WindowsVersion::Windows11);
+
+        // Windows 11 24H2 and beyond
+        assert_eq!(WindowsVersion::parse_build_number(26100), WindowsVersion::Windows11_24H2);
+        assert_eq!(WindowsVersion::parse_build_number(26200), WindowsVersion::Windows11_24H2);
+        assert_eq!(WindowsVersion::parse_build_number(30000), WindowsVersion::Windows11_24H2);
+    }
+
+    #[test]
+    fn test_parse_build_number_boundary_values() {
+        // Test boundary values around version thresholds
+
+        // Around Windows 11 threshold (22000)
+        assert_eq!(WindowsVersion::parse_build_number(21998), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(21999), WindowsVersion::Windows10);
+        assert_eq!(WindowsVersion::parse_build_number(22000), WindowsVersion::Windows11);
+        assert_eq!(WindowsVersion::parse_build_number(22001), WindowsVersion::Windows11);
+
+        // Around Windows 11 24H2 threshold (26100)
+        assert_eq!(WindowsVersion::parse_build_number(26098), WindowsVersion::Windows11);
+        assert_eq!(WindowsVersion::parse_build_number(26099), WindowsVersion::Windows11);
+        assert_eq!(WindowsVersion::parse_build_number(26100), WindowsVersion::Windows11_24H2);
+        assert_eq!(WindowsVersion::parse_build_number(26101), WindowsVersion::Windows11_24H2);
+    }
+
+    #[test]
     fn test_version_enum_equality() {
         assert_eq!(WindowsVersion::Windows10, WindowsVersion::Windows10);
         assert_eq!(WindowsVersion::Windows11, WindowsVersion::Windows11);
@@ -253,6 +319,103 @@ mod tests {
         assert_eq!(format!("{:?}", v1), "Windows10");
         assert_eq!(format!("{:?}", v2), "Windows11");
         assert_eq!(format!("{:?}", v3), "Windows11_24H2");
+    }
+
+    #[test]
+    fn test_version_enum_clone() {
+        // Ensure Clone trait works correctly
+        let v1 = WindowsVersion::Windows10;
+        let v2 = v1.clone();
+        assert_eq!(v1, v2);
+
+        let v3 = WindowsVersion::Windows11_24H2;
+        let v4 = v3.clone();
+        assert_eq!(v3, v4);
+    }
+
+    #[test]
+    fn test_version_enum_copy() {
+        // Ensure Copy trait works correctly
+        let v1 = WindowsVersion::Windows11;
+        let v2 = v1; // Copy, not move
+        assert_eq!(v1, v2);
+        // v1 should still be usable after copy
+        assert_eq!(v1, WindowsVersion::Windows11);
+    }
+
+    // Tests for Windows API response simulation
+    // Note: These tests verify the logic flow and error handling
+    // since we cannot easily mock Windows API calls in unit tests
+
+    #[test]
+    #[cfg(not(windows))]
+    fn test_version_detection_non_windows() {
+        // On non-Windows platforms, should return Windows11 as default
+        let version = WindowsVersion::detect();
+        assert!(version.is_ok());
+        assert_eq!(version.unwrap(), WindowsVersion::Windows11);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_version_detection_windows_api_success() {
+        // This test verifies that version detection succeeds on Windows
+        // It will use the actual Windows API, so the result depends on the test environment
+        let version = WindowsVersion::detect();
+
+        // Should succeed on any Windows system
+        assert!(version.is_ok(), "Version detection should succeed on Windows");
+
+        let detected = version.unwrap();
+
+        // Should be one of the three valid versions
+        assert!(
+            matches!(detected, WindowsVersion::Windows10 | WindowsVersion::Windows11 | WindowsVersion::Windows11_24H2),
+            "Detected version should be one of the valid Windows versions"
+        );
+    }
+
+    #[test]
+    fn test_parse_build_number_zero() {
+        // Edge case: build number 0 (should never happen in practice)
+        let version = WindowsVersion::parse_build_number(0);
+        assert_eq!(version, WindowsVersion::Windows10);
+    }
+
+    #[test]
+    fn test_parse_build_number_max_u32() {
+        // Edge case: maximum u32 value
+        let version = WindowsVersion::parse_build_number(u32::MAX);
+        assert_eq!(version, WindowsVersion::Windows11_24H2);
+    }
+
+    #[test]
+    fn test_parse_build_number_known_versions() {
+        // Test specific known Windows versions for accuracy
+
+        // Windows 10 versions
+        assert_eq!(WindowsVersion::parse_build_number(10240), WindowsVersion::Windows10); // 1507
+        assert_eq!(WindowsVersion::parse_build_number(10586), WindowsVersion::Windows10); // 1511
+        assert_eq!(WindowsVersion::parse_build_number(14393), WindowsVersion::Windows10); // 1607
+        assert_eq!(WindowsVersion::parse_build_number(15063), WindowsVersion::Windows10); // 1703
+        assert_eq!(WindowsVersion::parse_build_number(16299), WindowsVersion::Windows10); // 1709
+        assert_eq!(WindowsVersion::parse_build_number(17134), WindowsVersion::Windows10); // 1803
+        assert_eq!(WindowsVersion::parse_build_number(17763), WindowsVersion::Windows10); // 1809
+        assert_eq!(WindowsVersion::parse_build_number(18362), WindowsVersion::Windows10); // 1903
+        assert_eq!(WindowsVersion::parse_build_number(18363), WindowsVersion::Windows10); // 1909
+        assert_eq!(WindowsVersion::parse_build_number(19041), WindowsVersion::Windows10); // 2004
+        assert_eq!(WindowsVersion::parse_build_number(19042), WindowsVersion::Windows10); // 20H2
+        assert_eq!(WindowsVersion::parse_build_number(19043), WindowsVersion::Windows10); // 21H1
+        assert_eq!(WindowsVersion::parse_build_number(19044), WindowsVersion::Windows10); // 21H2
+        assert_eq!(WindowsVersion::parse_build_number(19045), WindowsVersion::Windows10); // 22H2
+
+        // Windows 11 versions
+        assert_eq!(WindowsVersion::parse_build_number(22000), WindowsVersion::Windows11); // 21H2
+        assert_eq!(WindowsVersion::parse_build_number(22621), WindowsVersion::Windows11); // 22H2
+        assert_eq!(WindowsVersion::parse_build_number(22631), WindowsVersion::Windows11); // 23H2
+
+        // Windows 11 24H2
+        assert_eq!(WindowsVersion::parse_build_number(26100), WindowsVersion::Windows11_24H2); // 24H2
     }
 }
 

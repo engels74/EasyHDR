@@ -6,6 +6,14 @@ authors = ["EasyHDR Contributors"]
 description = "Automatic HDR management for Windows"
 license = "AGPL-3.0"
 
+[lib]
+name = "easyhdr"
+path = "src/lib.rs"
+
+[[bin]]
+name = "easyhdr"
+path = "src/main.rs"
+
 [dependencies]
 # GUI
 slint = "1.3"
