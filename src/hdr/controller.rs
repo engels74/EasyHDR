@@ -88,21 +88,21 @@ impl HdrController {
             let mut mode_count: u32 = 0;
 
             unsafe {
-                GetDisplayConfigBufferSizes(
+                let result = GetDisplayConfigBufferSizes(
                     QDC_ONLY_ACTIVE_PATHS,
                     &mut path_count,
                     &mut mode_count,
-                )
-                .map_err(|e| {
+                );
+                if result != 0 {
                     error!(
-                        "Windows API error - GetDisplayConfigBufferSizes failed: {}",
-                        e
+                        "Windows API error - GetDisplayConfigBufferSizes failed with code: {}",
+                        result
                     );
-                    EasyHdrError::HdrControlFailed(format!(
-                        "Failed to get display config buffer sizes: {}",
-                        e
-                    ))
-                })?;
+                    return Err(EasyHdrError::HdrControlFailed(format!(
+                        "Failed to get display config buffer sizes: error code {}",
+                        result
+                    )));
+                }
             }
 
             debug!(
@@ -116,16 +116,21 @@ impl HdrController {
 
             // Step 3: Query display configuration
             unsafe {
-                QueryDisplayConfig(
+                let result = QueryDisplayConfig(
                     QDC_ONLY_ACTIVE_PATHS,
-                    Some(&mut paths),
-                    Some(&mut modes),
-                    None,
-                )
-                .map_err(|e| {
-                    error!("Windows API error - QueryDisplayConfig failed: {}", e);
-                    EasyHdrError::HdrControlFailed(format!("Failed to query display config: {}", e))
-                })?;
+                    &mut path_count,
+                    paths.as_mut_ptr(),
+                    &mut mode_count,
+                    modes.as_mut_ptr(),
+                    std::ptr::null_mut(),
+                );
+                if result != 0 {
+                    error!("Windows API error - QueryDisplayConfig failed with code: {}", result);
+                    return Err(EasyHdrError::HdrControlFailed(format!(
+                        "Failed to query display config: error code {}",
+                        result
+                    )));
+                }
             }
 
             info!(
@@ -266,17 +271,17 @@ impl HdrController {
                     };
 
                     unsafe {
-                        DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
-                            .map_err(|e| {
-                                error!(
-                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2) failed for adapter {:?}, target {}: {}",
-                                    target.adapter_id, target.target_id, e
-                                );
-                                EasyHdrError::HdrControlFailed(format!(
-                                    "Failed to get advanced color info 2: {}",
-                                    e
-                                ))
-                            })?;
+                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        if result != 0 {
+                            error!(
+                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2) failed for adapter {:?}, target {}: error code {}",
+                                target.adapter_id, target.target_id, result
+                            );
+                            return Err(EasyHdrError::HdrControlFailed(format!(
+                                "Failed to get advanced color info 2: error code {}",
+                                result
+                            )));
+                        }
                     }
 
                     let supported = color_info.highDynamicRangeSupported();
@@ -305,17 +310,17 @@ impl HdrController {
                     };
 
                     unsafe {
-                        DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
-                            .map_err(|e| {
-                                error!(
-                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info) failed for adapter {:?}, target {}: {}",
-                                    target.adapter_id, target.target_id, e
-                                );
-                                EasyHdrError::HdrControlFailed(format!(
-                                    "Failed to get advanced color info: {}",
-                                    e
-                                ))
-                            })?;
+                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        if result != 0 {
+                            error!(
+                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info) failed for adapter {:?}, target {}: error code {}",
+                                target.adapter_id, target.target_id, result
+                            );
+                            return Err(EasyHdrError::HdrControlFailed(format!(
+                                "Failed to get advanced color info: error code {}",
+                                result
+                            )));
+                        }
                     }
 
                     // HDR supported: advancedColorSupported == TRUE AND wideColorEnforced == FALSE
@@ -384,17 +389,17 @@ impl HdrController {
                     };
 
                     unsafe {
-                        DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
-                            .map_err(|e| {
-                                error!(
-                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: {}",
-                                    target.adapter_id, target.target_id, e
-                                );
-                                EasyHdrError::HdrControlFailed(format!(
-                                    "Failed to get advanced color info 2: {}",
-                                    e
-                                ))
-                            })?;
+                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        if result != 0 {
+                            error!(
+                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
+                                target.adapter_id, target.target_id, result
+                            );
+                            return Err(EasyHdrError::HdrControlFailed(format!(
+                                "Failed to get advanced color info 2: error code {}",
+                                result
+                            )));
+                        }
                     }
 
                     // HDR enabled: activeColorMode == HDR
@@ -427,17 +432,17 @@ impl HdrController {
                     };
 
                     unsafe {
-                        DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
-                            .map_err(|e| {
-                                error!(
-                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info for HDR enabled check) failed for adapter {:?}, target {}: {}",
-                                    target.adapter_id, target.target_id, e
-                                );
-                                EasyHdrError::HdrControlFailed(format!(
-                                    "Failed to get advanced color info: {}",
-                                    e
-                                ))
-                            })?;
+                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        if result != 0 {
+                            error!(
+                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
+                                target.adapter_id, target.target_id, result
+                            );
+                            return Err(EasyHdrError::HdrControlFailed(format!(
+                                "Failed to get advanced color info: error code {}",
+                                result
+                            )));
+                        }
                     }
 
                     // HDR enabled: advancedColorSupported == TRUE AND advancedColorEnabled == TRUE AND wideColorEnforced == FALSE
@@ -730,12 +735,13 @@ mod tests {
 
         // If displays are found, verify structure
         for display in &displays {
-            // Target ID should be valid
-            assert!(display.target_id > 0 || display.target_id == 0);
+            // Target ID is a u32, so it's always valid (>= 0)
+            // Just verify the display has some data
+            let _ = display.target_id; // Ensure field exists
 
             // supports_hdr is now properly detected (may be true or false depending on hardware)
-            // Just verify it's a valid boolean value
-            assert!(display.supports_hdr == true || display.supports_hdr == false);
+            // The field is a bool, so it's always valid
+            let _ = display.supports_hdr; // Ensure field exists
         }
     }
 
@@ -756,7 +762,7 @@ mod tests {
         assert_eq!(cloned.adapter_id.LowPart, 0x1234);
         assert_eq!(cloned.adapter_id.HighPart, 0x5678);
         assert_eq!(cloned.target_id, 42);
-        assert_eq!(cloned.supports_hdr, false);
+        assert!(!cloned.supports_hdr);
     }
 
     #[test]
@@ -819,7 +825,7 @@ mod tests {
 
         let result = controller.is_hdr_supported(&target);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]
@@ -839,7 +845,7 @@ mod tests {
 
         let result = controller.is_hdr_enabled(&target);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]
@@ -1123,15 +1129,15 @@ mod tests {
             WindowsVersion::Windows10 => {
                 // Windows 10 should use legacy APIs
                 // The controller should initialize successfully
-                assert!(true, "Windows 10 detected");
+                eprintln!("Windows 10 detected");
             }
             WindowsVersion::Windows11 => {
                 // Windows 11 (pre-24H2) should use legacy APIs
-                assert!(true, "Windows 11 detected");
+                eprintln!("Windows 11 detected");
             }
             WindowsVersion::Windows11_24H2 => {
                 // Windows 11 24H2+ should use new APIs
-                assert!(true, "Windows 11 24H2+ detected");
+                eprintln!("Windows 11 24H2+ detected");
             }
         }
 
@@ -1200,11 +1206,11 @@ mod tests {
         match result {
             Ok(supported) => {
                 // If it succeeds, it should return false for invalid display
-                assert_eq!(supported, false, "Invalid display should not support HDR");
+                assert!(!supported, "Invalid display should not support HDR");
             }
             Err(_) => {
                 // If it fails, that's also acceptable for invalid display
-                assert!(true, "Error is acceptable for invalid display");
+                eprintln!("Error is acceptable for invalid display");
             }
         }
 
@@ -1213,14 +1219,14 @@ mod tests {
         match result {
             Ok(enabled) => {
                 // If it succeeds, it should return false for invalid display
-                assert_eq!(
-                    enabled, false,
+                assert!(
+                    !enabled,
                     "Invalid display should not have HDR enabled"
                 );
             }
             Err(_) => {
                 // If it fails, that's also acceptable for invalid display
-                assert!(true, "Error is acceptable for invalid display");
+                eprintln!("Error is acceptable for invalid display");
             }
         }
     }
@@ -1247,11 +1253,11 @@ mod tests {
         match result {
             Ok(()) => {
                 // Unlikely but acceptable
-                assert!(true, "Operation succeeded on invalid display");
+                eprintln!("Operation succeeded on invalid display");
             }
             Err(e) => {
                 // Expected: operation fails but doesn't panic
-                assert!(true, "Operation failed gracefully with error: {}", e);
+                eprintln!("Operation failed gracefully with error: {}", e);
             }
         }
 

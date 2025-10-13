@@ -81,7 +81,7 @@ fn test_config_persistence_integration() {
     assert_eq!(loaded_config.monitored_apps.len(), 1);
     assert_eq!(loaded_config.monitored_apps[0].display_name, "Test Game");
     assert_eq!(loaded_config.monitored_apps[0].process_name, "test");
-    assert_eq!(loaded_config.monitored_apps[0].enabled, true);
+    assert!(loaded_config.monitored_apps[0].enabled);
 
     // Cleanup
     std::fs::remove_dir_all(&test_dir).ok();
@@ -263,8 +263,8 @@ fn test_preferences_update_integration() {
     config.preferences.show_tray_notifications = false;
 
     // Verify updates
-    assert_eq!(config.preferences.auto_start, true);
+    assert!(config.preferences.auto_start);
     assert_eq!(config.preferences.monitoring_interval_ms, 2000);
     assert_eq!(config.preferences.startup_delay_ms, 5000);
-    assert_eq!(config.preferences.show_tray_notifications, false);
+    assert!(!config.preferences.show_tray_notifications);
 }

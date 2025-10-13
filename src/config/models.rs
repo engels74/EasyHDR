@@ -450,10 +450,10 @@ mod tests {
     fn test_default_user_preferences() {
         let prefs = UserPreferences::default();
 
-        assert_eq!(prefs.auto_start, false);
+        assert!(!prefs.auto_start);
         assert_eq!(prefs.monitoring_interval_ms, 1000);
         assert_eq!(prefs.startup_delay_ms, 3000);
-        assert_eq!(prefs.show_tray_notifications, true);
+        assert!(prefs.show_tray_notifications);
     }
 
     #[test]

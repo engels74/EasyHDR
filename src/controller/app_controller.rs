@@ -642,7 +642,7 @@ mod tests {
 
         // Should have sent a state update
         let state = state_rx.try_recv().unwrap();
-        assert_eq!(state.hdr_enabled, true);
+        assert!(state.hdr_enabled);
     }
 
     #[test]
@@ -734,7 +734,7 @@ mod tests {
 
         // Should have sent a state update
         let state = state_rx.try_recv().unwrap();
-        assert_eq!(state.hdr_enabled, false);
+        assert!(!state.hdr_enabled);
     }
 
     #[test]
@@ -767,12 +767,12 @@ mod tests {
         // Start first app
         controller.handle_process_event(ProcessEvent::Started("app1".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Start second app
         controller.handle_process_event(ProcessEvent::Started("app2".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 2);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Wait for debounce period
         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -780,7 +780,7 @@ mod tests {
         // Stop first app - HDR should remain on
         controller.handle_process_event(ProcessEvent::Stopped("app1".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Wait for debounce period
         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -788,7 +788,7 @@ mod tests {
         // Stop second app - HDR should turn off
         controller.handle_process_event(ProcessEvent::Stopped("app2".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), false);
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
 
     // NOTE: This test may fail when run in parallel with other tests due to a race condition.
@@ -923,7 +923,7 @@ mod tests {
 
         // Verify enabled flag was updated
         let config = controller.config.lock();
-        assert_eq!(config.monitored_apps[0].enabled, false);
+        assert!(!config.monitored_apps[0].enabled);
         drop(config);
 
         // Verify watch list was updated (app should be removed)
@@ -937,7 +937,7 @@ mod tests {
 
         // Verify enabled flag was updated
         let config = controller.config.lock();
-        assert_eq!(config.monitored_apps[0].enabled, true);
+        assert!(config.monitored_apps[0].enabled);
         drop(config);
 
         // Verify watch list was updated (app should be added back)
@@ -978,10 +978,10 @@ mod tests {
 
         // Verify preferences were updated
         let config = controller.config.lock();
-        assert_eq!(config.preferences.auto_start, true);
+        assert!(config.preferences.auto_start);
         assert_eq!(config.preferences.monitoring_interval_ms, 2000);
         assert_eq!(config.preferences.startup_delay_ms, 5000);
-        assert_eq!(config.preferences.show_tray_notifications, false);
+        assert!(!config.preferences.show_tray_notifications);
     }
 
     #[test]
@@ -1134,7 +1134,7 @@ mod tests {
         let state = state_rx
             .recv_timeout(std::time::Duration::from_millis(100))
             .unwrap();
-        assert_eq!(state.hdr_enabled, true);
+        assert!(state.hdr_enabled);
 
         // Close the channel to exit the event loop
         drop(event_tx);
@@ -1217,12 +1217,12 @@ mod tests {
         let state1 = state_rx
             .recv_timeout(std::time::Duration::from_millis(100))
             .unwrap();
-        assert_eq!(state1.hdr_enabled, true);
+        assert!(state1.hdr_enabled);
 
         let state2 = state_rx
             .recv_timeout(std::time::Duration::from_millis(100))
             .unwrap();
-        assert_eq!(state2.hdr_enabled, true);
+        assert!(state2.hdr_enabled);
 
         // Close the channel to exit the event loop
         drop(event_tx);
@@ -1262,7 +1262,7 @@ mod tests {
         // Start the app - HDR should turn on
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Record the time of the first toggle
         let first_toggle_time = *controller.last_toggle_time.lock();
@@ -1274,7 +1274,7 @@ mod tests {
         controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
         // HDR should still be on because we're within the debounce window
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Verify that the last toggle time hasn't changed (no toggle occurred)
         let second_toggle_time = *controller.last_toggle_time.lock();
@@ -1288,7 +1288,7 @@ mod tests {
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         // HDR should still be on (it never turned off)
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Wait for debounce period to expire (600ms to be safe)
         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -1296,7 +1296,7 @@ mod tests {
         // Stop the app - HDR should turn off now (debounce period has passed)
         controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), false);
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
 
     /// Test that debouncing doesn't prevent HDR from turning on
@@ -1325,7 +1325,7 @@ mod tests {
         // Start the app - HDR should turn on immediately
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Wait for debounce period
         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -1333,12 +1333,12 @@ mod tests {
         // Stop the app - HDR should turn off
         controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), false);
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Immediately start the app again (within what would be a debounce window if it applied to enable)
         // HDR should turn on immediately regardless of timing
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
-        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
     }
 }

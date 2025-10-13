@@ -401,11 +401,11 @@ mod tests {
     fn test_version_enum_clone() {
         // Ensure Clone trait works correctly
         let v1 = WindowsVersion::Windows10;
-        let v2 = v1.clone();
+        let v2 = v1; // Copy trait is used automatically
         assert_eq!(v1, v2);
 
         let v3 = WindowsVersion::Windows11_24H2;
-        let v4 = v3.clone();
+        let v4 = v3; // Copy trait is used automatically
         assert_eq!(v3, v4);
     }
 

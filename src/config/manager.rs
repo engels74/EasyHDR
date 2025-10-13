@@ -257,7 +257,7 @@ mod tests {
         // Verify we got default config
         assert_eq!(config.monitored_apps.len(), 0);
         assert_eq!(config.preferences.monitoring_interval_ms, 1000);
-        assert_eq!(config.preferences.auto_start, false);
+        assert!(!config.preferences.auto_start);
 
         // Cleanup
         cleanup_test_dir(&test_dir);
@@ -303,7 +303,7 @@ mod tests {
         fs::create_dir_all(&config_dir).unwrap();
 
         // Write various types of malformed JSON
-        let test_cases = vec![
+        let test_cases = [
             "",                                      // Empty file
             "{",                                     // Unclosed brace
             "null",                                  // Null value
@@ -438,7 +438,7 @@ mod tests {
         let json_content = fs::read_to_string(&config_path).unwrap();
         let loaded: AppConfig = serde_json::from_str(&json_content).unwrap();
         assert_eq!(loaded.preferences.monitoring_interval_ms, 2000);
-        assert_eq!(loaded.preferences.auto_start, true);
+        assert!(loaded.preferences.auto_start);
 
         // Cleanup
         cleanup_test_dir(&test_dir);
@@ -496,13 +496,13 @@ mod tests {
         assert_eq!(loaded.monitored_apps.len(), 2);
         assert_eq!(loaded.monitored_apps[0].display_name, "App 1");
         assert_eq!(loaded.monitored_apps[1].display_name, "App 2");
-        assert_eq!(loaded.monitored_apps[0].enabled, true);
-        assert_eq!(loaded.monitored_apps[1].enabled, false);
+        assert!(loaded.monitored_apps[0].enabled);
+        assert!(!loaded.monitored_apps[1].enabled);
 
-        assert_eq!(loaded.preferences.auto_start, true);
+        assert!(loaded.preferences.auto_start);
         assert_eq!(loaded.preferences.monitoring_interval_ms, 1500);
         assert_eq!(loaded.preferences.startup_delay_ms, 7000);
-        assert_eq!(loaded.preferences.show_tray_notifications, false);
+        assert!(!loaded.preferences.show_tray_notifications);
 
         assert_eq!(loaded.window_state.x, 250);
         assert_eq!(loaded.window_state.y, 300);
