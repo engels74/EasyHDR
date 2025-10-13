@@ -12,6 +12,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Number of historical log files to keep
+// TODO: Use in rotation logic or remove if not needed
 #[allow(dead_code)]
 const MAX_LOG_FILES: usize = 3;
 
