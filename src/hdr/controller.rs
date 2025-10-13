@@ -37,7 +37,7 @@ pub struct DisplayTarget {
 /// HDR controller
 pub struct HdrController {
     /// Windows version
-    #[allow(dead_code)]
+    #[cfg_attr(not(windows), allow(dead_code))]
     windows_version: WindowsVersion,
     /// Cached display targets
     display_cache: Vec<DisplayTarget>,
@@ -498,7 +498,7 @@ impl HdrController {
     /// - Requirement 3.8: Use DISPLAYCONFIG_SET_HDR_STATE for Windows 11 24H2+
     /// - Requirement 3.9: Use DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE for older Windows
     /// - Requirement 3.11: Add 100ms delay after DisplayConfigSetDeviceInfo call
-    #[allow(dead_code)]
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn set_hdr_state(&self, target: &DisplayTarget, enable: bool) -> Result<()> {
         #[cfg(windows)]
         {

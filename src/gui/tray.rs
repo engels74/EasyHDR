@@ -55,9 +55,11 @@ use tray_icon::{
 #[cfg(windows)]
 pub struct TrayIcon {
     /// The actual tray icon
+    // TODO: Wire up to state updates
     #[allow(dead_code)]
     tray: tray_icon::TrayIcon,
     /// The context menu for the tray icon
+    // TODO: Wire up to state updates
     #[allow(dead_code)]
     menu: Menu,
     /// Weak reference to the main window
@@ -67,6 +69,7 @@ pub struct TrayIcon {
     /// ID of the "Exit" menu item
     exit_item_id: tray_icon::menu::MenuId,
     /// Reference to the status menu item for updating text
+    // TODO: Wire up to state updates
     #[allow(dead_code)]
     status_item: MenuItem,
 }
@@ -460,6 +463,7 @@ impl TrayIcon {
     /// tray_icon.update_icon(false); // HDR disabled
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
+    // TODO: Connect to HDR state changes
     #[allow(dead_code)]
     pub fn update_icon(&mut self, hdr_enabled: bool) {
         use tracing::{info, warn};
@@ -537,6 +541,7 @@ impl TrayIcon {
     /// tray_icon.show_notification("HDR Disabled");
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
+    // TODO: Connect to process events
     #[allow(dead_code)]
     pub fn show_notification(&self, message: &str) {
         use tracing::{debug, info, warn};
