@@ -197,7 +197,7 @@ impl MonitoredApp {
 }
 
 /// Top-level application configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     /// List of monitored applications
     pub monitored_apps: Vec<MonitoredApp>,
@@ -231,16 +231,6 @@ pub struct WindowState {
     pub width: u32,
     /// Window height
     pub height: u32,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            monitored_apps: Vec::new(),
-            preferences: UserPreferences::default(),
-            window_state: WindowState::default(),
-        }
-    }
 }
 
 impl Default for UserPreferences {

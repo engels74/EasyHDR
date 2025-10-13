@@ -67,12 +67,15 @@ pub struct ProcessMonitor {
     /// List of process names to watch (lowercase)
     watch_list: Arc<Mutex<HashSet<String>>>,
     /// Channel to send process events
+    #[allow(dead_code)]
     event_sender: mpsc::Sender<ProcessEvent>,
     /// Polling interval
     interval: Duration,
     /// Previous snapshot of running processes
+    #[allow(dead_code)]
     running_processes: HashSet<String>,
     /// Estimated process count for capacity pre-allocation
+    #[allow(dead_code)]
     estimated_process_count: usize,
 }
 
@@ -277,6 +280,7 @@ impl ProcessMonitor {
     /// Started: {cyberpunk2077} ∩ {cyberpunk2077, witcher3} = {cyberpunk2077}
     /// → Send ProcessEvent::Started("cyberpunk2077")
     /// ```
+    #[allow(dead_code)]
     fn detect_changes(&mut self, current: HashSet<String>) {
         use tracing::info;
 
@@ -367,6 +371,7 @@ fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
 /// # Requirements
 ///
 /// - Requirement 2.3: Perform case-insensitive matching (convert to lowercase)
+#[allow(dead_code)]
 fn extract_filename_without_extension(path: &str) -> String {
     // Extract filename from path
     let filename = if let Some(pos) = path.rfind('\\') {

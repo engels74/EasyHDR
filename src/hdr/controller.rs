@@ -6,6 +6,7 @@
 use crate::error::Result;
 use crate::hdr::windows_api::LUID;
 use crate::hdr::WindowsVersion;
+use tracing::{debug, info, warn};
 
 #[cfg(windows)]
 use crate::hdr::windows_api::{
@@ -16,6 +17,9 @@ use crate::hdr::windows_api::{
 
 #[cfg(windows)]
 use crate::error::EasyHdrError;
+
+#[cfg(windows)]
+use tracing::error;
 
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
@@ -37,6 +41,7 @@ pub struct DisplayTarget {
 /// HDR controller
 pub struct HdrController {
     /// Windows version
+    #[allow(dead_code)]
     windows_version: WindowsVersion,
     /// Cached display targets
     display_cache: Vec<DisplayTarget>,
@@ -242,7 +247,7 @@ impl HdrController {
     /// }
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
-    pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
+    pub fn is_hdr_supported(&self, _target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
             use tracing::debug;
@@ -359,7 +364,7 @@ impl HdrController {
     /// - Requirement 3.4: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 for Windows 11 24H2+
     /// - Requirement 3.5: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO for older Windows
     /// - Requirement 3.7: Check advancedColorSupported && advancedColorEnabled && !wideColorEnforced for older Windows
-    pub fn is_hdr_enabled(&self, target: &DisplayTarget) -> Result<bool> {
+    pub fn is_hdr_enabled(&self, _target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
             use tracing::debug;

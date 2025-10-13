@@ -724,6 +724,7 @@ impl GuiController {
 
     /// Stub implementation for non-Windows platforms
     #[cfg(not(windows))]
+    #[allow(dead_code)]
     fn show_error_dialog_from_error(error: &easyhdr::error::EasyHdrError) {
         use easyhdr::error::get_user_friendly_error;
         eprintln!("Error: {}", get_user_friendly_error(error));

@@ -129,7 +129,7 @@ impl WindowsVersion {
             // Call GetVersionExW
             let result = GetVersionExW(&mut version_info as *mut _ as *mut _);
 
-            if result.as_bool() {
+            if result.is_ok() {
                 Ok(Self::parse_build_number(version_info.dwBuildNumber))
             } else {
                 Err(crate::error::EasyHdrError::WindowsApiError(

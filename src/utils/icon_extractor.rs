@@ -15,14 +15,19 @@ use tracing::debug;
 use crate::error::EasyHdrError;
 
 #[cfg(windows)]
+use tracing::warn;
+
+#[cfg(windows)]
 use windows::core::PCWSTR;
 #[cfg(windows)]
-use windows::Win32::Foundation::{HICON, HWND};
+use windows::Win32::Foundation::HICON;
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, DeleteObject, GetDIBits, GetObjectW, SelectObject, BITMAP, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+    CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, SelectObject, BITMAP,
+    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
 };
+#[cfg(windows)]
+use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
     ExtractIconExW, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
@@ -143,7 +148,7 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
 
         let result = SHGetFileInfoW(
             PCWSTR(wide_path.as_ptr()),
-            0,
+            FILE_FLAGS_AND_ATTRIBUTES(0),
             Some(&mut file_info),
             std::mem::size_of::<SHFILEINFOW>() as u32,
             SHGFI_ICON | SHGFI_LARGEICON,
@@ -181,7 +186,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
     unsafe {
         // Get icon information
         let mut icon_info: ICONINFO = zeroed();
-        if !GetIconInfo(hicon, &mut icon_info).as_bool() {
+        if GetIconInfo(hicon, &mut icon_info).is_err() {
             return Err(EasyHdrError::WindowsApiError(
                 windows::core::Error::from_win32(),
             ));
@@ -247,7 +252,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
 
         // Cleanup
         SelectObject(hdc, old_bitmap);
-        DeleteObject(hdc);
+        DeleteDC(hdc);
         DeleteObject(color_bitmap);
         DeleteObject(mask_bitmap);
 
@@ -408,13 +413,13 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
         let mut buffer = vec![0u8; size as usize];
 
         // Get version info
-        if !GetFileVersionInfoW(
+        if GetFileVersionInfoW(
             PCWSTR(wide_path.as_ptr()),
             handle,
             size,
             buffer.as_mut_ptr() as *mut _,
         )
-        .as_bool()
+        .is_err()
         {
             debug!("GetFileVersionInfoW failed, using filename");
             return Ok(get_filename_fallback(path));
@@ -439,7 +444,7 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
                 &mut value_ptr as *mut *mut u16 as *mut *mut _,
                 &mut value_len,
             )
-            .as_bool()
+            .is_ok()
                 && !value_ptr.is_null()
                 && value_len > 0
             {
