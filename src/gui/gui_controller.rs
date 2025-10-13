@@ -58,7 +58,7 @@ pub struct GuiController {
     /// Channel receiver for state updates from the controller
     state_receiver: mpsc::Receiver<AppState>,
     /// System tray icon for notifications and status display
-    tray_icon: Arc<Mutex<TrayIcon>>,
+    tray_icon: TrayIcon,
 }
 
 impl GuiController {
@@ -201,7 +201,7 @@ impl GuiController {
             main_window,
             controller_handle: controller,
             state_receiver,
-            tray_icon: Arc::new(Mutex::new(tray_icon)),
+            tray_icon,
         })
     }
 
