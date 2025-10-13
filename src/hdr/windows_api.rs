@@ -229,7 +229,7 @@ pub struct DISPLAYCONFIG_RATIONAL {
 
 /// DISPLAYCONFIG_VIDEO_SIGNAL_INFO structure
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO {
     pub pixelRate: u64,
     pub hSyncFreq: DISPLAYCONFIG_RATIONAL,
@@ -238,12 +238,6 @@ pub struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO {
     pub totalSize: DISPLAYCONFIG_2DREGION,
     pub videoStandard: u32,
     pub scanLineOrdering: u32,
-}
-
-impl Default for DISPLAYCONFIG_VIDEO_SIGNAL_INFO {
-    fn default() -> Self {
-        unsafe { std::mem::zeroed() }
-    }
 }
 
 /// DISPLAYCONFIG_TARGET_MODE structure
@@ -291,7 +285,14 @@ pub union DISPLAYCONFIG_MODE_INFO_UNION {
 
 impl Default for DISPLAYCONFIG_MODE_INFO {
     fn default() -> Self {
-        unsafe { std::mem::zeroed() }
+        Self {
+            infoType: DISPLAYCONFIG_MODE_INFO_TYPE::DISPLAYCONFIG_MODE_INFO_TYPE_TARGET,
+            id: 0,
+            adapterId: LUID::default(),
+            modeInfo: DISPLAYCONFIG_MODE_INFO_UNION {
+                targetMode: DISPLAYCONFIG_TARGET_MODE::default(),
+            },
+        }
     }
 }
 
