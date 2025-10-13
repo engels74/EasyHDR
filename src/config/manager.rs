@@ -109,6 +109,17 @@ mod tests {
         assert!(path.to_string_lossy().ends_with("config.json"));
     }
 
+    // NOTE: This test may fail when run in parallel with other tests due to a race condition.
+    // This test expects the config file to be missing, but other tests (particularly in
+    // controller::app_controller) write to the same shared config file (./EasyHDR/config.json
+    // on macOS, %APPDATA%\EasyHDR\config.json on Windows). When those tests run concurrently,
+    // they may create/modify the config file, causing this test to load non-default data.
+    //
+    // The functionality itself is correct - the test passes consistently when run:
+    // - Individually: `cargo test test_load_missing_config`
+    // - Single-threaded: `cargo test -- --test-threads=1`
+    //
+    // This is a test isolation issue, not a code defect. Will be fixed in Task 17.3.
     #[test]
     fn test_load_missing_config() {
         // This should return default config without error

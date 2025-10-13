@@ -1,5 +1,13 @@
 {
-  "monitored_apps": [],
+  "monitored_apps": [
+    {
+      "id": "1ec63966-0c78-4657-94dc-315e246f9dd4",
+      "display_name": "Test App",
+      "exe_path": "C:\\test\\app.exe",
+      "process_name": "app",
+      "enabled": true
+    }
+  ],
   "preferences": {
     "auto_start": false,
     "monitoring_interval_ms": 1000,
