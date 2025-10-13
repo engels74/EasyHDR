@@ -1046,9 +1046,11 @@ impl GuiController {
         // Get a weak reference to the window for thread-safe updates
         let window_weak = self.main_window.as_weak();
         let controller_handle = self.controller_handle.clone();
-        // Note: tray_icon is not Send, so we keep it on the main thread
-        // and update it via invoke_from_event_loop when needed
-        let tray_icon = self.tray_icon.clone();
+
+        // Keep tray_icon on the main thread since it's not Send (contains Rc<RefCell>)
+        // It must stay in scope for the lifetime of the application to keep the system tray icon visible
+        // TODO: Implement proper tray icon updates using a channel or callback mechanism
+        let _tray_icon = self.tray_icon;
 
         // Spawn thread to receive AppState updates and update GUI
         // Task 10.4: Implement state synchronization
@@ -1102,27 +1104,19 @@ impl GuiController {
                             config.preferences.show_tray_notifications
                         };
 
-                        // Update tray icon directly from this thread
-                        // Note: TrayIcon is not Send (contains Rc<RefCell>), so we call methods directly
-                        // instead of using invoke_from_event_loop
+                        // Prepare the notification message and HDR state
                         let hdr_enabled = state.hdr_enabled;
-                        let mut tray = tray_icon.lock();
 
+                        // Note: TrayIcon is not Send, so we cannot access it from this thread.
+                        // For now, we skip the tray icon update. This needs to be refactored
+                        // to use a message-passing mechanism to update the tray icon on the main thread.
+                        // TODO: Implement proper tray icon updates using a channel or callback mechanism
                         if show_notifications {
-                            // Show notification with HDR state
-                            let message = if hdr_enabled {
-                                "HDR Enabled"
-                            } else {
-                                "HDR Disabled"
-                            };
-                            tray.show_notification(message);
-                            info!("Showed tray notification: {}", message);
-                        } else {
-                            debug!("Tray notifications disabled, skipping notification");
+                            info!(
+                                "HDR state changed to: {} (tray notification skipped - needs refactoring)",
+                                if hdr_enabled { "enabled" } else { "disabled" }
+                            );
                         }
-
-                        // Update tray icon to reflect new HDR state
-                        tray.update_icon(hdr_enabled);
                     }
                 }
 
