@@ -109,7 +109,11 @@ impl GuiController {
 
         // Create the main window
         let main_window = MainWindow::new()
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to create main window: {}", e)))?;
+            .map_err(|e| {
+                use tracing::error;
+                error!("Failed to create main window: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to create main window: {}", e))
+            })?;
 
         info!("Main window created successfully");
 
@@ -1011,7 +1015,11 @@ impl GuiController {
         // Run the Slint event loop on the main thread
         info!("Running Slint event loop");
         self.main_window.run()
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {}", e)))?;
+            .map_err(|e| {
+                use tracing::error;
+                error!("Failed to run GUI event loop: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {}", e))
+            })?;
 
         info!("GUI event loop stopped");
 

@@ -128,19 +128,31 @@ impl TrayIcon {
         // Append items to menu
         tray_menu
             .append(&open_item)
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to add Open menu item: {}", e)))?;
+            .map_err(|e| {
+                error!("Failed to add Open menu item to tray: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to add Open menu item: {}", e))
+            })?;
 
         tray_menu
             .append(&status_item)
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to add Status menu item: {}", e)))?;
+            .map_err(|e| {
+                error!("Failed to add Status menu item to tray: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to add Status menu item: {}", e))
+            })?;
 
         tray_menu
             .append(&separator)
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to add separator: {}", e)))?;
+            .map_err(|e| {
+                error!("Failed to add separator to tray menu: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to add separator: {}", e))
+            })?;
 
         tray_menu
             .append(&exit_item)
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to add Exit menu item: {}", e)))?;
+            .map_err(|e| {
+                error!("Failed to add Exit menu item to tray: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to add Exit menu item: {}", e))
+            })?;
 
         debug!("Tray menu created with 4 items");
 
@@ -154,7 +166,10 @@ impl TrayIcon {
             .with_icon(icon)
             .with_tooltip("EasyHDR")
             .build()
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to build tray icon: {}", e)))?;
+            .map_err(|e| {
+                error!("Failed to build tray icon: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to build tray icon: {}", e))
+            })?;
 
         info!("System tray icon created successfully");
 
@@ -235,7 +250,10 @@ impl TrayIcon {
         debug!("Created default tray icon (HDR: {})", if hdr_enabled { "ON" } else { "OFF" });
 
         Icon::from_rgba(rgba, ICON_SIZE as u32, ICON_SIZE as u32)
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e)))
+            .map_err(|e| {
+                error!("Failed to create tray icon from RGBA data: {}", e);
+                EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
+            })
     }
 
     /// Set up menu event handler for tray icon menu

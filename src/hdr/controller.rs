@@ -93,6 +93,7 @@ impl HdrController {
                     &mut mode_count,
                 )
                 .map_err(|e| {
+                    error!("Windows API error - GetDisplayConfigBufferSizes failed: {}", e);
                     EasyHdrError::HdrControlFailed(format!(
                         "Failed to get display config buffer sizes: {}",
                         e
@@ -118,6 +119,7 @@ impl HdrController {
                     None,
                 )
                 .map_err(|e| {
+                    error!("Windows API error - QueryDisplayConfig failed: {}", e);
                     EasyHdrError::HdrControlFailed(format!(
                         "Failed to query display config: {}",
                         e
@@ -224,6 +226,10 @@ impl HdrController {
                     unsafe {
                         DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
                             .map_err(|e| {
+                                error!(
+                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2) failed for adapter {:?}, target {}: {}",
+                                    target.adapter_id, target.target_id, e
+                                );
                                 EasyHdrError::HdrControlFailed(format!(
                                     "Failed to get advanced color info 2: {}",
                                     e
@@ -259,6 +265,10 @@ impl HdrController {
                     unsafe {
                         DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
                             .map_err(|e| {
+                                error!(
+                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info) failed for adapter {:?}, target {}: {}",
+                                    target.adapter_id, target.target_id, e
+                                );
                                 EasyHdrError::HdrControlFailed(format!(
                                     "Failed to get advanced color info: {}",
                                     e
@@ -332,6 +342,10 @@ impl HdrController {
                     unsafe {
                         DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
                             .map_err(|e| {
+                                error!(
+                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: {}",
+                                    target.adapter_id, target.target_id, e
+                                );
                                 EasyHdrError::HdrControlFailed(format!(
                                     "Failed to get advanced color info 2: {}",
                                     e
@@ -369,6 +383,10 @@ impl HdrController {
                     unsafe {
                         DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _)
                             .map_err(|e| {
+                                error!(
+                                    "Windows API error - DisplayConfigGetDeviceInfo (advanced color info for HDR enabled check) failed for adapter {:?}, target {}: {}",
+                                    target.adapter_id, target.target_id, e
+                                );
                                 EasyHdrError::HdrControlFailed(format!(
                                     "Failed to get advanced color info: {}",
                                     e
@@ -452,6 +470,10 @@ impl HdrController {
                     unsafe {
                         DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _)
                             .map_err(|e| {
+                                error!(
+                                    "Windows API error - DisplayConfigSetDeviceInfo (set HDR state 24H2+) failed for adapter {:?}, target {}: {}",
+                                    target.adapter_id, target.target_id, e
+                                );
                                 EasyHdrError::HdrControlFailed(format!(
                                     "Failed to set HDR state (24H2+): {}",
                                     e
@@ -491,6 +513,10 @@ impl HdrController {
                     unsafe {
                         DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _)
                             .map_err(|e| {
+                                error!(
+                                    "Windows API error - DisplayConfigSetDeviceInfo (set advanced color state) failed for adapter {:?}, target {}: {}",
+                                    target.adapter_id, target.target_id, e
+                                );
                                 EasyHdrError::HdrControlFailed(format!(
                                     "Failed to set advanced color state: {}",
                                     e
