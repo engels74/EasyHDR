@@ -68,11 +68,56 @@ impl WindowsVersion {
         }
     }
 
+    /// Get the current Windows build number
+    ///
+    /// Uses RtlGetVersion from ntdll.dll to get accurate build number.
+    /// Falls back to GetVersionExW if RtlGetVersion is unavailable.
+    ///
+    /// # Returns
+    ///
+    /// Returns the Windows build number (e.g., 19044, 22621, 26100)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if version detection fails completely.
+    pub fn get_build_number() -> crate::error::Result<u32> {
+        #[cfg(windows)]
+        {
+            // Try RtlGetVersion first (most reliable method)
+            match Self::get_build_number_with_rtl_get_version() {
+                Ok(build) => {
+                    return Ok(build);
+                }
+                Err(_e) => {
+                    // Silently fall back to GetVersionExW
+                }
+            }
+
+            // Fallback to GetVersionExW
+            Self::get_build_number_with_get_version_ex()
+        }
+
+        #[cfg(not(windows))]
+        {
+            // For non-Windows platforms (testing purposes)
+            Ok(22621) // Return a typical Windows 11 build number
+        }
+    }
+
     /// Detect Windows version using RtlGetVersion from ntdll.dll
     ///
     /// This is the most reliable method as it's not subject to compatibility shims.
     #[cfg(windows)]
     fn detect_with_rtl_get_version() -> crate::error::Result<Self> {
+        let build_number = Self::get_build_number_with_rtl_get_version()?;
+        Ok(Self::parse_build_number(build_number))
+    }
+
+    /// Get Windows build number using RtlGetVersion from ntdll.dll
+    ///
+    /// This is the most reliable method as it's not subject to compatibility shims.
+    #[cfg(windows)]
+    fn get_build_number_with_rtl_get_version() -> crate::error::Result<u32> {
         use std::mem::transmute;
 
         unsafe {
@@ -110,8 +155,7 @@ impl WindowsVersion {
                 )));
             }
 
-            // Parse build number to determine version
-            Ok(Self::parse_build_number(version_info.dwBuildNumber))
+            Ok(version_info.dwBuildNumber)
         }
     }
 
@@ -120,6 +164,15 @@ impl WindowsVersion {
     /// This method may be affected by compatibility shims but serves as a fallback.
     #[cfg(windows)]
     fn detect_with_get_version_ex() -> crate::error::Result<Self> {
+        let build_number = Self::get_build_number_with_get_version_ex()?;
+        Ok(Self::parse_build_number(build_number))
+    }
+
+    /// Get Windows build number using GetVersionExW (fallback method)
+    ///
+    /// This method may be affected by compatibility shims but serves as a fallback.
+    #[cfg(windows)]
+    fn get_build_number_with_get_version_ex() -> crate::error::Result<u32> {
         unsafe {
             let mut version_info = OSVERSIONINFOEXW {
                 dwOSVersionInfoSize: size_of::<OSVERSIONINFOEXW>() as u32,
@@ -130,7 +183,7 @@ impl WindowsVersion {
             let result = GetVersionExW(&mut version_info as *mut _ as *mut _);
 
             if result.is_ok() {
-                Ok(Self::parse_build_number(version_info.dwBuildNumber))
+                Ok(version_info.dwBuildNumber)
             } else {
                 Err(crate::error::EasyHdrError::WindowsApiError(
                     windows::core::Error::from_win32(),
