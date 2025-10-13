@@ -65,36 +65,38 @@ fn main() -> Result<()> {
     // Load configuration
     let config = ConfigManager::load()?;
     profiler.record_phase(StartupPhase::ConfigLoad);
-    info!("Configuration loaded with {} monitored apps", config.monitored_apps.len());
+    info!(
+        "Configuration loaded with {} monitored apps",
+        config.monitored_apps.len()
+    );
 
     // Initialize core components
     // This may fail if run on macOS (development environment)
-    let (process_monitor, gui_controller) =
-        match initialize_components(config) {
-            Ok(components) => components,
-            Err(e) => {
-                error!("Failed to initialize components: {}", e);
+    let (process_monitor, gui_controller) = match initialize_components(config) {
+        Ok(components) => components,
+        Err(e) => {
+            error!("Failed to initialize components: {}", e);
 
-                // On macOS, show a friendly message
-                #[cfg(not(windows))]
-                {
-                    eprintln!("EasyHDR is a Windows-only application.");
-                    eprintln!("This application cannot run on macOS or other non-Windows platforms.");
-                    return Err(e);
-                }
-
-                // On Windows, show error dialog
-                #[cfg(windows)]
-                {
-                    show_error_and_exit(&format!(
-                        "Failed to initialize EasyHDR:\n\n{}\n\n\
-                         Please ensure your display drivers are up to date.",
-                        get_user_friendly_error(&e)
-                    ));
-                    return Err(e);
-                }
+            // On macOS, show a friendly message
+            #[cfg(not(windows))]
+            {
+                eprintln!("EasyHDR is a Windows-only application.");
+                eprintln!("This application cannot run on macOS or other non-Windows platforms.");
+                return Err(e);
             }
-        };
+
+            // On Windows, show error dialog
+            #[cfg(windows)]
+            {
+                show_error_and_exit(&format!(
+                    "Failed to initialize EasyHDR:\n\n{}\n\n\
+                         Please ensure your display drivers are up to date.",
+                    get_user_friendly_error(&e)
+                ));
+                return Err(e);
+            }
+        }
+    };
 
     info!("Core components initialized successfully");
 
@@ -153,7 +155,10 @@ fn verify_windows_version() -> Result<()> {
         // We need to check if it's at least Windows 10 21H2 (build 19044)
         let build_number = get_windows_build_number()?;
 
-        info!("Detected Windows version: {:?}, build: {}", version, build_number);
+        info!(
+            "Detected Windows version: {:?}, build: {}",
+            version, build_number
+        );
 
         if build_number < MIN_WINDOWS_BUILD {
             return Err(EasyHdrError::ConfigError(format!(
@@ -169,7 +174,7 @@ fn verify_windows_version() -> Result<()> {
     {
         // On non-Windows platforms, return an error
         Err(EasyHdrError::ConfigError(
-            "EasyHDR is a Windows-only application".to_string()
+            "EasyHDR is a Windows-only application".to_string(),
         ))
     }
 }
@@ -179,10 +184,10 @@ fn verify_windows_version() -> Result<()> {
 /// Uses the same method as WindowsVersion::detect() but returns the raw build number
 #[cfg(windows)]
 fn get_windows_build_number() -> Result<u32> {
-    use windows::Win32::System::SystemInformation::OSVERSIONINFOEXW;
-    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
-    use windows::core::HSTRING;
     use std::mem::{size_of, transmute};
+    use windows::core::HSTRING;
+    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+    use windows::Win32::System::SystemInformation::OSVERSIONINFOEXW;
 
     unsafe {
         // Load ntdll.dll
@@ -195,7 +200,7 @@ fn get_windows_build_number() -> Result<u32> {
 
         if rtl_get_version_ptr.is_none() {
             return Err(EasyHdrError::HdrControlFailed(
-                "RtlGetVersion not found in ntdll.dll".to_string()
+                "RtlGetVersion not found in ntdll.dll".to_string(),
             ));
         }
 
@@ -211,9 +216,10 @@ fn get_windows_build_number() -> Result<u32> {
         let status = rtl_get_version(&mut version_info);
 
         if status != 0 {
-            return Err(EasyHdrError::HdrControlFailed(
-                format!("RtlGetVersion failed with status: {}", status)
-            ));
+            return Err(EasyHdrError::HdrControlFailed(format!(
+                "RtlGetVersion failed with status: {}",
+                status
+            )));
         }
 
         Ok(version_info.dwBuildNumber)
@@ -243,7 +249,8 @@ fn initialize_components(
 
     // Check if any displays support HDR and warn if none found
     // Requirement 10.9: Show clear messaging about hardware compatibility
-    let hdr_capable_count = temp_hdr_controller.get_display_cache()
+    let hdr_capable_count = temp_hdr_controller
+        .get_display_cache()
         .iter()
         .filter(|d| d.supports_hdr)
         .count();
@@ -262,7 +269,7 @@ fn initialize_components(
                  Please ensure:\n\
                  - Your display supports HDR\n\
                  - Display drivers are up to date\n\
-                 - HDR is enabled in Windows display settings"
+                 - HDR is enabled in Windows display settings",
             );
         }
     } else {
@@ -275,7 +282,10 @@ fn initialize_components(
 
     // Create ProcessMonitor with configured interval
     let monitoring_interval = Duration::from_millis(config.preferences.monitoring_interval_ms);
-    info!("Creating process monitor with interval: {:?}", monitoring_interval);
+    info!(
+        "Creating process monitor with interval: {:?}",
+        monitoring_interval
+    );
     let process_monitor = ProcessMonitor::new(monitoring_interval, process_event_tx);
     let watch_list_ref = process_monitor.get_watch_list_ref();
     profiler.record_phase(StartupPhase::ProcessMonitorInit);
@@ -371,14 +381,12 @@ fn show_warning_dialog(message: &str) {
 #[cfg(windows)]
 fn get_user_friendly_error(error: &EasyHdrError) -> String {
     match error {
-        EasyHdrError::HdrNotSupported => {
-            "Your display doesn't support HDR.\n\n\
+        EasyHdrError::HdrNotSupported => "Your display doesn't support HDR.\n\n\
              Please check your hardware specifications and ensure:\n\
              - Your display supports HDR10 or higher\n\
              - Your GPU supports HDR output\n\
              - You're using a compatible connection (HDMI 2.0+ or DisplayPort 1.4+)"
-                .to_string()
-        }
+            .to_string(),
         EasyHdrError::HdrControlFailed(_) | EasyHdrError::DriverError(_) => {
             "Unable to control HDR.\n\n\
              Please ensure:\n\
@@ -387,19 +395,15 @@ fn get_user_friendly_error(error: &EasyHdrError) -> String {
              - Your display is properly connected"
                 .to_string()
         }
-        EasyHdrError::ProcessMonitorError(_) => {
-            "Failed to monitor processes.\n\n\
+        EasyHdrError::ProcessMonitorError(_) => "Failed to monitor processes.\n\n\
              The application may not function correctly.\n\
              Try restarting the application."
-                .to_string()
-        }
-        EasyHdrError::ConfigError(_) => {
-            "Failed to load or save configuration.\n\n\
+            .to_string(),
+        EasyHdrError::ConfigError(_) => "Failed to load or save configuration.\n\n\
              Your settings may not persist.\n\
              Check that you have write permissions to:\n\
              %APPDATA%\\EasyHDR"
-                .to_string()
-        }
+            .to_string(),
         #[cfg(windows)]
         EasyHdrError::WindowsApiError(e) => {
             format!(

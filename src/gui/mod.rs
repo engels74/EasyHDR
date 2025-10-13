@@ -93,4 +93,3 @@ pub mod tray;
 
 pub use gui_controller::GuiController;
 pub use tray::TrayIcon;
-

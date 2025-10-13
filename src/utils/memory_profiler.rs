@@ -70,7 +70,8 @@ impl MemoryProfiler {
     pub fn record_icon_cached(&self, icon_size: usize) {
         self.icon_cache_size.fetch_add(icon_size, Ordering::Relaxed);
         self.icon_count.fetch_add(1, Ordering::Relaxed);
-        debug!("Icon cached: {} bytes, total cache: {} bytes, count: {}",
+        debug!(
+            "Icon cached: {} bytes, total cache: {} bytes, count: {}",
             icon_size,
             self.icon_cache_size.load(Ordering::Relaxed),
             self.icon_count.load(Ordering::Relaxed)
@@ -85,7 +86,8 @@ impl MemoryProfiler {
     pub fn record_icon_removed(&self, icon_size: usize) {
         self.icon_cache_size.fetch_sub(icon_size, Ordering::Relaxed);
         self.icon_count.fetch_sub(1, Ordering::Relaxed);
-        debug!("Icon removed: {} bytes, total cache: {} bytes, count: {}",
+        debug!(
+            "Icon removed: {} bytes, total cache: {} bytes, count: {}",
             icon_size,
             self.icon_cache_size.load(Ordering::Relaxed),
             self.icon_count.load(Ordering::Relaxed)
@@ -131,7 +133,9 @@ impl MemoryProfiler {
     /// On other platforms, returns 0 (stub for testing).
     #[cfg(windows)]
     fn get_process_memory() -> usize {
-        use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+        use windows::Win32::System::ProcessStatus::{
+            GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+        };
         use windows::Win32::System::Threading::GetCurrentProcess;
 
         unsafe {
@@ -198,10 +202,10 @@ mod tests {
     #[test]
     fn test_memory_stats_mb_conversion() {
         let stats = MemoryStats {
-            total_memory: 10 * 1024 * 1024, // 10 MB
+            total_memory: 10 * 1024 * 1024,     // 10 MB
             icon_cache_memory: 5 * 1024 * 1024, // 5 MB
             cached_icon_count: 10,
-            config_memory: 1024, // 1 KB
+            config_memory: 1024,  // 1 KB
             monitor_memory: 2048, // 2 KB
         };
 
@@ -254,4 +258,3 @@ mod tests {
         assert!(stats.monitor_memory > 0);
     }
 }
-

@@ -5,8 +5,8 @@
 
 use crate::error::Result;
 use std::path::PathBuf;
-use tracing_subscriber::{fmt, EnvFilter};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::{fmt, EnvFilter};
 
 /// Maximum log file size in bytes (5MB)
 const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024;
@@ -47,24 +47,25 @@ pub fn init_logging() -> Result<()> {
     // Note: tracing_appender's RollingFileAppender doesn't support size-based rotation
     // with max_log_files in the way we need, so we'll use manual rotation
     let file_appender = RollingFileAppender::builder()
-        .rotation(Rotation::NEVER)  // We handle rotation manually
+        .rotation(Rotation::NEVER) // We handle rotation manually
         .filename_prefix("app")
         .filename_suffix("log")
         .build(log_dir)
-        .map_err(|e| crate::error::EasyHdrError::ConfigError(format!("Failed to create log appender: {}", e)))?;
+        .map_err(|e| {
+            crate::error::EasyHdrError::ConfigError(format!("Failed to create log appender: {}", e))
+        })?;
 
     // Build the subscriber with file output
     let subscriber = fmt()
         .with_writer(file_appender)
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("info"))
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
-        .with_ansi(false)  // Disable ANSI colors for file output
-        .with_target(true)  // Include target module
-        .with_thread_ids(true)  // Include thread IDs
-        .with_file(true)  // Include file names
-        .with_line_number(true)  // Include line numbers
+        .with_ansi(false) // Disable ANSI colors for file output
+        .with_target(true) // Include target module
+        .with_thread_ids(true) // Include thread IDs
+        .with_file(true) // Include file names
+        .with_line_number(true) // Include line numbers
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)
@@ -89,7 +90,11 @@ fn check_and_rotate_log(log_path: &PathBuf) -> Result<()> {
     let metadata = std::fs::metadata(log_path)?;
 
     if metadata.len() > MAX_LOG_SIZE {
-        tracing::debug!("Log file size {} exceeds limit {}, rotating logs", metadata.len(), MAX_LOG_SIZE);
+        tracing::debug!(
+            "Log file size {} exceeds limit {}, rotating logs",
+            metadata.len(),
+            MAX_LOG_SIZE
+        );
 
         // Rotate existing log files
         // Delete the oldest log file (app.log.2)
@@ -172,8 +177,10 @@ mod tests {
         // Verify that app.log was rotated to app.log.1
         let log_1 = temp_dir.join("app.log.1");
         assert!(log_1.exists(), "app.log.1 should exist after rotation");
-        assert!(!log_path.exists() || fs::metadata(&log_path).unwrap().len() == 0,
-                "app.log should be empty or not exist after rotation");
+        assert!(
+            !log_path.exists() || fs::metadata(&log_path).unwrap().len() == 0,
+            "app.log should be empty or not exist after rotation"
+        );
 
         // Clean up
         fs::remove_dir_all(&temp_dir).unwrap();
@@ -211,4 +218,3 @@ mod tests {
         fs::remove_dir_all(&temp_dir).unwrap();
     }
 }
-

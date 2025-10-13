@@ -161,7 +161,10 @@ impl MonitoredApp {
                     self.icon_data = Some(data);
                 }
                 Ok(_) => {
-                    tracing::debug!("Icon extraction returned empty data for {:?}", self.exe_path);
+                    tracing::debug!(
+                        "Icon extraction returned empty data for {:?}",
+                        self.exe_path
+                    );
                 }
                 Err(e) => {
                     tracing::warn!("Failed to load icon for {:?}: {}", self.exe_path, e);
@@ -278,7 +281,10 @@ mod tests {
         let config = AppConfig::default();
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(config.preferences.auto_start, deserialized.preferences.auto_start);
+        assert_eq!(
+            config.preferences.auto_start,
+            deserialized.preferences.auto_start
+        );
     }
 
     #[test]
@@ -349,21 +355,57 @@ mod tests {
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
 
         // Verify monitored apps
-        assert_eq!(config.monitored_apps.len(), deserialized.monitored_apps.len());
-        assert_eq!(config.monitored_apps[0].id, deserialized.monitored_apps[0].id);
-        assert_eq!(config.monitored_apps[0].display_name, deserialized.monitored_apps[0].display_name);
-        assert_eq!(config.monitored_apps[0].exe_path, deserialized.monitored_apps[0].exe_path);
-        assert_eq!(config.monitored_apps[0].process_name, deserialized.monitored_apps[0].process_name);
-        assert_eq!(config.monitored_apps[0].enabled, deserialized.monitored_apps[0].enabled);
+        assert_eq!(
+            config.monitored_apps.len(),
+            deserialized.monitored_apps.len()
+        );
+        assert_eq!(
+            config.monitored_apps[0].id,
+            deserialized.monitored_apps[0].id
+        );
+        assert_eq!(
+            config.monitored_apps[0].display_name,
+            deserialized.monitored_apps[0].display_name
+        );
+        assert_eq!(
+            config.monitored_apps[0].exe_path,
+            deserialized.monitored_apps[0].exe_path
+        );
+        assert_eq!(
+            config.monitored_apps[0].process_name,
+            deserialized.monitored_apps[0].process_name
+        );
+        assert_eq!(
+            config.monitored_apps[0].enabled,
+            deserialized.monitored_apps[0].enabled
+        );
 
-        assert_eq!(config.monitored_apps[1].id, deserialized.monitored_apps[1].id);
-        assert_eq!(config.monitored_apps[1].enabled, deserialized.monitored_apps[1].enabled);
+        assert_eq!(
+            config.monitored_apps[1].id,
+            deserialized.monitored_apps[1].id
+        );
+        assert_eq!(
+            config.monitored_apps[1].enabled,
+            deserialized.monitored_apps[1].enabled
+        );
 
         // Verify preferences
-        assert_eq!(config.preferences.auto_start, deserialized.preferences.auto_start);
-        assert_eq!(config.preferences.monitoring_interval_ms, deserialized.preferences.monitoring_interval_ms);
-        assert_eq!(config.preferences.startup_delay_ms, deserialized.preferences.startup_delay_ms);
-        assert_eq!(config.preferences.show_tray_notifications, deserialized.preferences.show_tray_notifications);
+        assert_eq!(
+            config.preferences.auto_start,
+            deserialized.preferences.auto_start
+        );
+        assert_eq!(
+            config.preferences.monitoring_interval_ms,
+            deserialized.preferences.monitoring_interval_ms
+        );
+        assert_eq!(
+            config.preferences.startup_delay_ms,
+            deserialized.preferences.startup_delay_ms
+        );
+        assert_eq!(
+            config.preferences.show_tray_notifications,
+            deserialized.preferences.show_tray_notifications
+        );
 
         // Verify window state
         assert_eq!(config.window_state.x, deserialized.window_state.x);
@@ -385,15 +427,21 @@ mod tests {
         let deserialized: UserPreferences = serde_json::from_str(&json).unwrap();
 
         assert_eq!(prefs.auto_start, deserialized.auto_start);
-        assert_eq!(prefs.monitoring_interval_ms, deserialized.monitoring_interval_ms);
+        assert_eq!(
+            prefs.monitoring_interval_ms,
+            deserialized.monitoring_interval_ms
+        );
         assert_eq!(prefs.startup_delay_ms, deserialized.startup_delay_ms);
-        assert_eq!(prefs.show_tray_notifications, deserialized.show_tray_notifications);
+        assert_eq!(
+            prefs.show_tray_notifications,
+            deserialized.show_tray_notifications
+        );
     }
 
     #[test]
     fn test_window_state_serialization_round_trip() {
         let window_state = WindowState {
-            x: -100,  // Test negative coordinates
+            x: -100, // Test negative coordinates
             y: -50,
             width: 1920,
             height: 1080,
@@ -436,7 +484,10 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(config.monitored_apps.len(), deserialized.monitored_apps.len());
+        assert_eq!(
+            config.monitored_apps.len(),
+            deserialized.monitored_apps.len()
+        );
         assert_eq!(0, deserialized.monitored_apps.len());
     }
 
@@ -519,4 +570,3 @@ mod tests {
         assert_eq!(app.exe_path, current_exe);
     }
 }
-

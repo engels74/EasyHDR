@@ -143,4 +143,3 @@ pub mod utils;
 
 // Re-export commonly used types
 pub use error::{EasyHdrError, Result};
-

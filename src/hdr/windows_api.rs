@@ -206,12 +206,8 @@ impl DISPLAYCONFIG_SET_HDR_STATE {
 // These structures are used for display enumeration
 #[cfg(windows)]
 pub use windows::Win32::Graphics::Gdi::{
-    DISPLAYCONFIG_PATH_INFO,
-    DISPLAYCONFIG_MODE_INFO,
-    DISPLAYCONFIG_PATH_SOURCE_INFO,
-    DISPLAYCONFIG_PATH_TARGET_INFO,
-    DISPLAYCONFIG_SOURCE_MODE,
-    DISPLAYCONFIG_TARGET_MODE,
+    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_PATH_SOURCE_INFO,
+    DISPLAYCONFIG_PATH_TARGET_INFO, DISPLAYCONFIG_SOURCE_MODE, DISPLAYCONFIG_TARGET_MODE,
     DISPLAYCONFIG_VIDEO_SIGNAL_INFO,
 };
 
@@ -305,13 +301,22 @@ mod tests {
 
     #[test]
     fn test_displayconfig_set_advanced_color_state_new() {
-        let luid = LUID { LowPart: 0x1234, HighPart: 0x5678 };
+        let luid = LUID {
+            LowPart: 0x1234,
+            HighPart: 0x5678,
+        };
         let target_id = 42;
 
         // Test enable
         let state = DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE::new(luid, target_id, true);
-        assert_eq!(state.header.type_, DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE);
-        assert_eq!(state.header.size, std::mem::size_of::<DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE>() as u32);
+        assert_eq!(
+            state.header.type_,
+            DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE
+        );
+        assert_eq!(
+            state.header.size,
+            std::mem::size_of::<DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE>() as u32
+        );
         assert_eq!(state.header.adapterId.LowPart, 0x1234);
         assert_eq!(state.header.adapterId.HighPart, 0x5678);
         assert_eq!(state.header.id, 42);
@@ -324,13 +329,22 @@ mod tests {
 
     #[test]
     fn test_displayconfig_set_hdr_state_new() {
-        let luid = LUID { LowPart: 0xABCD, HighPart: 0xEF01 };
+        let luid = LUID {
+            LowPart: 0xABCD,
+            HighPart: 0xEF01,
+        };
         let target_id = 99;
 
         // Test enable
         let state = DISPLAYCONFIG_SET_HDR_STATE::new(luid, target_id, true);
-        assert_eq!(state.header.type_, DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_HDR_STATE);
-        assert_eq!(state.header.size, std::mem::size_of::<DISPLAYCONFIG_SET_HDR_STATE>() as u32);
+        assert_eq!(
+            state.header.type_,
+            DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_HDR_STATE
+        );
+        assert_eq!(
+            state.header.size,
+            std::mem::size_of::<DISPLAYCONFIG_SET_HDR_STATE>() as u32
+        );
         assert_eq!(state.header.adapterId.LowPart, 0xABCD);
         assert_eq!(state.header.adapterId.HighPart, 0xEF01);
         assert_eq!(state.header.id, 99);
@@ -351,4 +365,3 @@ mod tests {
         assert!(std::mem::size_of::<DISPLAYCONFIG_SET_HDR_STATE>() % 4 == 0);
     }
 }
-

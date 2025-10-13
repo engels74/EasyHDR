@@ -79,4 +79,3 @@ pub mod windows_api;
 
 pub use controller::{DisplayTarget, HdrController};
 pub use version::WindowsVersion;
-

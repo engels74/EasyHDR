@@ -10,9 +10,9 @@ use easyhdr::hdr::version::WindowsVersion;
 fn test_version_detection_returns_valid_result() {
     let result = WindowsVersion::detect();
     assert!(result.is_ok(), "Version detection should succeed");
-    
+
     let version = result.unwrap();
-    
+
     // Verify it's one of the three valid versions
     assert!(
         matches!(
@@ -31,7 +31,7 @@ fn test_version_detection_consistency() {
     let version1 = WindowsVersion::detect().expect("First detection should succeed");
     let version2 = WindowsVersion::detect().expect("Second detection should succeed");
     let version3 = WindowsVersion::detect().expect("Third detection should succeed");
-    
+
     assert_eq!(version1, version2, "Version detection should be consistent");
     assert_eq!(version2, version3, "Version detection should be consistent");
 }
@@ -42,24 +42,24 @@ fn test_version_enum_traits() {
     let v1 = WindowsVersion::Windows10;
     let v2 = WindowsVersion::Windows11;
     let v3 = WindowsVersion::Windows11_24H2;
-    
+
     // Test Debug
     assert_eq!(format!("{:?}", v1), "Windows10");
     assert_eq!(format!("{:?}", v2), "Windows11");
     assert_eq!(format!("{:?}", v3), "Windows11_24H2");
-    
+
     // Test Clone
     let v1_clone = v1.clone();
     assert_eq!(v1, v1_clone);
-    
+
     // Test Copy
     let v2_copy = v2;
     assert_eq!(v2, v2_copy);
-    
+
     // Test PartialEq
     assert_eq!(v1, WindowsVersion::Windows10);
     assert_ne!(v1, WindowsVersion::Windows11);
-    
+
     // Test Eq (transitivity)
     assert_eq!(v1, v1_clone);
     assert_eq!(v1_clone, WindowsVersion::Windows10);
@@ -86,7 +86,7 @@ fn test_all_windows10_versions() {
         19044, // 21H2 (November 2021 Update)
         19045, // 22H2 (October 2022 Update)
     ];
-    
+
     for build in windows10_builds {
         let version = WindowsVersion::parse_build_number(build);
         assert_eq!(
@@ -107,7 +107,7 @@ fn test_all_windows11_versions() {
         22621, // 22H2
         22631, // 23H2
     ];
-    
+
     for build in windows11_builds {
         let version = WindowsVersion::parse_build_number(build);
         assert_eq!(
@@ -129,7 +129,7 @@ fn test_all_windows11_24h2_versions() {
         27000, // Future build
         30000, // Far future build
     ];
-    
+
     for build in windows11_24h2_builds {
         let version = WindowsVersion::parse_build_number(build);
         assert_eq!(
@@ -155,7 +155,7 @@ fn test_version_threshold_boundaries() {
         WindowsVersion::Windows11,
         "Build 22000 should be Windows 11"
     );
-    
+
     // Test around Windows 11 24H2 threshold (26100)
     assert_eq!(
         WindowsVersion::parse_build_number(26099),
@@ -178,14 +178,14 @@ fn test_extreme_build_numbers() {
         WindowsVersion::Windows10,
         "Build 0 should default to Windows 10"
     );
-    
+
     // Test very small value
     assert_eq!(
         WindowsVersion::parse_build_number(1),
         WindowsVersion::Windows10,
         "Build 1 should be Windows 10"
     );
-    
+
     // Test maximum value
     assert_eq!(
         WindowsVersion::parse_build_number(u32::MAX),
@@ -213,8 +213,11 @@ fn test_version_detection_error_handling() {
 fn test_non_windows_platform() {
     // On non-Windows platforms, should return a default version
     let result = WindowsVersion::detect();
-    assert!(result.is_ok(), "Version detection should succeed on non-Windows");
-    
+    assert!(
+        result.is_ok(),
+        "Version detection should succeed on non-Windows"
+    );
+
     let version = result.unwrap();
     assert_eq!(
         version,
@@ -227,15 +230,13 @@ fn test_non_windows_platform() {
 #[test]
 fn test_version_detection_deterministic() {
     // Run detection multiple times in quick succession
-    let results: Vec<_> = (0..10)
-        .map(|_| WindowsVersion::detect())
-        .collect();
-    
+    let results: Vec<_> = (0..10).map(|_| WindowsVersion::detect()).collect();
+
     // All results should be Ok
     for (i, result) in results.iter().enumerate() {
         assert!(result.is_ok(), "Detection {} should succeed", i);
     }
-    
+
     // All results should be the same
     let first = results[0].as_ref().unwrap();
     for (i, result) in results.iter().enumerate().skip(1) {
@@ -254,12 +255,12 @@ fn test_version_comparisons() {
     let v10 = WindowsVersion::Windows10;
     let v11 = WindowsVersion::Windows11;
     let v11_24h2 = WindowsVersion::Windows11_24H2;
-    
+
     // Test equality
     assert_eq!(v10, WindowsVersion::Windows10);
     assert_eq!(v11, WindowsVersion::Windows11);
     assert_eq!(v11_24h2, WindowsVersion::Windows11_24H2);
-    
+
     // Test inequality
     assert_ne!(v10, v11);
     assert_ne!(v11, v11_24h2);
@@ -283,7 +284,7 @@ fn test_parse_build_number_consistency() {
         (26200, WindowsVersion::Windows11_24H2),
         (30000, WindowsVersion::Windows11_24H2),
     ];
-    
+
     for (build, expected) in test_cases {
         let actual = WindowsVersion::parse_build_number(build);
         assert_eq!(
@@ -293,4 +294,3 @@ fn test_parse_build_number_consistency() {
         );
     }
 }
-

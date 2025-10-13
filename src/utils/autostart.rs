@@ -124,10 +124,7 @@ impl AutoStartManager {
         // Get the current executable path
         let exe_path = std::env::current_exe().map_err(|e| {
             error!("Failed to get current executable path: {}", e);
-            EasyHdrError::ConfigError(format!(
-                "Failed to determine application location: {}",
-                e
-            ))
+            EasyHdrError::ConfigError(format!("Failed to determine application location: {}", e))
         })?;
 
         let exe_path_str = exe_path.to_string_lossy();
@@ -137,7 +134,10 @@ impl AutoStartManager {
         let run_key = match hkcu.open_subkey_with_flags(RUN_KEY_PATH, KEY_WRITE) {
             Ok(key) => key,
             Err(e) => {
-                error!("Failed to open registry key {} for writing: {}", RUN_KEY_PATH, e);
+                error!(
+                    "Failed to open registry key {} for writing: {}",
+                    RUN_KEY_PATH, e
+                );
                 return Err(EasyHdrError::ConfigError(format!(
                     "Failed to access Windows auto-start registry. Please check your permissions: {}",
                     e
@@ -189,7 +189,10 @@ impl AutoStartManager {
         let run_key = match hkcu.open_subkey_with_flags(RUN_KEY_PATH, KEY_WRITE) {
             Ok(key) => key,
             Err(e) => {
-                error!("Failed to open registry key {} for writing: {}", RUN_KEY_PATH, e);
+                error!(
+                    "Failed to open registry key {} for writing: {}",
+                    RUN_KEY_PATH, e
+                );
                 return Err(EasyHdrError::ConfigError(format!(
                     "Failed to access Windows auto-start registry. Please check your permissions: {}",
                     e
@@ -257,27 +260,30 @@ mod tests {
         let _ = AutoStartManager::disable();
 
         // Verify it's disabled
-        let is_enabled = AutoStartManager::is_enabled()
-            .expect("Failed to check auto-start status");
+        let is_enabled = AutoStartManager::is_enabled().expect("Failed to check auto-start status");
         assert!(!is_enabled, "Auto-start should be disabled initially");
 
         // Enable auto-start
-        AutoStartManager::enable()
-            .expect("Failed to enable auto-start");
+        AutoStartManager::enable().expect("Failed to enable auto-start");
 
         // Verify it's enabled
         let is_enabled = AutoStartManager::is_enabled()
             .expect("Failed to check auto-start status after enabling");
-        assert!(is_enabled, "Auto-start should be enabled after calling enable()");
+        assert!(
+            is_enabled,
+            "Auto-start should be enabled after calling enable()"
+        );
 
         // Disable auto-start
-        AutoStartManager::disable()
-            .expect("Failed to disable auto-start");
+        AutoStartManager::disable().expect("Failed to disable auto-start");
 
         // Verify it's disabled
         let is_enabled = AutoStartManager::is_enabled()
             .expect("Failed to check auto-start status after disabling");
-        assert!(!is_enabled, "Auto-start should be disabled after calling disable()");
+        assert!(
+            !is_enabled,
+            "Auto-start should be disabled after calling disable()"
+        );
     }
 
     /// Test that disabling auto-start when it's already disabled doesn't error
@@ -289,11 +295,13 @@ mod tests {
 
         // Try to disable again - should succeed without error
         let result = AutoStartManager::disable();
-        assert!(result.is_ok(), "Disabling when already disabled should succeed");
+        assert!(
+            result.is_ok(),
+            "Disabling when already disabled should succeed"
+        );
 
         // Verify it's still disabled
-        let is_enabled = AutoStartManager::is_enabled()
-            .expect("Failed to check auto-start status");
+        let is_enabled = AutoStartManager::is_enabled().expect("Failed to check auto-start status");
         assert!(!is_enabled, "Auto-start should remain disabled");
     }
 
@@ -305,14 +313,11 @@ mod tests {
         let _ = AutoStartManager::disable();
 
         // Enable twice
-        AutoStartManager::enable()
-            .expect("First enable should succeed");
-        AutoStartManager::enable()
-            .expect("Second enable should succeed");
+        AutoStartManager::enable().expect("First enable should succeed");
+        AutoStartManager::enable().expect("Second enable should succeed");
 
         // Verify it's enabled
-        let is_enabled = AutoStartManager::is_enabled()
-            .expect("Failed to check auto-start status");
+        let is_enabled = AutoStartManager::is_enabled().expect("Failed to check auto-start status");
         assert!(is_enabled, "Auto-start should be enabled");
 
         // Cleanup
@@ -329,5 +334,3 @@ mod tests {
         assert!(AutoStartManager::disable().is_ok());
     }
 }
-
-
