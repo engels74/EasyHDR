@@ -101,6 +101,8 @@ impl ProcessMonitor {
             let snapshot = unsafe {
                 CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
                     .map_err(|e| {
+                        use tracing::error;
+                        error!("Windows API error - CreateToolhelp32Snapshot failed: {}", e);
                         EasyHdrError::ProcessMonitorError(format!(
                             "Failed to create process snapshot: {}",
                             e
@@ -184,7 +186,10 @@ impl ProcessMonitor {
         for process in current.difference(&self.running_processes) {
             if watch_list.contains(process) {
                 info!("Detected process started: {}", process);
-                let _ = self.event_sender.send(ProcessEvent::Started(process.clone()));
+                if let Err(e) = self.event_sender.send(ProcessEvent::Started(process.clone())) {
+                    use tracing::error;
+                    error!("Failed to send ProcessEvent::Started for '{}': {}", process, e);
+                }
             }
         }
 
@@ -192,7 +197,10 @@ impl ProcessMonitor {
         for process in self.running_processes.difference(&current) {
             if watch_list.contains(process) {
                 info!("Detected process stopped: {}", process);
-                let _ = self.event_sender.send(ProcessEvent::Stopped(process.clone()));
+                if let Err(e) = self.event_sender.send(ProcessEvent::Stopped(process.clone())) {
+                    use tracing::error;
+                    error!("Failed to send ProcessEvent::Stopped for '{}': {}", process, e);
+                }
             }
         }
 

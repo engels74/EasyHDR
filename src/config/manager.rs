@@ -24,12 +24,22 @@ impl ConfigManager {
     ///
     /// Creates %APPDATA%\EasyHDR if it doesn't exist
     pub fn ensure_config_dir() -> Result<PathBuf> {
+        use tracing::{debug, error};
+
         let config_path = Self::get_config_path();
         let config_dir = config_path
             .parent()
-            .ok_or_else(|| EasyHdrError::ConfigError("Invalid config path".to_string()))?;
-        
-        std::fs::create_dir_all(config_dir)?;
+            .ok_or_else(|| {
+                error!("Invalid config path - no parent directory");
+                EasyHdrError::ConfigError("Invalid config path".to_string())
+            })?;
+
+        std::fs::create_dir_all(config_dir).map_err(|e| {
+            error!("Failed to create config directory {:?}: {}", config_dir, e);
+            e
+        })?;
+
+        debug!("Config directory ensured: {:?}", config_dir);
         Ok(config_dir.to_path_buf())
     }
 
@@ -37,22 +47,27 @@ impl ConfigManager {
     ///
     /// If the configuration file doesn't exist or is corrupt, returns default configuration.
     pub fn load() -> Result<AppConfig> {
+        use tracing::error;
+
         let config_path = Self::get_config_path();
-        
+
         if !config_path.exists() {
-            info!("Configuration file not found, using defaults");
+            info!("Configuration file not found at {:?}, using defaults", config_path);
             return Ok(AppConfig::default());
         }
-        
-        let json = std::fs::read_to_string(&config_path)?;
-        
+
+        let json = std::fs::read_to_string(&config_path).map_err(|e| {
+            error!("Failed to read configuration file {:?}: {}", config_path, e);
+            e
+        })?;
+
         match serde_json::from_str(&json) {
             Ok(config) => {
-                info!("Configuration loaded successfully");
+                info!("Configuration loaded successfully from {:?}", config_path);
                 Ok(config)
             }
             Err(e) => {
-                warn!("Failed to parse configuration, using defaults: {}", e);
+                warn!("Failed to parse configuration from {:?}, using defaults: {}", config_path, e);
                 Ok(AppConfig::default())
             }
         }
@@ -62,20 +77,40 @@ impl ConfigManager {
     ///
     /// Uses a temporary file and rename to ensure atomic write operation.
     pub fn save(config: &AppConfig) -> Result<()> {
+        use tracing::{debug, error};
+
         let config_path = Self::get_config_path();
         Self::ensure_config_dir()?;
-        
+
         let config_dir = config_path
             .parent()
-            .ok_or_else(|| EasyHdrError::ConfigError("Invalid config path".to_string()))?;
-        
+            .ok_or_else(|| {
+                error!("Invalid config path - no parent directory");
+                EasyHdrError::ConfigError("Invalid config path".to_string())
+            })?;
+
         // Atomic write: write to temp file, then rename
         let temp_path = config_dir.join("config.json.tmp");
-        let json = serde_json::to_string_pretty(config)?;
-        std::fs::write(&temp_path, json)?;
-        std::fs::rename(temp_path, config_path)?;
-        
-        info!("Configuration saved successfully");
+
+        debug!("Serializing configuration to JSON");
+        let json = serde_json::to_string_pretty(config).map_err(|e| {
+            error!("Failed to serialize configuration to JSON: {}", e);
+            e
+        })?;
+
+        debug!("Writing configuration to temp file: {:?}", temp_path);
+        std::fs::write(&temp_path, &json).map_err(|e| {
+            error!("Failed to write configuration to temp file {:?}: {}", temp_path, e);
+            e
+        })?;
+
+        debug!("Renaming temp file to config file: {:?}", config_path);
+        std::fs::rename(&temp_path, &config_path).map_err(|e| {
+            error!("Failed to rename temp file {:?} to {:?}: {}", temp_path, config_path, e);
+            e
+        })?;
+
+        info!("Configuration saved successfully to {:?}", config_path);
         Ok(())
     }
 }
