@@ -116,6 +116,20 @@ impl GuiController {
         // Task 10.7: Restore window position and size from config
         Self::restore_window_state(&main_window, &controller);
 
+        // Task 12.2: Initialize settings properties from config
+        // Load current preferences and set them in the UI
+        {
+            let controller_guard = controller.lock();
+            let config = controller_guard.config.lock();
+
+            main_window.set_settings_auto_start(config.preferences.auto_start);
+            main_window.set_settings_monitoring_interval_ms(config.preferences.monitoring_interval_ms as i32);
+            main_window.set_settings_startup_delay_ms(config.preferences.startup_delay_ms as i32);
+            main_window.set_settings_show_tray_notifications(config.preferences.show_tray_notifications);
+
+            info!("Settings properties initialized from config");
+        }
+
         // Set up callbacks
         // Task 10.2: Implement file picker integration
         let controller_clone = controller.clone();
@@ -132,6 +146,16 @@ impl GuiController {
         let controller_clone = controller.clone();
         main_window.on_toggle_enabled(move |index, enabled| {
             Self::toggle_app_enabled(&controller_clone, index, enabled);
+        });
+
+        // Task 12.2: Implement settings callbacks
+        // Requirement 6.5: Persist preferences to configuration file
+        // Requirement 6.6: Create registry entry for auto-start
+        // Requirement 6.7: Remove registry entry when auto-start disabled
+        // Requirement 6.8: Handle registry write failures gracefully
+        let controller_clone = controller.clone();
+        main_window.on_save_settings(move |auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications| {
+            Self::save_settings(&controller_clone, auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications);
         });
 
         info!("GUI callbacks connected");
@@ -438,6 +462,146 @@ impl GuiController {
     #[cfg(not(windows))]
     fn toggle_app_enabled(_controller: &Arc<Mutex<AppController>>, _index: i32, _enabled: bool) {
         Self::show_error_dialog("Application management is only supported on Windows");
+    }
+
+    /// Save user preferences settings
+    ///
+    /// Updates user preferences in the configuration and handles auto-start registry
+    /// management. This method is called when the user clicks "Save" in the settings dialog.
+    ///
+    /// # Arguments
+    ///
+    /// * `controller` - Shared reference to the AppController
+    /// * `auto_start` - Whether to auto-start on Windows login
+    /// * `monitoring_interval_ms` - Process monitoring interval in milliseconds (500-2000)
+    /// * `startup_delay_ms` - Startup delay in milliseconds (0-10000)
+    /// * `show_tray_notifications` - Whether to show tray notifications on HDR changes
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 6.5: Persist preferences to configuration file
+    /// - Requirement 6.6: Create registry entry for auto-start when enabled
+    /// - Requirement 6.7: Remove registry entry when auto-start disabled
+    /// - Requirement 6.8: Handle registry write failures gracefully
+    ///
+    /// # Implementation Details
+    ///
+    /// 1. Creates UserPreferences struct with new values
+    /// 2. Calls controller.update_preferences() to save to config
+    /// 3. Calls AutoStartManager::enable() or disable() based on auto_start flag
+    /// 4. Shows error dialog if registry write fails
+    /// 5. Shows success message if all operations succeed
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
+    /// use easyhdr::controller::AppController;
+    /// use easyhdr::gui::GuiController;
+    ///
+    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// GuiController::save_settings(&controller, true, 1000, 3000, true);
+    /// ```
+    #[cfg(windows)]
+    fn save_settings(
+        controller: &Arc<Mutex<AppController>>,
+        auto_start: bool,
+        monitoring_interval_ms: i32,
+        startup_delay_ms: i32,
+        show_tray_notifications: bool,
+    ) {
+        use easyhdr::config::models::UserPreferences;
+        use easyhdr::utils::AutoStartManager;
+        use tracing::{info, warn};
+
+        info!(
+            "Saving settings: auto_start={}, monitoring_interval_ms={}, startup_delay_ms={}, show_tray_notifications={}",
+            auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications
+        );
+
+        // Create UserPreferences struct with new values
+        let prefs = UserPreferences {
+            auto_start,
+            monitoring_interval_ms: monitoring_interval_ms as u64,
+            startup_delay_ms: startup_delay_ms as u64,
+            show_tray_notifications,
+        };
+
+        // Update preferences in controller (this saves to config file)
+        // Requirement 6.5: Persist preferences to configuration file
+        let mut controller_guard = controller.lock();
+        match controller_guard.update_preferences(prefs) {
+            Ok(()) => {
+                info!("Preferences updated successfully");
+            }
+            Err(e) => {
+                warn!("Failed to update preferences: {}", e);
+                drop(controller_guard);
+                // Requirement 6.8: Handle failures gracefully and show error message
+                Self::show_error_dialog_from_error(&e);
+                return;
+            }
+        }
+        drop(controller_guard);
+
+        // Handle auto-start registry management
+        // Requirement 6.6: Create registry entry when auto-start enabled
+        // Requirement 6.7: Remove registry entry when auto-start disabled
+        if auto_start {
+            info!("Enabling auto-start");
+            match AutoStartManager::enable() {
+                Ok(()) => {
+                    info!("Auto-start enabled successfully");
+                }
+                Err(e) => {
+                    warn!("Failed to enable auto-start: {}", e);
+                    // Requirement 6.8: Handle registry write failures gracefully
+                    Self::show_error_dialog(&format!(
+                        "Settings saved, but failed to enable auto-start:\n\n{}",
+                        e
+                    ));
+                    return;
+                }
+            }
+        } else {
+            info!("Disabling auto-start");
+            match AutoStartManager::disable() {
+                Ok(()) => {
+                    info!("Auto-start disabled successfully");
+                }
+                Err(e) => {
+                    warn!("Failed to disable auto-start: {}", e);
+                    // Requirement 6.8: Handle registry write failures gracefully
+                    Self::show_error_dialog(&format!(
+                        "Settings saved, but failed to disable auto-start:\n\n{}",
+                        e
+                    ));
+                    return;
+                }
+            }
+        }
+
+        info!("All settings saved successfully");
+
+        // Show success message
+        rfd::MessageDialog::new()
+            .set_title("EasyHDR - Settings")
+            .set_description("Settings saved successfully!")
+            .set_buttons(rfd::MessageButtons::Ok)
+            .show();
+    }
+
+    /// Stub implementation for non-Windows platforms
+    #[cfg(not(windows))]
+    fn save_settings(
+        _controller: &Arc<Mutex<AppController>>,
+        _auto_start: bool,
+        _monitoring_interval_ms: i32,
+        _startup_delay_ms: i32,
+        _show_tray_notifications: bool,
+    ) {
+        Self::show_error_dialog("Settings management is only supported on Windows");
     }
 
     /// Show error dialog to the user with a string message

@@ -1,9 +1,10 @@
 // Main window UI definition for EasyHDR
 // Implements task 9.1: Create main window UI definition
 // Implements task 9.4: Theme support with Palette and StyleMetrics
-// Requirements: 5.1, 5.2, 5.3, 5.4, 5.8, 5.9, 5.13
+// Implements task 12.1: Settings dialog/panel component
+// Requirements: 5.1, 5.2, 5.3, 5.4, 5.8, 5.9, 5.13, 6.1, 6.2, 6.3, 6.4
 
-import { Button, ListView, CheckBox, Palette, StyleMetrics } from "std-widgets.slint";
+import { Button, ListView, CheckBox, Palette, StyleMetrics, Slider } from "std-widgets.slint";
 
 // AppListItem struct represents a configured application in the list
 // Fields: id (UUID), display-name (app name), exe-path (full path), enabled (checkbox state), icon (app icon)
@@ -15,6 +16,156 @@ export struct AppListItem {
     icon: image,
 }
 
+// Settings dialog content component (Task 12.1, Requirements 6.1-6.4)
+// Provides UI for configuring user preferences:
+// - Auto-start on Windows login
+// - Monitoring interval (500-2000ms)
+// - Startup delay (0-10 seconds)
+// - Tray notifications on HDR changes
+component SettingsDialogContent inherits Rectangle {
+    // Properties for settings values
+    in-out property <bool> auto-start: false;
+    in-out property <int> monitoring-interval-ms: 1000;
+    in-out property <int> startup-delay-ms: 3000;
+    in-out property <bool> show-tray-notifications: true;
+
+    // Callbacks
+    callback save-settings(bool, int, int, bool);
+    callback cancel-settings();
+
+    background: Palette.background;
+    border-width: 2px;
+    border-color: Palette.border;
+    border-radius: 8px;
+
+        VerticalLayout {
+            padding: StyleMetrics.layout-padding * 2;
+            spacing: StyleMetrics.layout-spacing * 2;
+
+            // Title
+            Text {
+                text: "Settings";
+                font-size: 18px;
+                font-weight: 700;
+                color: Palette.foreground;
+            }
+
+            // Auto-start setting (Requirement 6.1)
+            HorizontalLayout {
+                spacing: StyleMetrics.layout-spacing;
+                CheckBox {
+                    text: "Auto-start on Windows login";
+                    checked <=> auto-start;
+                }
+            }
+
+            // Monitoring interval setting (Requirement 6.2)
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Monitoring interval: " + round(monitoring-interval-ms) + "ms";
+                    color: Palette.foreground;
+                    font-size: 13px;
+                }
+                HorizontalLayout {
+                    spacing: StyleMetrics.layout-spacing;
+                    Text {
+                        text: "500ms";
+                        color: Palette.foreground.transparentize(0.4);
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                    Slider {
+                        minimum: 500;
+                        maximum: 2000;
+                        value: monitoring-interval-ms;
+                        horizontal-stretch: 1;
+                        changed(value) => {
+                            monitoring-interval-ms = round(value);
+                        }
+                    }
+                    Text {
+                        text: "2000ms";
+                        color: Palette.foreground.transparentize(0.4);
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // Startup delay setting (Requirement 6.3)
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Startup delay: " + round(startup-delay-ms / 1000) + " seconds";
+                    color: Palette.foreground;
+                    font-size: 13px;
+                }
+                HorizontalLayout {
+                    spacing: StyleMetrics.layout-spacing;
+                    Text {
+                        text: "0s";
+                        color: Palette.foreground.transparentize(0.4);
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                    Slider {
+                        minimum: 0;
+                        maximum: 10000;
+                        value: startup-delay-ms;
+                        horizontal-stretch: 1;
+                        changed(value) => {
+                            startup-delay-ms = round(value);
+                        }
+                    }
+                    Text {
+                        text: "10s";
+                        color: Palette.foreground.transparentize(0.4);
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // Tray notifications setting (Requirement 6.4)
+            HorizontalLayout {
+                spacing: StyleMetrics.layout-spacing;
+                CheckBox {
+                    text: "Show tray notifications on HDR changes";
+                    checked <=> show-tray-notifications;
+                }
+            }
+
+            // Spacer to push buttons to bottom
+            Rectangle {
+                vertical-stretch: 1;
+            }
+
+            // Dialog buttons
+            HorizontalLayout {
+                spacing: StyleMetrics.layout-spacing;
+
+                // Spacer to push buttons to the right
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                Button {
+                    text: "Cancel";
+                    clicked => {
+                        cancel-settings();
+                    }
+                }
+                Button {
+                    text: "Save";
+                    clicked => {
+                        save-settings(auto-start, monitoring-interval-ms, startup-delay-ms, show-tray-notifications);
+                    }
+                }
+            }
+        }
+    }
+
 export component MainWindow inherits Window {
     title: "EasyHDR";
     preferred-width: 600px;
@@ -25,11 +176,19 @@ export component MainWindow inherits Window {
     in-out property <bool> hdr-enabled: false;
     in-out property <int> selected-index: -1;
 
+    // Settings properties (synced with backend)
+    in-out property <bool> settings-auto-start: false;
+    in-out property <int> settings-monitoring-interval-ms: 1000;
+    in-out property <int> settings-startup-delay-ms: 3000;
+    in-out property <bool> settings-show-tray-notifications: true;
+
     // Callbacks
     callback add-application();
     callback remove-application(int);
     callback toggle-enabled(int, bool);
     callback minimize-to-tray();
+    callback open-settings();
+    callback save-settings(bool, int, int, bool);
 
     VerticalLayout {
         padding: StyleMetrics.layout-padding;
@@ -163,6 +322,19 @@ export component MainWindow inherits Window {
                     remove-application(selected-index);
                 }
             }
+
+            // Spacer to push Settings button to the right
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            // Settings button (Task 12.1)
+            Button {
+                text: "Settings";
+                clicked => {
+                    settings-dialog.show();
+                }
+            }
         }
 
         // Drag-and-drop hint (Requirement 5.14)
@@ -172,6 +344,30 @@ export component MainWindow inherits Window {
             font-size: 11px;
             color: Palette.foreground.transparentize(0.5);
             horizontal-alignment: center;
+        }
+    }
+
+    // Settings dialog popup (Task 12.1, Requirements 6.1-6.4)
+    settings-dialog := PopupWindow {
+        x: (parent.width - 500px) / 2;
+        y: (parent.height - 400px) / 2;
+        width: 500px;
+        height: 400px;
+
+        SettingsDialogContent {
+            auto-start <=> settings-auto-start;
+            monitoring-interval-ms <=> settings-monitoring-interval-ms;
+            startup-delay-ms <=> settings-startup-delay-ms;
+            show-tray-notifications <=> settings-show-tray-notifications;
+
+            save-settings(auto-start, monitoring-interval-ms, startup-delay-ms, show-tray-notifications) => {
+                root.save-settings(auto-start, monitoring-interval-ms, startup-delay-ms, show-tray-notifications);
+                settings-dialog.close();
+            }
+
+            cancel-settings => {
+                settings-dialog.close();
+            }
         }
     }
 }
