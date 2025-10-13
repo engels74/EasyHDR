@@ -1,0 +1,59 @@
+---
+name: Release
+
+"on":
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-scan:
+    name: Build, Scan, and Upload Release Asset
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+
+      - name: Build optimized release executable
+        run: cargo build --release --verbose
+        env:
+          RUSTFLAGS: "-C target-cpu=native"
+
+      - name: Verify executable exists
+        run: |
+          if (!(Test-Path "target/release/easyhdr.exe")) {
+            Write-Error "Executable not found"
+            exit 1
+          }
+          $size = (Get-Item target/release/easyhdr.exe).Length
+          Write-Host "Executable found: $size bytes"
+        shell: pwsh
+
+      - name: VirusTotal Scan
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          update_release_body: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            target/release/easyhdr.exe
+          request_rate: 4
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: target/release/easyhdr.exe
+          asset_name: easyhdr.exe
+          asset_content_type: application/vnd.microsoft.portable-executable
