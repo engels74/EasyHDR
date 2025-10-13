@@ -156,9 +156,9 @@ impl TrayIcon {
 
         debug!("Tray menu created with 4 items");
 
-        // Create a default icon (simple colored square)
-        // TODO: Replace with actual icon assets when available (Task 15.1)
-        let icon = Self::create_default_icon(false)?;
+        // Load the initial tray icon (HDR OFF state)
+        // Task 15.1: Load icon from embedded assets
+        let icon = Self::load_tray_icon(false)?;
 
         // Build the tray icon
         let tray = TrayIconBuilder::new()
@@ -193,12 +193,87 @@ impl TrayIcon {
         Ok(tray_icon)
     }
 
-    /// Create a default tray icon
+    /// Load tray icon from embedded assets
     ///
-    /// This creates a simple 32x32 RGBA icon as a placeholder until actual icon assets
-    /// are available. The icon is a colored square:
-    /// - Red when HDR is disabled
+    /// This method loads the appropriate tray icon based on HDR state:
+    /// - icon_hdr_on.ico when HDR is enabled (green brightness indicator)
+    /// - icon_hdr_off.ico when HDR is disabled (gray with red slash)
+    ///
+    /// # Arguments
+    ///
+    /// * `hdr_enabled` - Whether HDR is currently enabled
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing the Icon or an error if loading fails.
+    ///
+    /// # Implementation Notes
+    ///
+    /// The icon files are embedded in the binary at compile time via include_bytes!.
+    /// This ensures the icons are always available without requiring external files.
+    /// The ICO files are decoded using the `image` crate and converted to RGBA format
+    /// for use with the tray-icon crate. Falls back to programmatically generated icons
+    /// if loading fails.
+    ///
+    /// # Requirements
+    ///
+    /// - Task 15.1: Load icon_hdr_on.ico when HDR enabled
+    /// - Task 15.1: Load icon_hdr_off.ico when HDR disabled
+    fn load_tray_icon(hdr_enabled: bool) -> Result<Icon> {
+        use tracing::{debug, warn};
+
+        // Embed icon files at compile time
+        const ICON_HDR_ON: &[u8] = include_bytes!("../../assets/icon_hdr_on.ico");
+        const ICON_HDR_OFF: &[u8] = include_bytes!("../../assets/icon_hdr_off.ico");
+
+        let icon_data = if hdr_enabled {
+            ICON_HDR_ON
+        } else {
+            ICON_HDR_OFF
+        };
+
+        debug!("Loading tray icon from embedded assets (HDR: {})", if hdr_enabled { "ON" } else { "OFF" });
+
+        // Decode the ICO file using the image crate
+        use image::io::Reader as ImageReader;
+        use std::io::Cursor;
+
+        match ImageReader::new(Cursor::new(icon_data))
+            .with_guessed_format()
+            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to guess icon format: {}", e)))
+            .and_then(|reader| {
+                reader.decode()
+                    .map_err(|e| EasyHdrError::ConfigError(format!("Failed to decode icon: {}", e)))
+            })
+        {
+            Ok(img) => {
+                // Convert to RGBA8
+                let rgba_img = img.to_rgba8();
+                let (width, height) = rgba_img.dimensions();
+                let rgba_data = rgba_img.into_raw();
+
+                debug!("Decoded icon: {}x{}, {} bytes", width, height, rgba_data.len());
+
+                // Create Icon from RGBA data
+                Icon::from_rgba(rgba_data, width, height)
+                    .map_err(|e| {
+                        warn!("Failed to create icon from RGBA data: {}", e);
+                        EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
+                    })
+            }
+            Err(e) => {
+                warn!("Failed to decode icon from embedded assets: {}, falling back to generated icon", e);
+                Self::create_fallback_icon(hdr_enabled)
+            }
+        }
+    }
+
+    /// Create a fallback tray icon if asset loading fails
+    ///
+    /// This creates a simple 32x32 RGBA icon as a fallback.
+    /// The icon is a colored square:
     /// - Green when HDR is enabled
+    /// - Red when HDR is disabled
     ///
     /// # Arguments
     ///
@@ -207,12 +282,7 @@ impl TrayIcon {
     /// # Returns
     ///
     /// Returns a Result containing the Icon or an error if creation fails.
-    ///
-    /// # Implementation Notes
-    ///
-    /// This is a temporary implementation. Task 15.1 will replace this with
-    /// actual icon assets (icon_hdr_on.ico and icon_hdr_off.ico).
-    fn create_default_icon(hdr_enabled: bool) -> Result<Icon> {
+    fn create_fallback_icon(hdr_enabled: bool) -> Result<Icon> {
         use tracing::debug;
 
         const ICON_SIZE: usize = 32;
@@ -247,7 +317,7 @@ impl TrayIcon {
             }
         }
 
-        debug!("Created default tray icon (HDR: {})", if hdr_enabled { "ON" } else { "OFF" });
+        debug!("Created fallback tray icon (HDR: {})", if hdr_enabled { "ON" } else { "OFF" });
 
         Icon::from_rgba(rgba, ICON_SIZE as u32, ICON_SIZE as u32)
             .map_err(|e| {
@@ -363,8 +433,10 @@ impl TrayIcon {
     ///
     /// # Implementation Notes
     ///
-    /// Currently uses programmatically generated icons (colored squares).
-    /// Task 15.1 will replace this with actual icon assets (icon_hdr_on.ico and icon_hdr_off.ico).
+    /// Uses icon assets embedded in the binary at compile time:
+    /// - icon_hdr_on.ico: Green brightness indicator (HDR enabled)
+    /// - icon_hdr_off.ico: Gray with red slash (HDR disabled)
+    /// Falls back to programmatically generated icons if asset loading fails.
     ///
     /// # Example
     ///
@@ -386,10 +458,9 @@ impl TrayIcon {
 
         info!("Updating tray icon: HDR {}", if hdr_enabled { "ON" } else { "OFF" });
 
-        // Task 11.4: Load icon_hdr_on.ico when HDR enabled, icon_hdr_off.ico when HDR disabled
-        // For now, use the programmatically generated icons
-        // TODO: Replace with actual icon assets in Task 15.1
-        match Self::create_default_icon(hdr_enabled) {
+        // Task 15.1: Load icon_hdr_on.ico when HDR enabled, icon_hdr_off.ico when HDR disabled
+        // Icons are embedded in the binary at compile time
+        match Self::load_tray_icon(hdr_enabled) {
             Ok(icon) => {
                 // Update the tray icon
                 if let Err(e) = self.tray.set_icon(Some(icon)) {
@@ -399,7 +470,7 @@ impl TrayIcon {
                 }
             }
             Err(e) => {
-                warn!("Failed to create tray icon: {}", e);
+                warn!("Failed to load tray icon: {}", e);
             }
         }
 

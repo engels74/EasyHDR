@@ -50,9 +50,13 @@ winreg = "0.52"
 tray-icon = "0.12"
 rfd = "0.12"  # File dialogs
 winrt-notification = "0.5"  # Windows toast notifications
+image = { version = "0.24", default-features = false, features = ["ico"] }  # ICO decoding for tray icons
 
 [build-dependencies]
 slint-build = "1.3"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
 
 [profile.release]
 opt-level = "z"     # Optimize for size
