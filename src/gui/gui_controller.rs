@@ -845,14 +845,18 @@ impl GuiController {
             config.window_state.width = size.width;
             config.window_state.height = size.height;
 
-            // Save config to disk
+            // Save config to disk - if this fails, we continue with in-memory config
             match ConfigManager::save(&config) {
                 Ok(()) => {
                     info!("Window state saved successfully");
                 }
                 Err(e) => {
-                    log_error!("Failed to save window state: {}", e);
-                    return Err(e);
+                    log_error!(
+                        "Failed to save window state: {}. Continuing with in-memory config. \
+                         Changes will be lost on application restart.",
+                        e
+                    );
+                    // Don't return error - continue operation with in-memory config
                 }
             }
         }

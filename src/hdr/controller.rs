@@ -591,6 +591,12 @@ impl HdrController {
     /// - Requirement 3.10: Iterate through all display targets and call DisplayConfigSetDeviceInfo on each
     /// - Requirement 3.11: Add 100ms delays between changes (handled by set_hdr_state)
     /// - Requirement 3.13: Handle partial success scenarios gracefully
+    ///
+    /// # Edge Cases
+    ///
+    /// - Handles display disconnection during operation by continuing with remaining displays
+    /// - Logs warnings for failed displays but continues operation
+    /// - Returns partial results even if some displays fail
     pub fn set_hdr_global(&self, enable: bool) -> Result<Vec<(DisplayTarget, Result<()>)>> {
         use tracing::{debug, info, warn};
 
@@ -628,7 +634,8 @@ impl HdrController {
                 }
                 Err(e) => {
                     warn!(
-                        "Failed to set HDR {} for display (adapter={:#x}:{:#x}, target={}): {}",
+                        "Failed to set HDR {} for display (adapter={:#x}:{:#x}, target={}): {}. \
+                         Display may have been disconnected or driver issue occurred. Continuing with other displays.",
                         if enable { "ON" } else { "OFF" },
                         target.adapter_id.LowPart,
                         target.adapter_id.HighPart,
