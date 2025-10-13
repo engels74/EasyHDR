@@ -2,6 +2,26 @@
 //!
 //! This module implements the process monitoring subsystem that polls
 //! Windows processes and detects state changes.
+//!
+//! # Known Limitations
+//!
+//! ## Process Name Collisions
+//!
+//! The process monitor matches processes by their executable filename (without extension),
+//! converted to lowercase. This means that if multiple different applications have the same
+//! executable filename, they will all trigger HDR toggling.
+//!
+//! For example:
+//! - If you configure "game.exe" to trigger HDR
+//! - Any process named "game.exe" will trigger HDR, regardless of its full path
+//! - This includes "C:\Games\Game1\game.exe" and "D:\OtherGames\game.exe"
+//!
+//! This is a known limitation of the current implementation. The process monitor only has
+//! access to the process name, not the full executable path, when enumerating running processes.
+//!
+//! **Workaround:** Ensure that the applications you want to monitor have unique executable names.
+//!
+//! **Requirement 2.7:** Document process name collisions as a known limitation
 
 use std::collections::HashSet;
 use std::sync::{mpsc, Arc};
@@ -30,6 +50,12 @@ pub enum ProcessEvent {
 }
 
 /// Process monitor that polls for running processes
+///
+/// # Known Limitations
+///
+/// **Process Name Collisions:** The monitor matches processes by executable filename only
+/// (without path or extension). Multiple processes with the same filename will all be
+/// detected as the same application. See module-level documentation for details.
 pub struct ProcessMonitor {
     /// List of process names to watch (lowercase)
     watch_list: Arc<Mutex<HashSet<String>>>,

@@ -319,8 +319,13 @@ impl AppController {
     /// - Requirement 1.4: Update enabled state flag for applications
     /// - Requirement 1.5: Delete applications from configuration
     /// - Requirement 1.6: Persist data to config.json using atomic writes
+    ///
+    /// # Edge Cases
+    ///
+    /// - If config file is deleted during runtime, continues with in-memory config
+    /// - Logs warning if save fails but continues operation
     pub fn add_application(&mut self, app: MonitoredApp) -> Result<()> {
-        use tracing::info;
+        use tracing::{info, warn};
 
         info!("Adding application: {} ({})", app.display_name, app.process_name);
 
@@ -330,9 +335,15 @@ impl AppController {
             config.monitored_apps.push(app);
         }
 
-        // Save configuration
+        // Save configuration - if this fails, we continue with in-memory config
         let config = self.config.lock();
-        ConfigManager::save(&config)?;
+        if let Err(e) = ConfigManager::save(&config) {
+            warn!(
+                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
+                 Changes will be lost on application restart.",
+                e
+            );
+        }
         drop(config);
 
         // Update ProcessMonitor watch list
@@ -362,8 +373,13 @@ impl AppController {
     ///
     /// - Requirement 1.5: Delete applications from configuration
     /// - Requirement 1.6: Persist data to config.json using atomic writes
+    ///
+    /// # Edge Cases
+    ///
+    /// - If config file is deleted during runtime, continues with in-memory config
+    /// - Logs warning if save fails but continues operation
     pub fn remove_application(&mut self, id: Uuid) -> Result<()> {
-        use tracing::info;
+        use tracing::{info, warn};
 
         info!("Removing application with ID: {}", id);
 
@@ -373,9 +389,15 @@ impl AppController {
             config.monitored_apps.retain(|app| app.id != id);
         }
 
-        // Save configuration
+        // Save configuration - if this fails, we continue with in-memory config
         let config = self.config.lock();
-        ConfigManager::save(&config)?;
+        if let Err(e) = ConfigManager::save(&config) {
+            warn!(
+                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
+                 Changes will be lost on application restart.",
+                e
+            );
+        }
         drop(config);
 
         // Update ProcessMonitor watch list
@@ -406,8 +428,13 @@ impl AppController {
     ///
     /// - Requirement 1.4: Update enabled state flag for applications
     /// - Requirement 1.6: Persist data to config.json using atomic writes
+    ///
+    /// # Edge Cases
+    ///
+    /// - If config file is deleted during runtime, continues with in-memory config
+    /// - Logs warning if save fails but continues operation
     pub fn toggle_app_enabled(&mut self, id: Uuid, enabled: bool) -> Result<()> {
-        use tracing::info;
+        use tracing::{info, warn};
 
         info!("Toggling application {} to enabled={}", id, enabled);
 
@@ -419,9 +446,15 @@ impl AppController {
             }
         }
 
-        // Save configuration
+        // Save configuration - if this fails, we continue with in-memory config
         let config = self.config.lock();
-        ConfigManager::save(&config)?;
+        if let Err(e) = ConfigManager::save(&config) {
+            warn!(
+                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
+                 Changes will be lost on application restart.",
+                e
+            );
+        }
         drop(config);
 
         // Update ProcessMonitor watch list
@@ -449,8 +482,13 @@ impl AppController {
     /// # Requirements
     ///
     /// - Requirement 1.6: Persist data to config.json using atomic writes
+    ///
+    /// # Edge Cases
+    ///
+    /// - If config file is deleted during runtime, continues with in-memory config
+    /// - Logs warning if save fails but continues operation
     pub fn update_preferences(&mut self, prefs: UserPreferences) -> Result<()> {
-        use tracing::info;
+        use tracing::{info, warn};
 
         info!("Updating user preferences");
 
@@ -460,12 +498,44 @@ impl AppController {
             config.preferences = prefs;
         }
 
-        // Save configuration
+        // Save configuration - if this fails, we continue with in-memory config
         let config = self.config.lock();
-        ConfigManager::save(&config)?;
+        if let Err(e) = ConfigManager::save(&config) {
+            warn!(
+                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
+                 Changes will be lost on application restart.",
+                e
+            );
+        }
         drop(config);
 
         info!("User preferences updated successfully");
+        Ok(())
+    }
+
+    /// Refresh the display list
+    ///
+    /// Re-enumerates displays and updates the HDR controller's display cache.
+    /// This can be called when display configuration changes (e.g., monitor connected/disconnected).
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) on success, or an error if display enumeration fails.
+    ///
+    /// # Edge Cases
+    ///
+    /// - Handles display disconnection during operation by refreshing the display list
+    /// - Logs the number of displays found after refresh
+    pub fn refresh_displays(&mut self) -> Result<()> {
+        use tracing::info;
+
+        info!("Refreshing display list due to potential display configuration change");
+        let displays = self.hdr_controller.refresh_displays()?;
+        info!(
+            "Display list refreshed: {} display(s) found ({} HDR-capable)",
+            displays.len(),
+            displays.iter().filter(|d| d.supports_hdr).count()
+        );
         Ok(())
     }
 
@@ -1106,6 +1176,114 @@ mod tests {
 
         // Wait for the thread to complete
         handle.join().unwrap();
+    }
+
+    /// Test rapid process start/stop with debouncing
+    ///
+    /// This test verifies that the debouncing mechanism works correctly when a process
+    /// stops and starts quickly (within 500ms). The HDR should remain on during rapid
+    /// restarts to avoid unnecessary toggling.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 4.8: Debounce rapid state changes by waiting 500ms before toggling back
+    #[test]
+    fn test_rapid_process_restart_debouncing() {
+        // Create a config with one monitored app
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "Test App".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app.exe"),
+            process_name: "app".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Start the app - HDR should turn on
+        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+
+        // Record the time of the first toggle
+        let first_toggle_time = *controller.last_toggle_time.lock();
+
+        // Wait a short time (less than 500ms)
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Stop the app - HDR should NOT turn off due to debouncing
+        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+        // HDR should still be on because we're within the debounce window
+        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+
+        // Verify that the last toggle time hasn't changed (no toggle occurred)
+        let second_toggle_time = *controller.last_toggle_time.lock();
+        assert_eq!(first_toggle_time, second_toggle_time, "Toggle time should not change during debounce");
+
+        // Now test that after the debounce period expires, HDR can be toggled again
+        // First, restart the app to get the count back to 1
+        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        // HDR should still be on (it never turned off)
+        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+
+        // Wait for debounce period to expire (600ms to be safe)
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop the app - HDR should turn off now (debounce period has passed)
+        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), false);
+    }
+
+    /// Test that debouncing doesn't prevent HDR from turning on
+    ///
+    /// This test verifies that the debouncing mechanism only affects HDR disable operations,
+    /// not enable operations. HDR should always turn on immediately when a monitored app starts.
+    #[test]
+    fn test_debouncing_does_not_affect_hdr_enable() {
+        // Create a config with one monitored app
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "Test App".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app.exe"),
+            process_name: "app".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (_event_tx, event_rx) = mpsc::channel();
+        let (state_tx, _state_rx) = mpsc::channel();
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+
+        // Start the app - HDR should turn on immediately
+        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
+
+        // Wait for debounce period
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop the app - HDR should turn off
+        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), false);
+
+        // Immediately start the app again (within what would be a debounce window if it applied to enable)
+        // HDR should turn on immediately regardless of timing
+        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
     }
 }
 
