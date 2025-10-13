@@ -1,0 +1,51 @@
+---
+name: CI
+
+"on":
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+          cache: true
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build release executable
+        run: cargo build --release --verbose
+
+      - name: Run tests
+        run: cargo test --release -- --test-threads=1
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: easyhdr-${{ github.sha }}
+          path: target/release/easyhdr.exe
+          retention-days: 7
+          if-no-files-found: error
