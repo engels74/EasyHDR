@@ -30,6 +30,9 @@ use easyhdr::config::models::MonitoredApp;
 // We reference it from the parent module (main.rs)
 use crate::MainWindow;
 
+// Import TrayIcon for system tray integration
+use super::tray::TrayIcon;
+
 /// GUI controller that bridges Slint UI and application logic
 ///
 /// This struct manages the main window and coordinates between the GUI
@@ -41,10 +44,12 @@ use crate::MainWindow;
 /// - `main_window`: The Slint MainWindow component
 /// - `controller_handle`: Shared reference to the AppController for callbacks
 /// - `state_receiver`: Channel receiver for AppState updates from controller
+/// - `tray_icon`: System tray icon for notifications and status display
 ///
 /// # Requirements
 ///
 /// - Requirement 5.1: Main window displays with title bar and controls
+/// - Requirement 6.4: Show tray notifications on HDR changes
 pub struct GuiController {
     /// The Slint main window component
     main_window: MainWindow,
@@ -52,6 +57,8 @@ pub struct GuiController {
     controller_handle: Arc<Mutex<AppController>>,
     /// Channel receiver for state updates from the controller
     state_receiver: mpsc::Receiver<AppState>,
+    /// System tray icon for notifications and status display
+    tray_icon: Arc<Mutex<TrayIcon>>,
 }
 
 impl GuiController {
@@ -129,10 +136,16 @@ impl GuiController {
 
         info!("GUI callbacks connected");
 
+        // Task 11.1: Create TrayIcon
+        // Create the system tray icon
+        let tray_icon = TrayIcon::new(&main_window)?;
+        info!("System tray icon created");
+
         Ok(Self {
             main_window,
             controller_handle: controller,
             state_receiver,
+            tray_icon: Arc::new(Mutex::new(tray_icon)),
         })
     }
 
@@ -717,11 +730,15 @@ impl GuiController {
         // Get a weak reference to the window for thread-safe updates
         let window_weak = self.main_window.as_weak();
         let controller_handle = self.controller_handle.clone();
+        let tray_icon = self.tray_icon.clone();
 
         // Spawn thread to receive AppState updates and update GUI
         // Task 10.4: Implement state synchronization
         std::thread::spawn(move || {
             info!("State synchronization thread started");
+
+            // Track previous HDR state to detect changes for notifications
+            let mut previous_hdr_state: Option<bool> = None;
 
             while let Ok(state) = self.state_receiver.recv() {
                 debug!("Received state update: HDR enabled = {}, active apps = {:?}",
@@ -740,6 +757,41 @@ impl GuiController {
                 // Requirement 5.8: Update status indicator when HDR state changes
                 window.set_hdr_enabled(state.hdr_enabled);
                 debug!("Updated HDR enabled state to: {}", state.hdr_enabled);
+
+                // Task 11.5: Show notification when HDR state changes
+                // Check if HDR state has changed and show notification if enabled in preferences
+                if let Some(prev_state) = previous_hdr_state {
+                    if prev_state != state.hdr_enabled {
+                        // HDR state has changed, check if notifications are enabled
+                        let show_notifications = {
+                            let controller = controller_handle.lock();
+                            let config = controller.config.lock();
+                            config.preferences.show_tray_notifications
+                        };
+
+                        if show_notifications {
+                            // Show notification with HDR state
+                            let message = if state.hdr_enabled {
+                                "HDR Enabled"
+                            } else {
+                                "HDR Disabled"
+                            };
+
+                            let tray = tray_icon.lock();
+                            tray.show_notification(message);
+                            info!("Showed tray notification: {}", message);
+                        } else {
+                            debug!("Tray notifications disabled, skipping notification");
+                        }
+
+                        // Update tray icon to reflect new HDR state
+                        let mut tray = tray_icon.lock();
+                        tray.update_icon(state.hdr_enabled);
+                    }
+                }
+
+                // Update previous state for next iteration
+                previous_hdr_state = Some(state.hdr_enabled);
 
                 // Update application list
                 // Convert MonitoredApp to AppListItem for Slint
