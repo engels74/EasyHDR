@@ -125,7 +125,10 @@ impl HdrController {
                     std::ptr::null_mut(),
                 );
                 if result != 0 {
-                    error!("Windows API error - QueryDisplayConfig failed with code: {}", result);
+                    error!(
+                        "Windows API error - QueryDisplayConfig failed with code: {}",
+                        result
+                    );
                     return Err(EasyHdrError::HdrControlFailed(format!(
                         "Failed to query display config: error code {}",
                         result
@@ -271,7 +274,8 @@ impl HdrController {
                     };
 
                     unsafe {
-                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        let result =
+                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
                         if result != 0 {
                             error!(
                                 "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2) failed for adapter {:?}, target {}: error code {}",
@@ -310,7 +314,8 @@ impl HdrController {
                     };
 
                     unsafe {
-                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        let result =
+                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
                         if result != 0 {
                             error!(
                                 "Windows API error - DisplayConfigGetDeviceInfo (advanced color info) failed for adapter {:?}, target {}: error code {}",
@@ -389,7 +394,8 @@ impl HdrController {
                     };
 
                     unsafe {
-                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        let result =
+                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
                         if result != 0 {
                             error!(
                                 "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
@@ -432,7 +438,8 @@ impl HdrController {
                     };
 
                     unsafe {
-                        let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        let result =
+                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
                         if result != 0 {
                             error!(
                                 "Windows API error - DisplayConfigGetDeviceInfo (advanced color info for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
@@ -1219,10 +1226,7 @@ mod tests {
         match result {
             Ok(enabled) => {
                 // If it succeeds, it should return false for invalid display
-                assert!(
-                    !enabled,
-                    "Invalid display should not have HDR enabled"
-                );
+                assert!(!enabled, "Invalid display should not have HDR enabled");
             }
             Err(_) => {
                 // If it fails, that's also acceptable for invalid display
