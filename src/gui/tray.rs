@@ -62,6 +62,8 @@ pub struct TrayIcon {
     open_item_id: tray_icon::menu::MenuId,
     /// ID of the "Exit" menu item
     exit_item_id: tray_icon::menu::MenuId,
+    /// Reference to the status menu item for updating text
+    status_item: MenuItem,
 }
 
 /// Placeholder for non-Windows platforms
@@ -320,6 +322,82 @@ impl TrayIcon {
 
         info!("Menu event handler set up successfully");
     }
+
+    /// Update the tray icon based on HDR state
+    ///
+    /// This method changes the tray icon to reflect the current HDR state:
+    /// - Green icon when HDR is enabled
+    /// - Red icon when HDR is disabled
+    ///
+    /// It also updates the "Current HDR State" menu item text to show the current state.
+    ///
+    /// # Arguments
+    ///
+    /// * `hdr_enabled` - Whether HDR is currently enabled
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 5.10: Display an icon showing HDR state in the system tray
+    /// - Task 11.4: Write update_icon() to change tray icon based on HDR state
+    /// - Task 11.4: Load icon_hdr_on.ico when HDR enabled
+    /// - Task 11.4: Load icon_hdr_off.ico when HDR disabled
+    /// - Task 11.4: Update "Current HDR State" menu item text
+    ///
+    /// # Implementation Notes
+    ///
+    /// Currently uses programmatically generated icons (colored squares).
+    /// Task 15.1 will replace this with actual icon assets (icon_hdr_on.ico and icon_hdr_off.ico).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use easyhdr::gui::TrayIcon;
+    /// # use slint::include_modules;
+    /// # slint::include_modules!();
+    ///
+    /// let main_window = MainWindow::new().unwrap();
+    /// let mut tray_icon = TrayIcon::new(&main_window)?;
+    ///
+    /// // Update icon when HDR state changes
+    /// tray_icon.update_icon(true);  // HDR enabled
+    /// tray_icon.update_icon(false); // HDR disabled
+    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
+    /// ```
+    pub fn update_icon(&mut self, hdr_enabled: bool) {
+        use tracing::{info, warn};
+
+        info!("Updating tray icon: HDR {}", if hdr_enabled { "ON" } else { "OFF" });
+
+        // Task 11.4: Load icon_hdr_on.ico when HDR enabled, icon_hdr_off.ico when HDR disabled
+        // For now, use the programmatically generated icons
+        // TODO: Replace with actual icon assets in Task 15.1
+        match Self::create_default_icon(hdr_enabled) {
+            Ok(icon) => {
+                // Update the tray icon
+                if let Err(e) = self.tray.set_icon(Some(icon)) {
+                    warn!("Failed to update tray icon: {}", e);
+                } else {
+                    info!("Tray icon updated successfully");
+                }
+            }
+            Err(e) => {
+                warn!("Failed to create tray icon: {}", e);
+            }
+        }
+
+        // Task 11.4: Update "Current HDR State" menu item text
+        let status_text = if hdr_enabled {
+            "Current HDR State: ON"
+        } else {
+            "Current HDR State: OFF"
+        };
+
+        if let Err(e) = self.status_item.set_text(status_text) {
+            warn!("Failed to update status menu item text: {}", e);
+        } else {
+            info!("Status menu item updated to: {}", status_text);
+        }
+    }
 }
 
 /// Stub implementation for non-Windows platforms
@@ -332,6 +410,15 @@ impl TrayIcon {
     #[allow(dead_code)]
     pub fn new(_window: &crate::MainWindow) -> easyhdr::error::Result<Self> {
         Ok(Self)
+    }
+
+    /// Update the tray icon (stub for non-Windows)
+    ///
+    /// This is a stub implementation for non-Windows platforms.
+    /// The actual tray icon functionality is only available on Windows.
+    #[allow(dead_code)]
+    pub fn update_icon(&mut self, _hdr_enabled: bool) {
+        // No-op on non-Windows platforms
     }
 }
 
