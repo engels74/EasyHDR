@@ -309,9 +309,10 @@ fn log_hdr_startup_summary(hdr_controller: &HdrController) {
     // Log detailed information for each display
     for (index, disp) in displays.iter().enumerate() {
         info!("--- Display {} ---", index);
-        info!("  Adapter ID: LowPart={:#010x}, HighPart={:#010x}",
-              disp.adapter_id.LowPart,
-              disp.adapter_id.HighPart);
+        info!(
+            "  Adapter ID: LowPart={:#010x}, HighPart={:#010x}",
+            disp.adapter_id.LowPart, disp.adapter_id.HighPart
+        );
         info!("  Target ID: {}", disp.target_id);
         info!("  HDR Supported: {}", disp.supports_hdr);
 
@@ -332,7 +333,11 @@ fn log_hdr_startup_summary(hdr_controller: &HdrController) {
 
     // Summary statistics
     let hdr_capable_count = displays.iter().filter(|d| d.supports_hdr).count();
-    info!("HDR-Capable Displays: {} of {}", hdr_capable_count, displays.len());
+    info!(
+        "HDR-Capable Displays: {} of {}",
+        hdr_capable_count,
+        displays.len()
+    );
 
     info!("=== End HDR Startup Summary ===");
 }

@@ -329,9 +329,7 @@ impl HdrController {
 
                     debug!(
                         "Display (adapter={:#x}:{:#x}, target={}) - Windows 11 24H2+ API results:",
-                        target.adapter_id.LowPart,
-                        target.adapter_id.HighPart,
-                        target.target_id
+                        target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id
                     );
                     debug!("  colorEncoding: {}", color_info.colorEncoding);
                     debug!("  bitsPerColorChannel: {}", color_info.bitsPerColorChannel);
@@ -420,18 +418,25 @@ impl HdrController {
 
         debug!(
             "Display (adapter={:#x}:{:#x}, target={}) - Legacy API results:",
-            target.adapter_id.LowPart,
-            target.adapter_id.HighPart,
-            target.target_id
+            target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id
         );
         debug!("  value (raw bitfield): {:#010x}", color_info.value);
         debug!("  colorEncoding: {}", color_info.colorEncoding);
         debug!("  bitsPerColorChannel: {}", color_info.bitsPerColorChannel);
-        debug!("  advancedColorSupported (bit 0): {}", advanced_color_supported);
+        debug!(
+            "  advancedColorSupported (bit 0): {}",
+            advanced_color_supported
+        );
         debug!("  advancedColorEnabled (bit 1): {}", advanced_color_enabled);
         debug!("  wideColorEnforced (bit 2): {}", wide_color_enforced);
-        debug!("  advancedColorForceDisabled (bit 3): {}", advanced_color_force_disabled);
-        debug!("  Final HDR supported (advancedColorSupported && !wideColorEnforced): {}", supported);
+        debug!(
+            "  advancedColorForceDisabled (bit 3): {}",
+            advanced_color_force_disabled
+        );
+        debug!(
+            "  Final HDR supported (advancedColorSupported && !wideColorEnforced): {}",
+            supported
+        );
 
         Ok(supported)
     }
