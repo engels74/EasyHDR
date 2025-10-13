@@ -35,8 +35,14 @@ slint::include_modules!();
 const MIN_WINDOWS_BUILD: u32 = 19044;
 
 fn main() -> Result<()> {
+    // Task 16.3: Start startup profiling
+    use easyhdr::utils::startup_profiler::{self, StartupPhase};
+    let profiler = startup_profiler::get_profiler();
+    profiler.record_phase(StartupPhase::AppStart);
+
     // Initialize logging first so we can log errors
     utils::init_logging()?;
+    profiler.record_phase(StartupPhase::LoggingInit);
 
     info!("EasyHDR v{} starting...", env!("CARGO_PKG_VERSION"));
 
@@ -52,11 +58,13 @@ fn main() -> Result<()> {
         ));
         return Err(e);
     }
+    profiler.record_phase(StartupPhase::VersionDetection);
 
     info!("Windows version check passed");
 
     // Load configuration
     let config = ConfigManager::load()?;
+    profiler.record_phase(StartupPhase::ConfigLoad);
     info!("Configuration loaded with {} monitored apps", config.monitored_apps.len());
 
     // Initialize core components
@@ -90,6 +98,9 @@ fn main() -> Result<()> {
 
     info!("Core components initialized successfully");
 
+    // Task 16.3: Record GUI ready phase
+    profiler.record_phase(StartupPhase::GuiDisplay);
+
     // Task 16.1: Log initial memory usage
     #[cfg(windows)]
     {
@@ -104,6 +115,10 @@ fn main() -> Result<()> {
 
     // Note: AppController thread is started inside initialize_components
     // and is managed by GuiController
+
+    // Task 16.3: Log startup performance summary
+    profiler.record_phase(StartupPhase::AppReady);
+    profiler.log_summary();
 
     // Run GUI event loop (blocks until application exits)
     info!("Starting GUI event loop");
@@ -216,10 +231,15 @@ fn get_windows_build_number() -> Result<u32> {
 fn initialize_components(
     config: easyhdr::config::AppConfig,
 ) -> Result<(ProcessMonitor, GuiController)> {
+    // Task 16.3: Get profiler for tracking initialization phases
+    use easyhdr::utils::startup_profiler::{self, StartupPhase};
+    let profiler = startup_profiler::get_profiler();
+
     // First, create a temporary HdrController to check for HDR-capable displays
     // This is just for the warning message - AppController will create its own
     info!("Checking for HDR-capable displays");
     let temp_hdr_controller = HdrController::new()?;
+    profiler.record_phase(StartupPhase::HdrControllerInit);
 
     // Check if any displays support HDR and warn if none found
     // Requirement 10.9: Show clear messaging about hardware compatibility
@@ -258,6 +278,7 @@ fn initialize_components(
     info!("Creating process monitor with interval: {:?}", monitoring_interval);
     let process_monitor = ProcessMonitor::new(monitoring_interval, process_event_tx);
     let watch_list_ref = process_monitor.get_watch_list_ref();
+    profiler.record_phase(StartupPhase::ProcessMonitorInit);
 
     // Apply startup delay if configured
     // Requirement 4.7: Implement optional startup delay
@@ -275,6 +296,7 @@ fn initialize_components(
         app_state_tx,
         watch_list_ref,
     )?;
+    profiler.record_phase(StartupPhase::AppControllerInit);
 
     // Wrap AppController in Arc<Mutex<>> for sharing between GUI and background thread
     let app_controller_handle = Arc::new(Mutex::new(app_controller));
@@ -290,6 +312,7 @@ fn initialize_components(
     // Create GuiController
     info!("Creating GUI controller");
     let gui_controller = GuiController::new(app_controller_handle, app_state_rx)?;
+    profiler.record_phase(StartupPhase::GuiControllerInit);
 
     Ok((process_monitor, gui_controller))
 }

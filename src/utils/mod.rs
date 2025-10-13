@@ -7,6 +7,7 @@ pub mod autostart;
 pub mod icon_extractor;
 pub mod logging;
 pub mod memory_profiler;
+pub mod startup_profiler;
 
 pub use autostart::AutoStartManager;
 pub use icon_extractor::{extract_display_name_from_exe, extract_icon_from_exe};
