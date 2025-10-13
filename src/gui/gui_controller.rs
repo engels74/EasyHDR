@@ -136,6 +136,18 @@ impl GuiController {
 
         info!("GUI callbacks connected");
 
+        // Task 11.6: Implement minimize to tray
+        // Requirement 5.9: Handle window close event to minimize to tray instead of exit
+        // Set up close request handler to hide window instead of closing
+        main_window.window().on_close_requested(move || {
+            use tracing::info;
+            info!("Window close requested - hiding window instead of exiting");
+            // Return HideWindow to minimize to tray instead of closing the application
+            slint::CloseRequestResponse::HideWindow
+        });
+
+        info!("Close request handler configured to minimize to tray");
+
         // Task 11.1: Create TrayIcon
         // Create the system tray icon
         let tray_icon = TrayIcon::new(&main_window)?;
