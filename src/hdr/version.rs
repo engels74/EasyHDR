@@ -54,14 +54,10 @@ impl WindowsVersion {
 
             // Fallback to GetVersionExW
             match Self::detect_with_get_version_ex() {
-                Ok(version) => {
-                    return Ok(version);
-                }
-                Err(_e) => {
-                    return Err(crate::error::EasyHdrError::WindowsApiError(
-                        windows::core::Error::from_win32(),
-                    ));
-                }
+                Ok(version) => Ok(version),
+                Err(_e) => Err(crate::error::EasyHdrError::WindowsApiError(
+                    windows::core::Error::from_win32(),
+                )),
             }
         }
 
@@ -99,8 +95,10 @@ impl WindowsVersion {
             let rtl_get_version: RtlGetVersionFn = transmute(rtl_get_version_ptr);
 
             // Prepare version info structure
-            let mut version_info = OSVERSIONINFOEXW::default();
-            version_info.dwOSVersionInfoSize = size_of::<OSVERSIONINFOEXW>() as u32;
+            let mut version_info = OSVERSIONINFOEXW {
+                dwOSVersionInfoSize: size_of::<OSVERSIONINFOEXW>() as u32,
+                ..Default::default()
+            };
 
             // Call RtlGetVersion
             let status = rtl_get_version(&mut version_info);
@@ -123,8 +121,10 @@ impl WindowsVersion {
     #[cfg(windows)]
     fn detect_with_get_version_ex() -> crate::error::Result<Self> {
         unsafe {
-            let mut version_info = OSVERSIONINFOEXW::default();
-            version_info.dwOSVersionInfoSize = size_of::<OSVERSIONINFOEXW>() as u32;
+            let mut version_info = OSVERSIONINFOEXW {
+                dwOSVersionInfoSize: size_of::<OSVERSIONINFOEXW>() as u32,
+                ..Default::default()
+            };
 
             // Call GetVersionExW
             let result = GetVersionExW(&mut version_info as *mut _ as *mut _);

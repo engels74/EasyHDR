@@ -140,8 +140,10 @@ impl MemoryProfiler {
 
         unsafe {
             let process = GetCurrentProcess();
-            let mut pmc = PROCESS_MEMORY_COUNTERS::default();
-            pmc.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+            let mut pmc = PROCESS_MEMORY_COUNTERS {
+                cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+                ..Default::default()
+            };
 
             match GetProcessMemoryInfo(process, &mut pmc, pmc.cb) {
                 Ok(_) => pmc.WorkingSetSize,

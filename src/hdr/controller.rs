@@ -910,7 +910,7 @@ mod tests {
             let new_state = controller
                 .is_hdr_enabled(display)
                 .expect("Failed to get new HDR state");
-            assert_eq!(new_state, false, "HDR should be disabled");
+            assert!(!new_state, "HDR should be disabled");
 
             // Restore original state
             let result = controller.set_hdr_state(display, initial_state);
@@ -998,7 +998,7 @@ mod tests {
             let state = controller
                 .is_hdr_enabled(display)
                 .expect("Failed to get HDR state");
-            assert_eq!(state, false, "HDR should be disabled globally");
+            assert!(!state, "HDR should be disabled globally");
         }
 
         // Restore original states
