@@ -189,6 +189,30 @@ impl HdrController {
     /// Uses DisplayConfigGetDeviceInfo with version-specific structures to detect
     /// whether a display supports HDR.
     ///
+    /// # Algorithm
+    ///
+    /// ## Windows 11 24H2+ (Build 26100+)
+    ///
+    /// Uses `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2`:
+    /// 1. Create structure with header specifying adapter ID and target ID
+    /// 2. Call `DisplayConfigGetDeviceInfo` to populate the structure
+    /// 3. Check `highDynamicRangeSupported` bit field
+    /// 4. Return true if bit is set, false otherwise
+    ///
+    /// ## Windows 10/11 (Before 24H2)
+    ///
+    /// Uses `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO`:
+    /// 1. Create structure with header specifying adapter ID and target ID
+    /// 2. Call `DisplayConfigGetDeviceInfo` to populate the structure
+    /// 3. Check two conditions:
+    ///    - `advancedColorSupported` == TRUE (display hardware supports HDR)
+    ///    - `wideColorEnforced` == FALSE (not in forced wide color mode)
+    /// 4. Return true only if both conditions are met
+    ///
+    /// **Why check wideColorEnforced?** On older Windows versions, `wideColorEnforced`
+    /// being TRUE indicates the display is in a forced wide color gamut mode that's
+    /// incompatible with HDR. This is a legacy compatibility mode that should be avoided.
+    ///
     /// # Arguments
     ///
     /// * `target` - The display target to check
@@ -202,6 +226,22 @@ impl HdrController {
     /// - Requirement 3.4: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 for Windows 11 24H2+
     /// - Requirement 3.5: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO for older Windows
     /// - Requirement 3.6: Check advancedColorSupported && !wideColorEnforced for older Windows
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use easyhdr::hdr::HdrController;
+    ///
+    /// let controller = HdrController::new()?;
+    /// let displays = controller.get_display_cache();
+    ///
+    /// for display in displays {
+    ///     if controller.is_hdr_supported(display)? {
+    ///         println!("Display supports HDR");
+    ///     }
+    /// }
+    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
+    /// ```
     pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {

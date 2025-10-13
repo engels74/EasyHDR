@@ -233,11 +233,54 @@ impl ProcessMonitor {
 
     /// Detect changes between current and previous snapshots
     ///
+    /// Compares the current process snapshot with the previous snapshot to detect
+    /// which monitored processes have started or stopped, then sends appropriate events.
+    ///
+    /// # Algorithm
+    ///
+    /// This method uses HashSet difference operations for efficient change detection:
+    ///
+    /// 1. **Started processes** = `current - previous`
+    ///    - Processes in current snapshot but not in previous
+    ///    - Example: If previous = {chrome, notepad} and current = {chrome, notepad, game}
+    ///    - Then started = {game}
+    ///
+    /// 2. **Stopped processes** = `previous - current`
+    ///    - Processes in previous snapshot but not in current
+    ///    - Example: If previous = {chrome, notepad, game} and current = {chrome, notepad}
+    ///    - Then stopped = {game}
+    ///
+    /// 3. **Filter by watch list**
+    ///    - Only processes in the watch list trigger events
+    ///    - Watch list contains lowercase process names from monitored applications
+    ///
+    /// 4. **Send events**
+    ///    - ProcessEvent::Started for each started monitored process
+    ///    - ProcessEvent::Stopped for each stopped monitored process
+    ///
     /// # Performance Optimizations
     ///
     /// - Clones watch list once to minimize lock hold time (Requirement 9.2)
     /// - Uses HashSet::difference() for O(n) change detection
     /// - Only sends events for monitored processes
+    /// - Typical complexity: O(n) where n is number of processes (150-250 on Windows)
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 2.4: Detect NOT_RUNNING → RUNNING transitions within 1-2 seconds
+    /// - Requirement 2.5: Detect RUNNING → NOT_RUNNING transitions within 1-2 seconds
+    /// - Requirement 2.6: Fire events to application logic controller
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// Previous snapshot: {chrome, notepad}
+    /// Current snapshot:  {chrome, notepad, cyberpunk2077}
+    /// Watch list:        {cyberpunk2077, witcher3}
+    ///
+    /// Started: {cyberpunk2077} ∩ {cyberpunk2077, witcher3} = {cyberpunk2077}
+    /// → Send ProcessEvent::Started("cyberpunk2077")
+    /// ```
     fn detect_changes(&mut self, current: HashSet<String>) {
         use tracing::info;
 
