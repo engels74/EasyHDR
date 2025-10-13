@@ -106,8 +106,17 @@ impl MonitoredApp {
             .to_lowercase();
 
         // Extract icon from executable (gracefully handles failures)
+        // Task 16.1: Optimize icon caching - track memory usage
         let icon_data = match extract_icon_from_exe(&exe_path) {
-            Ok(data) if !data.is_empty() => Some(data),
+            Ok(data) if !data.is_empty() => {
+                // Record icon in memory profiler
+                #[cfg(windows)]
+                {
+                    use crate::utils::memory_profiler;
+                    memory_profiler::get_profiler().record_icon_cached(data.len());
+                }
+                Some(data)
+            }
             Ok(_) => None, // Empty data means extraction failed gracefully
             Err(e) => {
                 // Log warning but don't fail - icon is optional
@@ -124,6 +133,63 @@ impl MonitoredApp {
             enabled: true, // Default to enabled
             icon_data,
         })
+    }
+
+    /// Load icon data lazily if not already loaded
+    ///
+    /// This method loads the icon from the executable if it hasn't been loaded yet.
+    /// This supports lazy loading to reduce memory usage when icons aren't needed.
+    ///
+    /// # Returns
+    ///
+    /// Returns a reference to the icon data if available, None otherwise.
+    ///
+    /// # Requirements
+    ///
+    /// - Task 16.1: Optimize icon caching strategy with lazy loading
+    pub fn ensure_icon_loaded(&mut self) -> Option<&Vec<u8>> {
+        if self.icon_data.is_none() {
+            // Try to load icon
+            match extract_icon_from_exe(&self.exe_path) {
+                Ok(data) if !data.is_empty() => {
+                    // Record icon in memory profiler
+                    #[cfg(windows)]
+                    {
+                        use crate::utils::memory_profiler;
+                        memory_profiler::get_profiler().record_icon_cached(data.len());
+                    }
+                    self.icon_data = Some(data);
+                }
+                Ok(_) => {
+                    tracing::debug!("Icon extraction returned empty data for {:?}", self.exe_path);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load icon for {:?}: {}", self.exe_path, e);
+                }
+            }
+        }
+        self.icon_data.as_ref()
+    }
+
+    /// Release icon data to free memory
+    ///
+    /// This method releases the cached icon data to reduce memory usage.
+    /// The icon can be reloaded later using ensure_icon_loaded().
+    ///
+    /// # Requirements
+    ///
+    /// - Task 16.1: Optimize icon caching strategy
+    /// - Requirement 9.6: Release GUI resources when minimized to tray
+    pub fn release_icon(&mut self) {
+        if let Some(_icon_data) = self.icon_data.take() {
+            // Record icon removal in memory profiler
+            #[cfg(windows)]
+            {
+                use crate::utils::memory_profiler;
+                memory_profiler::get_profiler().record_icon_removed(_icon_data.len());
+            }
+            tracing::debug!("Released icon data for {}", self.display_name);
+        }
     }
 }
 

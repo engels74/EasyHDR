@@ -166,10 +166,16 @@ impl GuiController {
 
         // Task 11.6: Implement minimize to tray
         // Requirement 5.9: Handle window close event to minimize to tray instead of exit
+        // Task 16.1: Release GUI resources when minimized to tray
         // Set up close request handler to hide window instead of closing
+        let controller_for_close = controller.clone();
         main_window.window().on_close_requested(move || {
             use tracing::info;
-            info!("Window close requested - hiding window instead of exiting");
+            info!("Window close requested - hiding window and releasing resources");
+
+            // Release icon resources when minimizing to tray
+            Self::release_gui_resources(&controller_for_close);
+
             // Return HideWindow to minimize to tray instead of closing the application
             slint::CloseRequestResponse::HideWindow
         });
@@ -864,6 +870,100 @@ impl GuiController {
         Ok(())
     }
 
+    /// Release GUI resources when minimized to tray
+    ///
+    /// This method releases cached icon data to reduce memory usage when the
+    /// window is minimized to the system tray. Icons can be reloaded when
+    /// the window is restored.
+    ///
+    /// # Arguments
+    ///
+    /// * `controller` - Shared reference to the AppController
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 9.6: Release GUI resources when minimized to tray
+    /// - Task 16.1: Optimize memory usage
+    ///
+    /// # Implementation Details
+    ///
+    /// Releases icon data from all monitored applications to free memory.
+    /// The icons will be lazily reloaded when the window is shown again.
+    fn release_gui_resources(controller: &Arc<Mutex<AppController>>) {
+        use tracing::info;
+
+        info!("Releasing GUI resources (icon cache) to reduce memory usage");
+
+        let controller_guard = controller.lock();
+        let mut config = controller_guard.config.lock();
+
+        // Release all icon data
+        let mut released_count = 0;
+        for app in &mut config.monitored_apps {
+            if app.icon_data.is_some() {
+                app.release_icon();
+                released_count += 1;
+            }
+        }
+
+        drop(config);
+        drop(controller_guard);
+
+        info!("Released {} icon(s) from cache", released_count);
+
+        // Log memory stats after release
+        #[cfg(windows)]
+        {
+            use crate::utils::memory_profiler;
+            memory_profiler::get_profiler().log_stats();
+        }
+    }
+
+    /// Reload GUI resources when window is shown
+    ///
+    /// This method reloads icon data that was released when the window was
+    /// minimized to the tray. This ensures icons are available for display.
+    ///
+    /// # Arguments
+    ///
+    /// * `controller` - Shared reference to the AppController
+    ///
+    /// # Requirements
+    ///
+    /// - Task 16.1: Optimize memory usage with lazy loading
+    ///
+    /// # Implementation Details
+    ///
+    /// Lazily loads icon data for all monitored applications when needed.
+    fn reload_gui_resources(controller: &Arc<Mutex<AppController>>) {
+        use tracing::info;
+
+        info!("Reloading GUI resources (icon cache)");
+
+        let controller_guard = controller.lock();
+        let mut config = controller_guard.config.lock();
+
+        // Reload all icon data
+        let mut reloaded_count = 0;
+        for app in &mut config.monitored_apps {
+            if app.ensure_icon_loaded().is_some() {
+                reloaded_count += 1;
+            }
+        }
+
+        drop(config);
+        drop(controller_guard);
+
+        info!("Reloaded {} icon(s) into cache", reloaded_count);
+
+        // Log memory stats after reload
+        #[cfg(windows)]
+        {
+            use crate::utils::memory_profiler;
+            memory_profiler::get_profiler().log_stats();
+        }
+    }
+
     /// Run the GUI event loop with state synchronization
     ///
     /// This method starts a background thread to receive AppState updates from
@@ -924,6 +1024,9 @@ impl GuiController {
             // Track previous HDR state to detect changes for notifications
             let mut previous_hdr_state: Option<bool> = None;
 
+            // Track window visibility for resource management
+            let mut window_was_visible = true;
+
             while let Ok(state) = self.state_receiver.recv() {
                 debug!("Received state update: HDR enabled = {}, active apps = {:?}",
                     state.hdr_enabled, state.active_apps);
@@ -936,6 +1039,15 @@ impl GuiController {
                         break;
                     }
                 };
+
+                // Task 16.1: Check window visibility and reload resources if needed
+                let window_visible = window.window().is_visible();
+                if window_visible && !window_was_visible {
+                    // Window was just shown, reload GUI resources
+                    info!("Window shown, reloading GUI resources");
+                    Self::reload_gui_resources(&controller_handle);
+                }
+                window_was_visible = window_visible;
 
                 // Update HDR enabled state
                 // Requirement 5.8: Update status indicator when HDR state changes
