@@ -16,7 +16,7 @@ pub use windows::Win32::Foundation::LUID;
 // For non-Windows platforms (testing), define a stub LUID structure
 #[cfg(not(windows))]
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LUID {
     pub LowPart: u32,
     pub HighPart: i32,
@@ -202,14 +202,230 @@ impl DISPLAYCONFIG_SET_HDR_STATE {
     }
 }
 
-// Re-export DISPLAYCONFIG_PATH_INFO and DISPLAYCONFIG_MODE_INFO from windows-rs if available
-// These structures are used for display enumeration
+// DISPLAYCONFIG structures and constants
+// These are not available in windows-rs 0.52, so we define them manually
+
+/// QDC_ONLY_ACTIVE_PATHS flag for QueryDisplayConfig
+pub const QDC_ONLY_ACTIVE_PATHS: u32 = 0x00000002;
+
+/// DISPLAYCONFIG_PATH_ACTIVE flag
+pub const DISPLAYCONFIG_PATH_ACTIVE: u32 = 0x00000001;
+
+/// DISPLAYCONFIG_2DREGION structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DISPLAYCONFIG_2DREGION {
+    pub cx: u32,
+    pub cy: u32,
+}
+
+/// DISPLAYCONFIG_RATIONAL structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DISPLAYCONFIG_RATIONAL {
+    pub Numerator: u32,
+    pub Denominator: u32,
+}
+
+/// DISPLAYCONFIG_VIDEO_SIGNAL_INFO structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO {
+    pub pixelRate: u64,
+    pub hSyncFreq: DISPLAYCONFIG_RATIONAL,
+    pub vSyncFreq: DISPLAYCONFIG_RATIONAL,
+    pub activeSize: DISPLAYCONFIG_2DREGION,
+    pub totalSize: DISPLAYCONFIG_2DREGION,
+    pub videoStandard: u32,
+    pub scanLineOrdering: u32,
+}
+
+impl Default for DISPLAYCONFIG_VIDEO_SIGNAL_INFO {
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+/// DISPLAYCONFIG_TARGET_MODE structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DISPLAYCONFIG_TARGET_MODE {
+    pub targetVideoSignalInfo: DISPLAYCONFIG_VIDEO_SIGNAL_INFO,
+}
+
+/// DISPLAYCONFIG_SOURCE_MODE structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DISPLAYCONFIG_SOURCE_MODE {
+    pub width: u32,
+    pub height: u32,
+    pub pixelFormat: u32,
+    pub position: DISPLAYCONFIG_2DREGION,
+}
+
+/// DISPLAYCONFIG_MODE_INFO_TYPE enumeration
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DISPLAYCONFIG_MODE_INFO_TYPE {
+    DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE = 1,
+    DISPLAYCONFIG_MODE_INFO_TYPE_TARGET = 2,
+}
+
+/// DISPLAYCONFIG_MODE_INFO structure (union)
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct DISPLAYCONFIG_MODE_INFO {
+    pub infoType: DISPLAYCONFIG_MODE_INFO_TYPE,
+    pub id: u32,
+    pub adapterId: LUID,
+    pub modeInfo: DISPLAYCONFIG_MODE_INFO_UNION,
+}
+
+/// Union for DISPLAYCONFIG_MODE_INFO
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union DISPLAYCONFIG_MODE_INFO_UNION {
+    pub targetMode: DISPLAYCONFIG_TARGET_MODE,
+    pub sourceMode: DISPLAYCONFIG_SOURCE_MODE,
+}
+
+impl Default for DISPLAYCONFIG_MODE_INFO {
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+impl std::fmt::Debug for DISPLAYCONFIG_MODE_INFO {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DISPLAYCONFIG_MODE_INFO")
+            .field("infoType", &self.infoType)
+            .field("id", &self.id)
+            .field("adapterId", &self.adapterId)
+            .finish()
+    }
+}
+
+/// DISPLAYCONFIG_PATH_SOURCE_INFO structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DISPLAYCONFIG_PATH_SOURCE_INFO {
+    pub adapterId: LUID,
+    pub id: u32,
+    pub modeInfoIdx: u32,
+    pub statusFlags: u32,
+}
+
+/// DISPLAYCONFIG_PATH_TARGET_INFO structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct DISPLAYCONFIG_PATH_TARGET_INFO {
+    pub adapterId: LUID,
+    pub id: u32,
+    pub modeInfoIdx: u32,
+    pub outputTechnology: u32,
+    pub rotation: u32,
+    pub scaling: u32,
+    pub refreshRate: DISPLAYCONFIG_RATIONAL,
+    pub scanLineOrdering: u32,
+    pub targetAvailable: u32,
+    pub statusFlags: u32,
+}
+
+impl Default for DISPLAYCONFIG_PATH_TARGET_INFO {
+    fn default() -> Self {
+        unsafe { std::mem::zeroed() }
+    }
+}
+
+/// DISPLAYCONFIG_PATH_INFO structure
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DISPLAYCONFIG_PATH_INFO {
+    pub sourceInfo: DISPLAYCONFIG_PATH_SOURCE_INFO,
+    pub targetInfo: DISPLAYCONFIG_PATH_TARGET_INFO,
+    pub flags: u32,
+}
+
+// Windows API function declarations
+// These functions are not available in windows-rs 0.52, so we declare them manually
+
 #[cfg(windows)]
-pub use windows::Win32::Graphics::Gdi::{
-    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, DISPLAYCONFIG_PATH_SOURCE_INFO,
-    DISPLAYCONFIG_PATH_TARGET_INFO, DISPLAYCONFIG_SOURCE_MODE, DISPLAYCONFIG_TARGET_MODE,
-    DISPLAYCONFIG_VIDEO_SIGNAL_INFO,
-};
+extern "system" {
+    /// Gets the size of the buffers needed for QueryDisplayConfig
+    pub fn GetDisplayConfigBufferSizes(
+        flags: u32,
+        numPathArrayElements: *mut u32,
+        numModeInfoArrayElements: *mut u32,
+    ) -> i32;
+
+    /// Queries the display configuration
+    pub fn QueryDisplayConfig(
+        flags: u32,
+        numPathArrayElements: *mut u32,
+        pathArray: *mut DISPLAYCONFIG_PATH_INFO,
+        numModeInfoArrayElements: *mut u32,
+        modeInfoArray: *mut DISPLAYCONFIG_MODE_INFO,
+        currentTopologyId: *mut u32,
+    ) -> i32;
+
+    /// Gets display device information
+    pub fn DisplayConfigGetDeviceInfo(requestPacket: *mut DISPLAYCONFIG_DEVICE_INFO_HEADER) -> i32;
+
+    /// Sets display device information
+    pub fn DisplayConfigSetDeviceInfo(setPacket: *const DISPLAYCONFIG_DEVICE_INFO_HEADER) -> i32;
+}
+
+// Stub implementations for non-Windows platforms
+#[cfg(not(windows))]
+/// Stub implementation for non-Windows platforms
+///
+/// # Safety
+/// This is a stub function that always returns an error. It does not access any memory.
+pub unsafe fn GetDisplayConfigBufferSizes(
+    _flags: u32,
+    _numPathArrayElements: *mut u32,
+    _numModeInfoArrayElements: *mut u32,
+) -> i32 {
+    -1 // ERROR_NOT_SUPPORTED
+}
+
+#[cfg(not(windows))]
+/// Stub implementation for non-Windows platforms
+///
+/// # Safety
+/// This is a stub function that always returns an error. It does not access any memory.
+pub unsafe fn QueryDisplayConfig(
+    _flags: u32,
+    _numPathArrayElements: *mut u32,
+    _pathArray: *mut DISPLAYCONFIG_PATH_INFO,
+    _numModeInfoArrayElements: *mut u32,
+    _modeInfoArray: *mut DISPLAYCONFIG_MODE_INFO,
+    _currentTopologyId: *mut u32,
+) -> i32 {
+    -1 // ERROR_NOT_SUPPORTED
+}
+
+#[cfg(not(windows))]
+/// Stub implementation for non-Windows platforms
+///
+/// # Safety
+/// This is a stub function that always returns an error. It does not access any memory.
+pub unsafe fn DisplayConfigGetDeviceInfo(
+    _requestPacket: *mut DISPLAYCONFIG_DEVICE_INFO_HEADER,
+) -> i32 {
+    -1 // ERROR_NOT_SUPPORTED
+}
+
+#[cfg(not(windows))]
+/// Stub implementation for non-Windows platforms
+///
+/// # Safety
+/// This is a stub function that always returns an error. It does not access any memory.
+pub unsafe fn DisplayConfigSetDeviceInfo(
+    _setPacket: *const DISPLAYCONFIG_DEVICE_INFO_HEADER,
+) -> i32 {
+    -1 // ERROR_NOT_SUPPORTED
+}
 
 /// Default implementation for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {

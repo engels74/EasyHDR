@@ -10,10 +10,11 @@ use tracing::{debug, info, warn};
 
 #[cfg(windows)]
 use crate::hdr::windows_api::{
-    DISPLAYCONFIG_ADVANCED_COLOR_MODE, DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    DisplayConfigGetDeviceInfo, DisplayConfigSetDeviceInfo, GetDisplayConfigBufferSizes,
+    QueryDisplayConfig, DISPLAYCONFIG_ADVANCED_COLOR_MODE, DISPLAYCONFIG_DEVICE_INFO_HEADER,
     DISPLAYCONFIG_DEVICE_INFO_TYPE, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO,
-    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2, DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE,
-    DISPLAYCONFIG_SET_HDR_STATE,
+    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2, DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO,
+    QDC_ONLY_ACTIVE_PATHS,
 };
 
 #[cfg(windows)]
@@ -21,12 +22,6 @@ use crate::error::EasyHdrError;
 
 #[cfg(windows)]
 use tracing::error;
-
-#[cfg(windows)]
-use windows::Win32::Graphics::Gdi::{
-    DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QueryDisplayConfig,
-    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, QDC_ONLY_ACTIVE_PATHS,
-};
 
 /// Represents a display target
 #[derive(Debug, Clone)]
@@ -499,7 +494,6 @@ impl HdrController {
                 DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE, DISPLAYCONFIG_SET_HDR_STATE,
             };
             use tracing::{debug, info};
-            use windows::Win32::Graphics::Gdi::DisplayConfigSetDeviceInfo;
 
             match self.windows_version {
                 WindowsVersion::Windows11_24H2 => {
@@ -519,17 +513,18 @@ impl HdrController {
                     );
 
                     unsafe {
-                        DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _)
-                            .map_err(|e| {
-                                error!(
-                                    "Windows API error - DisplayConfigSetDeviceInfo (set HDR state 24H2+) failed for adapter {:?}, target {}: {}",
-                                    target.adapter_id, target.target_id, e
-                                );
-                                EasyHdrError::HdrControlFailed(format!(
-                                    "Failed to set HDR state (24H2+): {}",
-                                    e
-                                ))
-                            })?;
+                        let result =
+                            DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _);
+                        if result != 0 {
+                            error!(
+                                "Windows API error - DisplayConfigSetDeviceInfo (set HDR state 24H2+) failed for adapter {:?}, target {}: error code {}",
+                                target.adapter_id, target.target_id, result
+                            );
+                            return Err(EasyHdrError::HdrControlFailed(format!(
+                                "Failed to set HDR state (24H2+): error code {}",
+                                result
+                            )));
+                        }
                     }
 
                     // Add 100ms delay after DisplayConfigSetDeviceInfo call
@@ -562,17 +557,18 @@ impl HdrController {
                     );
 
                     unsafe {
-                        DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _)
-                            .map_err(|e| {
-                                error!(
-                                    "Windows API error - DisplayConfigSetDeviceInfo (set advanced color state) failed for adapter {:?}, target {}: {}",
-                                    target.adapter_id, target.target_id, e
-                                );
-                                EasyHdrError::HdrControlFailed(format!(
-                                    "Failed to set advanced color state: {}",
-                                    e
-                                ))
-                            })?;
+                        let result =
+                            DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _);
+                        if result != 0 {
+                            error!(
+                                "Windows API error - DisplayConfigSetDeviceInfo (set advanced color state) failed for adapter {:?}, target {}: error code {}",
+                                target.adapter_id, target.target_id, result
+                            );
+                            return Err(EasyHdrError::HdrControlFailed(format!(
+                                "Failed to set advanced color state: error code {}",
+                                result
+                            )));
+                        }
                     }
 
                     // Add 100ms delay after DisplayConfigSetDeviceInfo call
