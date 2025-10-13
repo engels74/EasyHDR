@@ -55,8 +55,10 @@ use tray_icon::{
 #[cfg(windows)]
 pub struct TrayIcon {
     /// The actual tray icon
+    #[allow(dead_code)]
     tray: tray_icon::TrayIcon,
     /// The context menu for the tray icon
+    #[allow(dead_code)]
     menu: Menu,
     /// Weak reference to the main window
     window_handle: Weak<crate::MainWindow>,
@@ -65,6 +67,7 @@ pub struct TrayIcon {
     /// ID of the "Exit" menu item
     exit_item_id: tray_icon::menu::MenuId,
     /// Reference to the status menu item for updating text
+    #[allow(dead_code)]
     status_item: MenuItem,
 }
 
@@ -440,7 +443,7 @@ impl TrayIcon {
     /// Uses icon assets embedded in the binary at compile time:
     /// - icon_hdr_on.ico: Green brightness indicator (HDR enabled)
     /// - icon_hdr_off.ico: Gray with red slash (HDR disabled)
-    /// Falls back to programmatically generated icons if asset loading fails.
+    ///   Falls back to programmatically generated icons if asset loading fails.
     ///
     /// # Example
     ///
@@ -457,6 +460,7 @@ impl TrayIcon {
     /// tray_icon.update_icon(false); // HDR disabled
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
+    #[allow(dead_code)]
     pub fn update_icon(&mut self, hdr_enabled: bool) {
         use tracing::{info, warn};
 
@@ -533,6 +537,7 @@ impl TrayIcon {
     /// tray_icon.show_notification("HDR Disabled");
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
+    #[allow(dead_code)]
     pub fn show_notification(&self, message: &str) {
         use tracing::{debug, info, warn};
 

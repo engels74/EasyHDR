@@ -209,8 +209,10 @@ fn get_windows_build_number() -> Result<u32> {
         let rtl_get_version: RtlGetVersionFn = transmute(rtl_get_version_ptr);
 
         // Prepare version info structure
-        let mut version_info = OSVERSIONINFOEXW::default();
-        version_info.dwOSVersionInfoSize = size_of::<OSVERSIONINFOEXW>() as u32;
+        let mut version_info = OSVERSIONINFOEXW {
+            dwOSVersionInfoSize: size_of::<OSVERSIONINFOEXW>() as u32,
+            ..Default::default()
+        };
 
         // Call RtlGetVersion
         let status = rtl_get_version(&mut version_info);
