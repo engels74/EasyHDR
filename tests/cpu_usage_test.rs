@@ -188,7 +188,7 @@ fn test_process_monitor_cpu_usage_different_intervals() {
 #[test]
 #[cfg(windows)]
 fn test_process_enumeration_performance() {
-    use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES};
+    use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
@@ -217,10 +217,7 @@ fn test_process_enumeration_performance() {
 
             while has_process {
                 count += 1;
-                has_process = match Process32NextW(snapshot, &mut entry) {
-                    Ok(_) => true,
-                    Err(_) => false,
-                };
+                has_process = Process32NextW(snapshot, &mut entry).is_ok();
             }
 
             let _ = CloseHandle(snapshot);

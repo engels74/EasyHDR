@@ -1102,30 +1102,29 @@ impl GuiController {
                             config.preferences.show_tray_notifications
                         };
 
-                        // Update tray icon on the main thread using invoke_from_event_loop
-                        // This is necessary because TrayIcon is not Send
+                        // Update tray icon and show notification
+                        // The tray-icon crate handles its own thread safety, so we can call these
+                        // methods directly without needing invoke_from_event_loop
                         let hdr_enabled = state.hdr_enabled;
-                        let tray_clone = tray_icon.clone();
-                        let _ = slint::invoke_from_event_loop(move || {
-                            if show_notifications {
-                                // Show notification with HDR state
-                                let message = if hdr_enabled {
-                                    "HDR Enabled"
-                                } else {
-                                    "HDR Disabled"
-                                };
 
-                                let tray = tray_clone.lock();
-                                tray.show_notification(message);
-                                info!("Showed tray notification: {}", message);
+                        if show_notifications {
+                            // Show notification with HDR state
+                            let message = if hdr_enabled {
+                                "HDR Enabled"
                             } else {
-                                debug!("Tray notifications disabled, skipping notification");
-                            }
+                                "HDR Disabled"
+                            };
 
-                            // Update tray icon to reflect new HDR state
-                            let mut tray = tray_clone.lock();
-                            tray.update_icon(hdr_enabled);
-                        });
+                            let tray = tray_icon.lock();
+                            tray.show_notification(message);
+                            info!("Showed tray notification: {}", message);
+                        } else {
+                            debug!("Tray notifications disabled, skipping notification");
+                        }
+
+                        // Update tray icon to reflect new HDR state
+                        let mut tray = tray_icon.lock();
+                        tray.update_icon(hdr_enabled);
                     }
                 }
 

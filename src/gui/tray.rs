@@ -488,11 +488,8 @@ impl TrayIcon {
             "Current HDR State: OFF"
         };
 
-        if let Err(e) = self.status_item.set_text(status_text) {
-            warn!("Failed to update status menu item text: {}", e);
-        } else {
-            info!("Status menu item updated to: {}", status_text);
-        }
+        self.status_item.set_text(status_text);
+        info!("Status menu item updated to: {}", status_text);
     }
 
     /// Show a tray notification
