@@ -234,7 +234,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         bmi.bmiHeader.biHeight = -(height as i32); // Negative for top-down DIB
         bmi.bmiHeader.biPlanes = 1;
         bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB.0 as u32;
+        bmi.bmiHeader.biCompression = BI_RGB.0;
 
         // Allocate buffer for bitmap data (BGRA format)
         let mut buffer = vec![0u8; width * height * 4];
