@@ -24,6 +24,8 @@
 use easyhdr::error::{EasyHdrError, Result};
 #[cfg(windows)]
 use slint::{ComponentHandle, Weak};
+#[cfg(windows)]
+use tracing::error;
 
 #[cfg(windows)]
 use tray_icon::{
@@ -176,6 +178,7 @@ impl TrayIcon {
             window_handle: window.as_weak(),
             open_item_id,
             exit_item_id,
+            status_item,
         };
 
         // Task 11.3: Set up MenuEvent handler for menu item clicks
@@ -370,7 +373,7 @@ impl TrayIcon {
 
         // Set up the MenuEvent handler
         // This handler will be called whenever a menu item is clicked
-        MenuEvent::set_event_handler(Some(move |event| {
+        MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
             use tracing::{debug, error};
 
             debug!("Menu event received: {:?}", event.id);
