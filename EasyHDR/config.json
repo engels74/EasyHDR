@@ -1,10 +1,10 @@
 {
   "monitored_apps": [],
   "preferences": {
-    "auto_start": true,
-    "monitoring_interval_ms": 2000,
-    "startup_delay_ms": 5000,
-    "show_tray_notifications": false
+    "auto_start": false,
+    "monitoring_interval_ms": 1000,
+    "startup_delay_ms": 3000,
+    "show_tray_notifications": true
   },
   "window_state": {
     "x": 100,
