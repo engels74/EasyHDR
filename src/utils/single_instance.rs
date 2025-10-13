@@ -11,7 +11,7 @@ use crate::error::EasyHdrError;
 #[cfg(windows)]
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 #[cfg(windows)]
-use windows::Win32::System::Threading::CreateMutexW;
+use windows::Win32::System::Threading::{CreateMutexW, OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE};
 
 /// Single instance guard
 ///
@@ -52,30 +52,24 @@ impl SingleInstanceGuard {
         let mutex_name = HSTRING::from("Global\\EasyHDR_SingleInstance_Mutex");
 
         unsafe {
-            // Try to create the mutex
-            let mutex_handle = CreateMutexW(None, true, &mutex_name)?;
-
-            // Check if the mutex already existed by checking the last Win32 error
-            // In windows-rs 0.52, GetLastError() returns Result<(), Error>
-            // We need to check the error code directly using windows::core::Error::from_win32()
-            let last_error_code = windows::core::Error::from_win32().code().0 as u32;
-
-            // ERROR_ALREADY_EXISTS = 183
-            if last_error_code == 183 {
-                // Another instance is already running
-                error!("Another instance of EasyHDR is already running");
-
-                // Close the handle we just created
-                let _ = CloseHandle(mutex_handle);
-
-                return Err(EasyHdrError::ConfigError(
-                    "Another instance of EasyHDR is already running".to_string(),
-                ));
+            // First, try to open an existing mutex
+            // If this succeeds, another instance is already running
+            match OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, false, &mutex_name) {
+                Ok(existing_handle) => {
+                    // Mutex already exists - another instance is running
+                    error!("Another instance of EasyHDR is already running");
+                    let _ = CloseHandle(existing_handle);
+                    Err(EasyHdrError::ConfigError(
+                        "Another instance of EasyHDR is already running".to_string(),
+                    ))
+                }
+                Err(_) => {
+                    // Mutex doesn't exist, create it
+                    let mutex_handle = CreateMutexW(None, true, &mutex_name)?;
+                    debug!("Single instance mutex created successfully");
+                    Ok(Self { mutex_handle })
+                }
             }
-
-            debug!("Single instance mutex created successfully");
-
-            Ok(Self { mutex_handle })
         }
     }
 }
