@@ -48,8 +48,8 @@ fn test_version_enum_traits() {
     assert_eq!(format!("{:?}", v2), "Windows11");
     assert_eq!(format!("{:?}", v3), "Windows11_24H2");
 
-    // Test Clone
-    let v1_clone = v1.clone();
+    // Test Clone (Copy trait is used automatically for types that implement Copy)
+    let v1_clone = v1;
     assert_eq!(v1, v1_clone);
 
     // Test Copy

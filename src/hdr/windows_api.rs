@@ -468,28 +468,38 @@ mod tests {
 
     #[test]
     fn test_displayconfig_get_advanced_color_info_bit_fields() {
-        let mut info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO::default();
-
         // Test advancedColorSupported bit
-        info.value = 0x1;
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+            value: 0x1,
+            ..Default::default()
+        };
         assert!(info.advancedColorSupported());
         assert!(!info.advancedColorEnabled());
         assert!(!info.wideColorEnforced());
 
         // Test advancedColorEnabled bit
-        info.value = 0x2;
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+            value: 0x2,
+            ..Default::default()
+        };
         assert!(!info.advancedColorSupported());
         assert!(info.advancedColorEnabled());
         assert!(!info.wideColorEnforced());
 
         // Test wideColorEnforced bit
-        info.value = 0x4;
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+            value: 0x4,
+            ..Default::default()
+        };
         assert!(!info.advancedColorSupported());
         assert!(!info.advancedColorEnabled());
         assert!(info.wideColorEnforced());
 
         // Test multiple bits
-        info.value = 0x3; // supported + enabled
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+            value: 0x3, // supported + enabled
+            ..Default::default()
+        };
         assert!(info.advancedColorSupported());
         assert!(info.advancedColorEnabled());
         assert!(!info.wideColorEnforced());
@@ -497,20 +507,27 @@ mod tests {
 
     #[test]
     fn test_displayconfig_get_advanced_color_info_2_bit_fields() {
-        let mut info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2::default();
-
         // Test highDynamicRangeSupported bit
-        info.value = 0x1;
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x1,
+            ..Default::default()
+        };
         assert!(info.highDynamicRangeSupported());
         assert!(!info.wideColorGamutSupported());
 
         // Test wideColorGamutSupported bit
-        info.value = 0x2;
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x2,
+            ..Default::default()
+        };
         assert!(!info.highDynamicRangeSupported());
         assert!(info.wideColorGamutSupported());
 
         // Test both bits
-        info.value = 0x3;
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x3,
+            ..Default::default()
+        };
         assert!(info.highDynamicRangeSupported());
         assert!(info.wideColorGamutSupported());
     }
@@ -574,10 +591,10 @@ mod tests {
     #[test]
     fn test_structure_sizes() {
         // Verify structure sizes are reasonable (should be multiples of 4 for alignment)
-        assert!(std::mem::size_of::<DISPLAYCONFIG_DEVICE_INFO_HEADER>() % 4 == 0);
-        assert!(std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() % 4 == 0);
-        assert!(std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() % 4 == 0);
-        assert!(std::mem::size_of::<DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE>() % 4 == 0);
-        assert!(std::mem::size_of::<DISPLAYCONFIG_SET_HDR_STATE>() % 4 == 0);
+        assert!(std::mem::size_of::<DISPLAYCONFIG_DEVICE_INFO_HEADER>().is_multiple_of(4));
+        assert!(std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>().is_multiple_of(4));
+        assert!(std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>().is_multiple_of(4));
+        assert!(std::mem::size_of::<DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE>().is_multiple_of(4));
+        assert!(std::mem::size_of::<DISPLAYCONFIG_SET_HDR_STATE>().is_multiple_of(4));
     }
 }
