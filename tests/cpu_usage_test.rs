@@ -39,7 +39,7 @@ fn test_process_monitor_cpu_usage() {
     let wall_start = Instant::now();
 
     // Start the monitoring thread
-    let handle = monitor.start();
+    let _handle = monitor.start();
 
     // Let it run for 10 seconds to get a good measurement
     let test_duration = Duration::from_secs(10);
@@ -219,13 +219,7 @@ fn test_process_enumeration_performance() {
                 count += 1;
                 has_process = match Process32NextW(snapshot, &mut entry) {
                     Ok(_) => true,
-                    Err(e) => {
-                        if e.code() == ERROR_NO_MORE_FILES.to_hresult() {
-                            false
-                        } else {
-                            false
-                        }
-                    }
+                    Err(_) => false,
                 };
             }
 
