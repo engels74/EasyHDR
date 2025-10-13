@@ -274,6 +274,74 @@ fn get_windows_build_number() -> Result<u32> {
     }
 }
 
+/// Log comprehensive HDR startup summary for diagnostics
+///
+/// This function logs detailed information about all detected displays,
+/// their HDR capabilities, current HDR state, and the Windows version.
+/// This information is crucial for diagnosing HDR detection issues.
+///
+/// # Arguments
+///
+/// * `hdr_controller` - Reference to the HdrController with enumerated displays
+#[cfg(windows)]
+fn log_hdr_startup_summary(hdr_controller: &HdrController) {
+    use easyhdr::hdr::version::WindowsVersion;
+
+    info!("=== HDR Startup Summary ===");
+
+    // Log Windows version information
+    let windows_version = hdr_controller.get_windows_version();
+    let build_number = WindowsVersion::get_build_number().unwrap_or(0);
+
+    info!("Windows Version: {:?}", windows_version);
+    info!("Windows Build Number: {}", build_number);
+
+    // Log display information
+    let displays = hdr_controller.get_display_cache();
+    info!("Total Displays Detected: {}", displays.len());
+
+    if displays.is_empty() {
+        warn!("No displays were detected by the system!");
+        info!("=== End HDR Startup Summary ===");
+        return;
+    }
+
+    // Log detailed information for each display
+    for (index, disp) in displays.iter().enumerate() {
+        info!("--- Display {} ---", index);
+        info!("  Adapter ID: LowPart={:#010x}, HighPart={:#010x}",
+              disp.adapter_id.LowPart,
+              disp.adapter_id.HighPart);
+        info!("  Target ID: {}", disp.target_id);
+        info!("  HDR Supported: {}", disp.supports_hdr);
+
+        // Try to get current HDR state
+        if disp.supports_hdr {
+            match hdr_controller.is_hdr_enabled(disp) {
+                Ok(enabled) => {
+                    info!("  HDR Currently Enabled: {}", enabled);
+                }
+                Err(e) => {
+                    warn!("  Failed to check if HDR is enabled: {}", e);
+                }
+            }
+        } else {
+            info!("  HDR Currently Enabled: N/A (not supported)");
+        }
+    }
+
+    // Summary statistics
+    let hdr_capable_count = displays.iter().filter(|d| d.supports_hdr).count();
+    info!("HDR-Capable Displays: {} of {}", hdr_capable_count, displays.len());
+
+    info!("=== End HDR Startup Summary ===");
+}
+
+#[cfg(not(windows))]
+fn log_hdr_startup_summary(_hdr_controller: &HdrController) {
+    // No-op on non-Windows platforms
+}
+
 /// Initialize all core components
 ///
 /// # Requirements
@@ -298,6 +366,9 @@ fn initialize_components(
     info!("Checking for HDR-capable displays");
     let temp_hdr_controller = HdrController::new()?;
     profiler.record_phase(StartupPhase::HdrControllerInit);
+
+    // Log comprehensive startup summary for diagnostics
+    log_hdr_startup_summary(&temp_hdr_controller);
 
     // Check if any displays support HDR and warn if none found
     // Requirement 10.9: Show clear messaging about hardware compatibility

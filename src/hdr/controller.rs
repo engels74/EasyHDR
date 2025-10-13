@@ -65,6 +65,13 @@ impl HdrController {
         &self.display_cache
     }
 
+    /// Get the detected Windows version
+    ///
+    /// Returns the Windows version that was detected during controller initialization.
+    pub fn get_windows_version(&self) -> WindowsVersion {
+        self.windows_version
+    }
+
     /// Enumerate displays
     ///
     /// Uses GetDisplayConfigBufferSizes and QueryDisplayConfig to retrieve
@@ -92,6 +99,10 @@ impl HdrController {
                     QDC_ONLY_ACTIVE_PATHS,
                     &mut path_count,
                     &mut mode_count,
+                );
+                debug!(
+                    "GetDisplayConfigBufferSizes returned: result={}, path_count={}, mode_count={}",
+                    result, path_count, mode_count
                 );
                 if result != 0 {
                     error!(
@@ -124,6 +135,10 @@ impl HdrController {
                     modes.as_mut_ptr(),
                     std::ptr::null_mut(),
                 );
+                debug!(
+                    "QueryDisplayConfig returned: result={}, final_path_count={}, final_mode_count={}",
+                    result, path_count, mode_count
+                );
                 if result != 0 {
                     error!(
                         "Windows API error - QueryDisplayConfig failed with code: {}",
@@ -145,6 +160,15 @@ impl HdrController {
             self.display_cache.clear();
 
             for (index, path) in paths.iter().enumerate() {
+                debug!(
+                    "Display path {}: adapter_id={{LowPart: {:#x}, HighPart: {:#x}}}, target_id={}, flags={:#x}",
+                    index,
+                    path.targetInfo.adapterId.LowPart,
+                    path.targetInfo.adapterId.HighPart,
+                    path.targetInfo.id,
+                    path.flags
+                );
+
                 let mut target = DisplayTarget {
                     adapter_id: path.targetInfo.adapterId,
                     target_id: path.targetInfo.id,
@@ -260,6 +284,13 @@ impl HdrController {
 
             match self.windows_version {
                 WindowsVersion::Windows11_24H2 => {
+                    debug!(
+                        "Using Windows 11 24H2+ API (DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2) for adapter={:#x}:{:#x}, target={}",
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id
+                    );
+
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -277,6 +308,10 @@ impl HdrController {
                     unsafe {
                         let result =
                             DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        debug!(
+                            "DisplayConfigGetDeviceInfo (GET_ADVANCED_COLOR_INFO_2) returned: result={}",
+                            result
+                        );
                         if result != 0 {
                             warn!(
                                 "Windows API - DisplayConfigGetDeviceInfo (advanced color info 2) failed for adapter {:?}, target {}: error code {}. Falling back to legacy API.",
@@ -289,20 +324,33 @@ impl HdrController {
                         }
                     }
 
-                    let supported = color_info.highDynamicRangeSupported();
+                    let hdr_supported = color_info.highDynamicRangeSupported();
+                    let wcg_supported = color_info.wideColorGamutSupported();
+
                     debug!(
-                        "Display (adapter={:#x}:{:#x}, target={}): HDR supported (24H2+ API) = {}, value={:#x}",
+                        "Display (adapter={:#x}:{:#x}, target={}) - Windows 11 24H2+ API results:",
                         target.adapter_id.LowPart,
                         target.adapter_id.HighPart,
-                        target.target_id,
-                        supported,
-                        color_info.value
+                        target.target_id
                     );
+                    debug!("  colorEncoding: {}", color_info.colorEncoding);
+                    debug!("  bitsPerColorChannel: {}", color_info.bitsPerColorChannel);
+                    debug!("  activeColorMode: {}", color_info.activeColorMode);
+                    debug!("  value (raw bitfield): {:#010x}", color_info.value);
+                    debug!("  highDynamicRangeSupported (bit 0): {}", hdr_supported);
+                    debug!("  wideColorGamutSupported (bit 1): {}", wcg_supported);
+                    debug!("  Final HDR supported: {}", hdr_supported);
 
-                    Ok(supported)
+                    Ok(hdr_supported)
                 }
                 WindowsVersion::Windows10 | WindowsVersion::Windows11 => {
                     // Windows 10/11 (before 24H2): Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
+                    debug!(
+                        "Using legacy API (DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO) for adapter={:#x}:{:#x}, target={}",
+                        target.adapter_id.LowPart,
+                        target.adapter_id.HighPart,
+                        target.target_id
+                    );
                     self.is_hdr_supported_legacy(target)
                 }
             }
@@ -346,6 +394,10 @@ impl HdrController {
 
         unsafe {
             let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+            debug!(
+                "DisplayConfigGetDeviceInfo (GET_ADVANCED_COLOR_INFO) returned: result={}",
+                result
+            );
             if result != 0 {
                 error!(
                     "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info) failed for adapter {:?}, target {}: error code {}",
@@ -358,18 +410,28 @@ impl HdrController {
             }
         }
 
+        let advanced_color_supported = color_info.advancedColorSupported();
+        let advanced_color_enabled = color_info.advancedColorEnabled();
+        let wide_color_enforced = color_info.wideColorEnforced();
+        let advanced_color_force_disabled = color_info.advancedColorForceDisabled();
+
         // HDR supported: advancedColorSupported == TRUE AND wideColorEnforced == FALSE
-        let supported = color_info.advancedColorSupported() && !color_info.wideColorEnforced();
+        let supported = advanced_color_supported && !wide_color_enforced;
+
         debug!(
-            "Display (adapter={:#x}:{:#x}, target={}): advancedColorSupported={}, wideColorEnforced={}, HDR supported (legacy API) = {}, value={:#x}",
+            "Display (adapter={:#x}:{:#x}, target={}) - Legacy API results:",
             target.adapter_id.LowPart,
             target.adapter_id.HighPart,
-            target.target_id,
-            color_info.advancedColorSupported(),
-            color_info.wideColorEnforced(),
-            supported,
-            color_info.value
+            target.target_id
         );
+        debug!("  value (raw bitfield): {:#010x}", color_info.value);
+        debug!("  colorEncoding: {}", color_info.colorEncoding);
+        debug!("  bitsPerColorChannel: {}", color_info.bitsPerColorChannel);
+        debug!("  advancedColorSupported (bit 0): {}", advanced_color_supported);
+        debug!("  advancedColorEnabled (bit 1): {}", advanced_color_enabled);
+        debug!("  wideColorEnforced (bit 2): {}", wide_color_enforced);
+        debug!("  advancedColorForceDisabled (bit 3): {}", advanced_color_force_disabled);
+        debug!("  Final HDR supported (advancedColorSupported && !wideColorEnforced): {}", supported);
 
         Ok(supported)
     }
