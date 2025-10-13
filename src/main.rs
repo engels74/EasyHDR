@@ -90,6 +90,14 @@ fn main() -> Result<()> {
 
     info!("Core components initialized successfully");
 
+    // Task 16.1: Log initial memory usage
+    #[cfg(windows)]
+    {
+        use easyhdr::utils::memory_profiler;
+        info!("Logging initial memory usage");
+        memory_profiler::get_profiler().log_stats();
+    }
+
     // Start background threads
     info!("Starting process monitor thread");
     let _monitor_handle = process_monitor.start();
@@ -100,6 +108,14 @@ fn main() -> Result<()> {
     // Run GUI event loop (blocks until application exits)
     info!("Starting GUI event loop");
     gui_controller.run()?;
+
+    // Task 16.1: Log final memory usage before shutdown
+    #[cfg(windows)]
+    {
+        use easyhdr::utils::memory_profiler;
+        info!("Logging final memory usage before shutdown");
+        memory_profiler::get_profiler().log_stats();
+    }
 
     info!("EasyHDR shutting down");
 
