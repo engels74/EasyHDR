@@ -50,11 +50,18 @@ impl HdrController {
             windows_version,
             display_cache: Vec::new(),
         };
-        
+
         // Enumerate displays on creation
         controller.enumerate_displays()?;
-        
+
         Ok(controller)
+    }
+
+    /// Get a reference to the display cache
+    ///
+    /// Returns a slice of all enumerated display targets.
+    pub fn get_display_cache(&self) -> &[DisplayTarget] {
+        &self.display_cache
     }
 
     /// Enumerate displays
