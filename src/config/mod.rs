@@ -81,4 +81,3 @@ pub mod models;
 
 pub use manager::ConfigManager;
 pub use models::{AppConfig, MonitoredApp, UserPreferences, WindowState};
-

@@ -4,14 +4,14 @@
 //! for Windows displays.
 
 use crate::error::Result;
-use crate::hdr::WindowsVersion;
 use crate::hdr::windows_api::LUID;
+use crate::hdr::WindowsVersion;
 
 #[cfg(windows)]
 use crate::hdr::windows_api::{
-    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2,
     DISPLAYCONFIG_ADVANCED_COLOR_MODE, DISPLAYCONFIG_DEVICE_INFO_HEADER,
-    DISPLAYCONFIG_DEVICE_INFO_TYPE,
+    DISPLAYCONFIG_DEVICE_INFO_TYPE, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO,
+    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2,
 };
 
 #[cfg(windows)]
@@ -19,8 +19,8 @@ use crate::error::EasyHdrError;
 
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    GetDisplayConfigBufferSizes, QueryDisplayConfig, QDC_ONLY_ACTIVE_PATHS,
-    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, DisplayConfigGetDeviceInfo,
+    DisplayConfigGetDeviceInfo, GetDisplayConfigBufferSizes, QueryDisplayConfig,
+    DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO, QDC_ONLY_ACTIVE_PATHS,
 };
 
 /// Represents a display target
@@ -93,7 +93,10 @@ impl HdrController {
                     &mut mode_count,
                 )
                 .map_err(|e| {
-                    error!("Windows API error - GetDisplayConfigBufferSizes failed: {}", e);
+                    error!(
+                        "Windows API error - GetDisplayConfigBufferSizes failed: {}",
+                        e
+                    );
                     EasyHdrError::HdrControlFailed(format!(
                         "Failed to get display config buffer sizes: {}",
                         e
@@ -120,10 +123,7 @@ impl HdrController {
                 )
                 .map_err(|e| {
                     error!("Windows API error - QueryDisplayConfig failed: {}", e);
-                    EasyHdrError::HdrControlFailed(format!(
-                        "Failed to query display config: {}",
-                        e
-                    ))
+                    EasyHdrError::HdrControlFailed(format!("Failed to query display config: {}", e))
                 })?;
             }
 
@@ -317,7 +317,8 @@ impl HdrController {
                     }
 
                     // HDR supported: advancedColorSupported == TRUE AND wideColorEnforced == FALSE
-                    let supported = color_info.advancedColorSupported() && !color_info.wideColorEnforced();
+                    let supported =
+                        color_info.advancedColorSupported() && !color_info.wideColorEnforced();
                     debug!(
                         "Display (adapter={:#x}:{:#x}, target={}): advancedColorSupported={}, wideColorEnforced={}, HDR supported={}",
                         target.adapter_id.LowPart,
@@ -394,7 +395,9 @@ impl HdrController {
                     }
 
                     // HDR enabled: activeColorMode == HDR
-                    let enabled = color_info.activeColorMode == DISPLAYCONFIG_ADVANCED_COLOR_MODE::DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR as u32;
+                    let enabled = color_info.activeColorMode
+                        == DISPLAYCONFIG_ADVANCED_COLOR_MODE::DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR
+                            as u32;
                     debug!(
                         "Display (adapter={:#x}:{:#x}, target={}): activeColorMode={}, HDR enabled (24H2+) = {}",
                         target.adapter_id.LowPart,
@@ -653,9 +656,7 @@ impl HdrController {
             if !target.supports_hdr {
                 debug!(
                     "Skipping display (adapter={:#x}:{:#x}, target={}) - HDR not supported",
-                    target.adapter_id.LowPart,
-                    target.adapter_id.HighPart,
-                    target.target_id
+                    target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id
                 );
                 continue;
             }
@@ -789,7 +790,10 @@ mod tests {
 
             // If HDR is enabled, the display must support HDR
             if result.unwrap() {
-                assert!(display.supports_hdr, "HDR cannot be enabled on a display that doesn't support it");
+                assert!(
+                    display.supports_hdr,
+                    "HDR cannot be enabled on a display that doesn't support it"
+                );
             }
         }
     }
@@ -870,10 +874,7 @@ mod tests {
         let controller = HdrController::new().expect("Failed to create controller");
 
         // Find an HDR-capable display
-        let hdr_display = controller
-            .display_cache
-            .iter()
-            .find(|d| d.supports_hdr);
+        let hdr_display = controller.display_cache.iter().find(|d| d.supports_hdr);
 
         if let Some(display) = hdr_display {
             // Get current HDR state
@@ -1057,7 +1058,10 @@ mod tests {
             match result {
                 Ok(()) => {
                     // Success case
-                    assert!(target.supports_hdr, "Only HDR-capable displays should succeed");
+                    assert!(
+                        target.supports_hdr,
+                        "Only HDR-capable displays should succeed"
+                    );
                 }
                 Err(_) => {
                     // Failure case - this is acceptable for partial success
@@ -1192,10 +1196,7 @@ mod tests {
         match result {
             Ok(supported) => {
                 // If it succeeds, it should return false for invalid display
-                assert_eq!(
-                    supported, false,
-                    "Invalid display should not support HDR"
-                );
+                assert_eq!(supported, false, "Invalid display should not support HDR");
             }
             Err(_) => {
                 // If it fails, that's also acceptable for invalid display
@@ -1208,7 +1209,10 @@ mod tests {
         match result {
             Ok(enabled) => {
                 // If it succeeds, it should return false for invalid display
-                assert_eq!(enabled, false, "Invalid display should not have HDR enabled");
+                assert_eq!(
+                    enabled, false,
+                    "Invalid display should not have HDR enabled"
+                );
             }
             Err(_) => {
                 // If it fails, that's also acceptable for invalid display
@@ -1243,11 +1247,7 @@ mod tests {
             }
             Err(e) => {
                 // Expected: operation fails but doesn't panic
-                assert!(
-                    true,
-                    "Operation failed gracefully with error: {}",
-                    e
-                );
+                assert!(true, "Operation failed gracefully with error: {}", e);
             }
         }
 
@@ -1281,10 +1281,7 @@ mod tests {
             let _ = display.supports_hdr;
 
             // Just verify we can access the display
-            assert!(
-                index < displays.len(),
-                "Display index should be valid"
-            );
+            assert!(index < displays.len(), "Display index should be valid");
         }
 
         // Verify the display cache matches the returned displays
@@ -1355,10 +1352,7 @@ mod tests {
         let controller = HdrController::new().expect("Failed to create controller");
 
         // Find an HDR-capable display
-        let hdr_display = controller
-            .display_cache
-            .iter()
-            .find(|d| d.supports_hdr);
+        let hdr_display = controller.display_cache.iter().find(|d| d.supports_hdr);
 
         if let Some(display) = hdr_display {
             // Get current state
@@ -1423,26 +1417,21 @@ mod tests {
         // Verify each display has consistent properties
         for i in 0..displays1.len() {
             assert_eq!(
-                displays1[i].adapter_id.LowPart,
-                displays2[i].adapter_id.LowPart,
+                displays1[i].adapter_id.LowPart, displays2[i].adapter_id.LowPart,
                 "Adapter ID LowPart should be consistent"
             );
             assert_eq!(
-                displays1[i].adapter_id.HighPart,
-                displays2[i].adapter_id.HighPart,
+                displays1[i].adapter_id.HighPart, displays2[i].adapter_id.HighPart,
                 "Adapter ID HighPart should be consistent"
             );
             assert_eq!(
-                displays1[i].target_id,
-                displays2[i].target_id,
+                displays1[i].target_id, displays2[i].target_id,
                 "Target ID should be consistent"
             );
             assert_eq!(
-                displays1[i].supports_hdr,
-                displays2[i].supports_hdr,
+                displays1[i].supports_hdr, displays2[i].supports_hdr,
                 "HDR support should be consistent"
             );
         }
     }
 }
-

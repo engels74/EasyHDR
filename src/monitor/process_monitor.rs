@@ -23,16 +23,15 @@
 //!
 //! **Requirement 2.7:** Document process name collisions as a known limitation
 
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use parking_lot::Mutex;
 
 #[cfg(windows)]
 use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW,
-    PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 
 #[cfg(windows)]
@@ -117,13 +116,11 @@ impl ProcessMonitor {
 
     /// Start the monitoring thread
     pub fn start(mut self) -> JoinHandle<()> {
-        thread::spawn(move || {
-            loop {
-                if let Err(e) = self.poll_processes() {
-                    tracing::error!("Error polling processes: {}", e);
-                }
-                thread::sleep(self.interval);
+        thread::spawn(move || loop {
+            if let Err(e) = self.poll_processes() {
+                tracing::error!("Error polling processes: {}", e);
             }
+            thread::sleep(self.interval);
         })
     }
 
@@ -151,15 +148,14 @@ impl ProcessMonitor {
 
             // Take a snapshot of all running processes
             let snapshot = unsafe {
-                CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-                    .map_err(|e| {
-                        use tracing::error;
-                        error!("Windows API error - CreateToolhelp32Snapshot failed: {}", e);
-                        EasyHdrError::ProcessMonitorError(format!(
-                            "Failed to create process snapshot: {}",
-                            e
-                        ))
-                    })?
+                CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).map_err(|e| {
+                    use tracing::error;
+                    error!("Windows API error - CreateToolhelp32Snapshot failed: {}", e);
+                    EasyHdrError::ProcessMonitorError(format!(
+                        "Failed to create process snapshot: {}",
+                        e
+                    ))
+                })?
             };
 
             // Ensure snapshot handle is closed when we're done
@@ -168,7 +164,10 @@ impl ProcessMonitor {
             // Build a set of currently running process names
             // Pre-allocate capacity based on previous snapshot size to avoid rehashing
             // This is a key CPU optimization (Requirement 9.2)
-            let capacity = self.running_processes.len().max(self.estimated_process_count);
+            let capacity = self
+                .running_processes
+                .len()
+                .max(self.estimated_process_count);
             let mut current_processes = HashSet::with_capacity(capacity);
 
             // Initialize PROCESSENTRY32W structure
@@ -178,10 +177,7 @@ impl ProcessMonitor {
             };
 
             // Get the first process
-            let mut has_process = unsafe {
-                Process32FirstW(snapshot, &mut entry)
-                    .is_ok()
-            };
+            let mut has_process = unsafe { Process32FirstW(snapshot, &mut entry).is_ok() };
 
             // Iterate through all processes
             while has_process {
@@ -226,7 +222,7 @@ impl ProcessMonitor {
         {
             // Non-Windows platforms not supported
             Err(EasyHdrError::ProcessMonitorError(
-                "Process monitoring is only supported on Windows".to_string()
+                "Process monitoring is only supported on Windows".to_string(),
             ))
         }
     }
@@ -295,9 +291,15 @@ impl ProcessMonitor {
         for process in current.difference(&self.running_processes) {
             if watch_list.contains(process) {
                 info!("Detected process started: {}", process);
-                if let Err(e) = self.event_sender.send(ProcessEvent::Started(process.clone())) {
+                if let Err(e) = self
+                    .event_sender
+                    .send(ProcessEvent::Started(process.clone()))
+                {
                     use tracing::error;
-                    error!("Failed to send ProcessEvent::Started for '{}': {}", process, e);
+                    error!(
+                        "Failed to send ProcessEvent::Started for '{}': {}",
+                        process, e
+                    );
                 }
             }
         }
@@ -306,9 +308,15 @@ impl ProcessMonitor {
         for process in self.running_processes.difference(&current) {
             if watch_list.contains(process) {
                 info!("Detected process stopped: {}", process);
-                if let Err(e) = self.event_sender.send(ProcessEvent::Stopped(process.clone())) {
+                if let Err(e) = self
+                    .event_sender
+                    .send(ProcessEvent::Stopped(process.clone()))
+                {
                     use tracing::error;
-                    error!("Failed to send ProcessEvent::Stopped for '{}': {}", process, e);
+                    error!(
+                        "Failed to send ProcessEvent::Stopped for '{}': {}",
+                        process, e
+                    );
                 }
             }
         }
@@ -340,7 +348,8 @@ impl Drop for SnapshotGuard {
 #[cfg(windows)]
 fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
     // Find the null terminator
-    let len = sz_exe_file.iter()
+    let len = sz_exe_file
+        .iter()
         .position(|&c| c == 0)
         .unwrap_or(sz_exe_file.len());
 
@@ -411,16 +420,10 @@ mod tests {
         );
 
         // Test simple filename
-        assert_eq!(
-            extract_filename_without_extension("game.exe"),
-            "game"
-        );
+        assert_eq!(extract_filename_without_extension("game.exe"), "game");
 
         // Test uppercase extension (should be lowercase)
-        assert_eq!(
-            extract_filename_without_extension("MyApp.EXE"),
-            "myapp"
-        );
+        assert_eq!(extract_filename_without_extension("MyApp.EXE"), "myapp");
 
         // Test mixed case
         assert_eq!(
@@ -429,10 +432,7 @@ mod tests {
         );
 
         // Test no extension
-        assert_eq!(
-            extract_filename_without_extension("process"),
-            "process"
-        );
+        assert_eq!(extract_filename_without_extension("process"), "process");
 
         // Test Unix-style path (edge case)
         assert_eq!(
@@ -441,10 +441,7 @@ mod tests {
         );
 
         // Test multiple dots
-        assert_eq!(
-            extract_filename_without_extension("my.app.exe"),
-            "my.app"
-        );
+        assert_eq!(extract_filename_without_extension("my.app.exe"), "my.app");
     }
 
     #[test]
@@ -616,20 +613,11 @@ mod tests {
     #[test]
     fn test_case_insensitive_matching_comprehensive() {
         // Test that extraction always produces lowercase
-        assert_eq!(
-            extract_filename_without_extension("Game.exe"),
-            "game"
-        );
+        assert_eq!(extract_filename_without_extension("Game.exe"), "game");
 
-        assert_eq!(
-            extract_filename_without_extension("GAME.EXE"),
-            "game"
-        );
+        assert_eq!(extract_filename_without_extension("GAME.EXE"), "game");
 
-        assert_eq!(
-            extract_filename_without_extension("GaMe.ExE"),
-            "game"
-        );
+        assert_eq!(extract_filename_without_extension("GaMe.ExE"), "game");
 
         assert_eq!(
             extract_filename_without_extension("C:\\Games\\MyGame.EXE"),
@@ -797,10 +785,10 @@ mod tests {
 
         // Start multiple processes, only one monitored
         let mut current = HashSet::new();
-        current.insert("game".to_string());      // Monitored
-        current.insert("notepad".to_string());   // Not monitored
-        current.insert("explorer".to_string());  // Not monitored
-        current.insert("chrome".to_string());    // Not monitored
+        current.insert("game".to_string()); // Monitored
+        current.insert("notepad".to_string()); // Not monitored
+        current.insert("explorer".to_string()); // Not monitored
+        current.insert("chrome".to_string()); // Not monitored
 
         monitor.detect_changes(current);
 
@@ -840,20 +828,11 @@ mod tests {
     /// Test edge case: process name with special characters
     #[test]
     fn test_process_name_with_special_characters() {
-        assert_eq!(
-            extract_filename_without_extension("my-app.exe"),
-            "my-app"
-        );
+        assert_eq!(extract_filename_without_extension("my-app.exe"), "my-app");
 
-        assert_eq!(
-            extract_filename_without_extension("app_v2.exe"),
-            "app_v2"
-        );
+        assert_eq!(extract_filename_without_extension("app_v2.exe"), "app_v2");
 
-        assert_eq!(
-            extract_filename_without_extension("app (1).exe"),
-            "app (1)"
-        );
+        assert_eq!(extract_filename_without_extension("app (1).exe"), "app (1)");
 
         assert_eq!(
             extract_filename_without_extension("app[test].exe"),
@@ -865,10 +844,7 @@ mod tests {
     #[test]
     fn test_very_long_path() {
         let long_path = "C:\\Very\\Long\\Path\\With\\Many\\Directories\\And\\Subdirectories\\That\\Goes\\On\\And\\On\\application.exe";
-        assert_eq!(
-            extract_filename_without_extension(long_path),
-            "application"
-        );
+        assert_eq!(extract_filename_without_extension(long_path), "application");
     }
 
     /// Test that process names are correctly normalized
@@ -894,4 +870,3 @@ mod tests {
         assert_eq!(watch_list.len(), 3);
     }
 }
-

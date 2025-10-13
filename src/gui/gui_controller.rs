@@ -108,12 +108,11 @@ impl GuiController {
         info!("Creating GUI controller");
 
         // Create the main window
-        let main_window = MainWindow::new()
-            .map_err(|e| {
-                use tracing::error;
-                error!("Failed to create main window: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to create main window: {}", e))
-            })?;
+        let main_window = MainWindow::new().map_err(|e| {
+            use tracing::error;
+            error!("Failed to create main window: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to create main window: {}", e))
+        })?;
 
         info!("Main window created successfully");
 
@@ -127,9 +126,12 @@ impl GuiController {
             let config = controller_guard.config.lock();
 
             main_window.set_settings_auto_start(config.preferences.auto_start);
-            main_window.set_settings_monitoring_interval_ms(config.preferences.monitoring_interval_ms as i32);
+            main_window.set_settings_monitoring_interval_ms(
+                config.preferences.monitoring_interval_ms as i32,
+            );
             main_window.set_settings_startup_delay_ms(config.preferences.startup_delay_ms as i32);
-            main_window.set_settings_show_tray_notifications(config.preferences.show_tray_notifications);
+            main_window
+                .set_settings_show_tray_notifications(config.preferences.show_tray_notifications);
 
             info!("Settings properties initialized from config");
         }
@@ -158,9 +160,17 @@ impl GuiController {
         // Requirement 6.7: Remove registry entry when auto-start disabled
         // Requirement 6.8: Handle registry write failures gracefully
         let controller_clone = controller.clone();
-        main_window.on_save_settings(move |auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications| {
-            Self::save_settings(&controller_clone, auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications);
-        });
+        main_window.on_save_settings(
+            move |auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications| {
+                Self::save_settings(
+                    &controller_clone,
+                    auto_start,
+                    monitoring_interval_ms,
+                    startup_delay_ms,
+                    show_tray_notifications,
+                );
+            },
+        );
 
         info!("GUI callbacks connected");
 
@@ -276,18 +286,22 @@ impl GuiController {
                             Err(e) => {
                                 warn!("Failed to add application: {}", e);
                                 error_count += 1;
-                                error_messages.push(format!("{}: {}",
+                                error_messages.push(format!(
+                                    "{}: {}",
                                     path.file_name().unwrap_or_default().to_string_lossy(),
-                                    e));
+                                    e
+                                ));
                             }
                         }
                     }
                     Err(e) => {
                         warn!("Failed to extract metadata from {:?}: {}", path, e);
                         error_count += 1;
-                        error_messages.push(format!("{}: {}",
+                        error_messages.push(format!(
+                            "{}: {}",
                             path.file_name().unwrap_or_default().to_string_lossy(),
-                            e));
+                            e
+                        ));
                     }
                 }
             }
@@ -436,7 +450,10 @@ impl GuiController {
     fn toggle_app_enabled(controller: &Arc<Mutex<AppController>>, index: i32, enabled: bool) {
         use tracing::{info, warn};
 
-        info!("Toggling application at index {} to enabled={}", index, enabled);
+        info!(
+            "Toggling application at index {} to enabled={}",
+            index, enabled
+        );
 
         // Get the app UUID at the specified index
         let mut controller_guard = controller.lock();
@@ -684,7 +701,7 @@ impl GuiController {
     #[cfg(windows)]
     fn show_error_dialog_from_error(error: &easyhdr::error::EasyHdrError) {
         use easyhdr::error::get_user_friendly_error;
-        use tracing::{info, error as log_error};
+        use tracing::{error as log_error, info};
 
         // Log the technical error details
         log_error!("Error occurred: {}", error);
@@ -692,7 +709,10 @@ impl GuiController {
         // Get user-friendly message
         let message = get_user_friendly_error(error);
 
-        info!("Showing error dialog with user-friendly message: {}", message);
+        info!(
+            "Showing error dialog with user-friendly message: {}",
+            message
+        );
 
         // Show the dialog with the user-friendly message
         rfd::MessageDialog::new()
@@ -745,8 +765,8 @@ impl GuiController {
     /// GuiController::restore_window_state(&window, &controller);
     /// ```
     fn restore_window_state(window: &MainWindow, controller: &Arc<Mutex<AppController>>) {
-        use tracing::{info, warn};
         use slint::{PhysicalPosition, PhysicalSize};
+        use tracing::{info, warn};
 
         info!("Restoring window state from config");
 
@@ -754,8 +774,10 @@ impl GuiController {
         let config = controller_guard.config.lock();
         let window_state = &config.window_state;
 
-        info!("Saved window state: x={}, y={}, width={}, height={}",
-            window_state.x, window_state.y, window_state.width, window_state.height);
+        info!(
+            "Saved window state: x={}, y={}, width={}, height={}",
+            window_state.x, window_state.y, window_state.width, window_state.height
+        );
 
         // Validate and apply window size
         // Ensure size is reasonable (at least 200x150, at most 4096x2160)
@@ -763,8 +785,10 @@ impl GuiController {
         let height = window_state.height.clamp(150, 2160);
 
         if width != window_state.width || height != window_state.height {
-            warn!("Window size adjusted from {}x{} to {}x{} (clamped to reasonable bounds)",
-                window_state.width, window_state.height, width, height);
+            warn!(
+                "Window size adjusted from {}x{} to {}x{} (clamped to reasonable bounds)",
+                window_state.width, window_state.height, width, height
+            );
         }
 
         window.window().set_size(PhysicalSize::new(width, height));
@@ -777,8 +801,10 @@ impl GuiController {
         let y = window_state.y.clamp(-1000, 10000);
 
         if x != window_state.x || y != window_state.y {
-            warn!("Window position adjusted from ({}, {}) to ({}, {}) (clamped to reasonable bounds)",
-                window_state.x, window_state.y, x, y);
+            warn!(
+                "Window position adjusted from ({}, {}) to ({}, {}) (clamped to reasonable bounds)",
+                window_state.x, window_state.y, x, y
+            );
         }
 
         window.window().set_position(PhysicalPosition::new(x, y));
@@ -829,9 +855,12 @@ impl GuiController {
     /// GuiController::save_window_state(&window, &controller)?;
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
-    fn save_window_state(window: &MainWindow, controller: &Arc<Mutex<AppController>>) -> Result<()> {
-        use tracing::{info, error as log_error};
+    fn save_window_state(
+        window: &MainWindow,
+        controller: &Arc<Mutex<AppController>>,
+    ) -> Result<()> {
         use easyhdr::config::ConfigManager;
+        use tracing::{error as log_error, info};
 
         info!("Saving window state to config");
 
@@ -839,8 +868,10 @@ impl GuiController {
         let position = window.window().position();
         let size = window.window().size();
 
-        info!("Current window state: x={}, y={}, width={}, height={}",
-            position.x, position.y, size.width, size.height);
+        info!(
+            "Current window state: x={}, y={}, width={}, height={}",
+            position.x, position.y, size.width, size.height
+        );
 
         // Update config with current window state
         let controller_guard = controller.lock();
@@ -1007,7 +1038,7 @@ impl GuiController {
     /// ```
     pub fn run(self) -> Result<()> {
         use easyhdr::error::EasyHdrError;
-        use tracing::{info, warn, debug};
+        use tracing::{debug, info, warn};
 
         info!("Starting GUI event loop with state synchronization");
 
@@ -1028,8 +1059,10 @@ impl GuiController {
             let mut window_was_visible = true;
 
             while let Ok(state) = self.state_receiver.recv() {
-                debug!("Received state update: HDR enabled = {}, active apps = {:?}",
-                    state.hdr_enabled, state.active_apps);
+                debug!(
+                    "Received state update: HDR enabled = {}, active apps = {:?}",
+                    state.hdr_enabled, state.active_apps
+                );
 
                 // Upgrade weak reference to strong reference
                 let window = match window_weak.upgrade() {
@@ -1095,24 +1128,28 @@ impl GuiController {
                     let controller = controller_handle.lock();
                     let config = controller.config.lock();
 
-                    let items: Vec<_> = config.monitored_apps.iter().map(|app| {
-                        // Convert icon_data to Slint image
-                        let icon = if let Some(ref _icon_data) = app.icon_data {
-                            // Convert RGBA bytes to Slint image
-                            // For now, use empty image - icon conversion will be implemented later
-                            slint::Image::default()
-                        } else {
-                            slint::Image::default()
-                        };
+                    let items: Vec<_> = config
+                        .monitored_apps
+                        .iter()
+                        .map(|app| {
+                            // Convert icon_data to Slint image
+                            let icon = if let Some(ref _icon_data) = app.icon_data {
+                                // Convert RGBA bytes to Slint image
+                                // For now, use empty image - icon conversion will be implemented later
+                                slint::Image::default()
+                            } else {
+                                slint::Image::default()
+                            };
 
-                        crate::AppListItem {
-                            id: app.id.to_string().into(),
-                            display_name: app.display_name.clone().into(),
-                            exe_path: app.exe_path.to_string_lossy().to_string().into(),
-                            enabled: app.enabled,
-                            icon,
-                        }
-                    }).collect();
+                            crate::AppListItem {
+                                id: app.id.to_string().into(),
+                                display_name: app.display_name.clone().into(),
+                                exe_path: app.exe_path.to_string_lossy().to_string().into(),
+                                enabled: app.enabled,
+                                icon,
+                            }
+                        })
+                        .collect();
 
                     drop(config);
                     drop(controller);
@@ -1130,12 +1167,11 @@ impl GuiController {
 
         // Run the Slint event loop on the main thread
         info!("Running Slint event loop");
-        self.main_window.run()
-            .map_err(|e| {
-                use tracing::error;
-                error!("Failed to run GUI event loop: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {}", e))
-            })?;
+        self.main_window.run().map_err(|e| {
+            use tracing::error;
+            error!("Failed to run GUI event loop: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {}", e))
+        })?;
 
         info!("GUI event loop stopped");
 
@@ -1170,42 +1206,72 @@ mod tests {
         // Test HDR not supported error
         let error = EasyHdrError::HdrNotSupported;
         let message = get_user_friendly_error(&error);
-        assert!(message.contains("display doesn't support HDR"),
-            "Expected HDR not supported message, got: {}", message);
-        assert!(message.contains("hardware specifications"),
-            "Expected troubleshooting hint about hardware, got: {}", message);
+        assert!(
+            message.contains("display doesn't support HDR"),
+            "Expected HDR not supported message, got: {}",
+            message
+        );
+        assert!(
+            message.contains("hardware specifications"),
+            "Expected troubleshooting hint about hardware, got: {}",
+            message
+        );
 
         // Test HDR control failed error
         let error = EasyHdrError::HdrControlFailed("test error".to_string());
         let message = get_user_friendly_error(&error);
-        assert!(message.contains("Unable to control HDR"),
-            "Expected HDR control error message, got: {}", message);
-        assert!(message.contains("display drivers"),
-            "Expected troubleshooting hint about drivers, got: {}", message);
+        assert!(
+            message.contains("Unable to control HDR"),
+            "Expected HDR control error message, got: {}",
+            message
+        );
+        assert!(
+            message.contains("display drivers"),
+            "Expected troubleshooting hint about drivers, got: {}",
+            message
+        );
 
         // Test driver error
         let error = EasyHdrError::DriverError("test driver error".to_string());
         let message = get_user_friendly_error(&error);
-        assert!(message.contains("Unable to control HDR"),
-            "Expected driver error message, got: {}", message);
-        assert!(message.contains("display drivers"),
-            "Expected troubleshooting hint about drivers, got: {}", message);
+        assert!(
+            message.contains("Unable to control HDR"),
+            "Expected driver error message, got: {}",
+            message
+        );
+        assert!(
+            message.contains("display drivers"),
+            "Expected troubleshooting hint about drivers, got: {}",
+            message
+        );
 
         // Test configuration error
         let error = EasyHdrError::ConfigError("test config error".to_string());
         let message = get_user_friendly_error(&error);
-        assert!(message.contains("configuration"),
-            "Expected configuration error message, got: {}", message);
-        assert!(message.contains("settings may not persist"),
-            "Expected troubleshooting hint about persistence, got: {}", message);
+        assert!(
+            message.contains("configuration"),
+            "Expected configuration error message, got: {}",
+            message
+        );
+        assert!(
+            message.contains("settings may not persist"),
+            "Expected troubleshooting hint about persistence, got: {}",
+            message
+        );
 
         // Test process monitor error
         let error = EasyHdrError::ProcessMonitorError("test monitor error".to_string());
         let message = get_user_friendly_error(&error);
-        assert!(message.contains("monitor processes"),
-            "Expected process monitor error message, got: {}", message);
-        assert!(message.contains("may not function correctly"),
-            "Expected troubleshooting hint about functionality, got: {}", message);
+        assert!(
+            message.contains("monitor processes"),
+            "Expected process monitor error message, got: {}",
+            message
+        );
+        assert!(
+            message.contains("may not function correctly"),
+            "Expected troubleshooting hint about functionality, got: {}",
+            message
+        );
     }
 
     /// Test that error messages contain appropriate troubleshooting hints
@@ -1223,22 +1289,31 @@ mod tests {
         // HDR not supported should mention hardware
         let error = EasyHdrError::HdrNotSupported;
         let message = get_user_friendly_error(&error);
-        assert!(message.to_lowercase().contains("hardware") ||
-                message.to_lowercase().contains("specifications"),
-            "Expected hardware troubleshooting hint, got: {}", message);
+        assert!(
+            message.to_lowercase().contains("hardware")
+                || message.to_lowercase().contains("specifications"),
+            "Expected hardware troubleshooting hint, got: {}",
+            message
+        );
 
         // Driver errors should mention updating drivers
         let error = EasyHdrError::DriverError("test".to_string());
         let message = get_user_friendly_error(&error);
-        assert!(message.to_lowercase().contains("driver"),
-            "Expected driver troubleshooting hint, got: {}", message);
+        assert!(
+            message.to_lowercase().contains("driver"),
+            "Expected driver troubleshooting hint, got: {}",
+            message
+        );
 
         // Config errors should mention settings persistence
         let error = EasyHdrError::ConfigError("test".to_string());
         let message = get_user_friendly_error(&error);
-        assert!(message.to_lowercase().contains("settings") ||
-                message.to_lowercase().contains("persist"),
-            "Expected settings troubleshooting hint, got: {}", message);
+        assert!(
+            message.to_lowercase().contains("settings")
+                || message.to_lowercase().contains("persist"),
+            "Expected settings troubleshooting hint, got: {}",
+            message
+        );
     }
 
     /// Test that error messages are user-friendly and not overly technical
@@ -1268,14 +1343,16 @@ mod tests {
             assert!(!message.is_empty(), "Error message should not be empty");
 
             // Message should be reasonably long (at least 20 characters)
-            assert!(message.len() >= 20,
-                "Error message too short: {}", message);
+            assert!(message.len() >= 20, "Error message too short: {}", message);
 
             // Message should not contain raw error details (like "Error: ")
             // unless it's a fallback message
             if !message.starts_with("An unexpected error occurred") {
-                assert!(!message.contains("Error: "),
-                    "User-friendly message should not contain 'Error: ' prefix: {}", message);
+                assert!(
+                    !message.contains("Error: "),
+                    "User-friendly message should not contain 'Error: ' prefix: {}",
+                    message
+                );
             }
         }
     }
@@ -1339,17 +1416,25 @@ mod tests {
         // Requirement 7.2: HDR not supported message
         let error = EasyHdrError::HdrNotSupported;
         let message = get_user_friendly_error(&error);
-        assert!(message.contains("display doesn't support HDR") ||
-                message.contains("display does not support HDR"),
-            "Expected 'display doesn't support HDR' message, got: {}", message);
+        assert!(
+            message.contains("display doesn't support HDR")
+                || message.contains("display does not support HDR"),
+            "Expected 'display doesn't support HDR' message, got: {}",
+            message
+        );
 
         // Requirement 7.3: Driver error message
         let error = EasyHdrError::DriverError("test".to_string());
         let message = get_user_friendly_error(&error);
-        assert!(message.contains("Unable to control HDR"),
-            "Expected 'Unable to control HDR' message, got: {}", message);
-        assert!(message.to_lowercase().contains("driver"),
-            "Expected message to mention drivers, got: {}", message);
+        assert!(
+            message.contains("Unable to control HDR"),
+            "Expected 'Unable to control HDR' message, got: {}",
+            message
+        );
+        assert!(
+            message.to_lowercase().contains("driver"),
+            "Expected message to mention drivers, got: {}",
+            message
+        );
     }
 }
-

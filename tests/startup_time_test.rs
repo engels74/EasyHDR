@@ -25,29 +25,29 @@ fn test_startup_profiler_creation() {
 #[test]
 fn test_record_startup_phases() {
     let profiler = startup_profiler::StartupProfiler::new();
-    
+
     // Simulate startup phases
     std::thread::sleep(Duration::from_millis(5));
     profiler.record_phase(StartupPhase::AppStart);
-    
+
     std::thread::sleep(Duration::from_millis(5));
     profiler.record_phase(StartupPhase::LoggingInit);
-    
+
     std::thread::sleep(Duration::from_millis(5));
     profiler.record_phase(StartupPhase::ConfigLoad);
-    
+
     std::thread::sleep(Duration::from_millis(5));
     profiler.record_phase(StartupPhase::GuiDisplay);
-    
+
     let timings = profiler.get_timings();
     assert_eq!(timings.len(), 4);
-    
+
     // Verify phases are recorded in order
     assert_eq!(timings[0].phase, StartupPhase::AppStart);
     assert_eq!(timings[1].phase, StartupPhase::LoggingInit);
     assert_eq!(timings[2].phase, StartupPhase::ConfigLoad);
     assert_eq!(timings[3].phase, StartupPhase::GuiDisplay);
-    
+
     // Each phase should have taken at least 5ms
     for timing in &timings {
         assert!(timing.duration.as_millis() >= 5);
@@ -57,13 +57,13 @@ fn test_record_startup_phases() {
 #[test]
 fn test_total_startup_time() {
     let profiler = startup_profiler::StartupProfiler::new();
-    
+
     // Simulate some startup time
     std::thread::sleep(Duration::from_millis(50));
-    
+
     let total_ms = profiler.total_startup_ms();
     assert!(total_ms >= 50.0);
-    
+
     let total_duration = profiler.total_startup_time();
     assert!(total_duration.as_millis() >= 50);
 }
@@ -71,11 +71,11 @@ fn test_total_startup_time() {
 #[test]
 fn test_startup_within_limits() {
     let profiler = startup_profiler::StartupProfiler::new();
-    
+
     // Fast startup should be within limits
     std::thread::sleep(Duration::from_millis(50));
     assert!(profiler.is_within_limits());
-    
+
     // Slow startup should exceed limits
     std::thread::sleep(Duration::from_millis(200));
     assert!(!profiler.is_within_limits());
@@ -87,10 +87,22 @@ fn test_phase_names() {
     assert_eq!(StartupPhase::LoggingInit.name(), "Logging Initialization");
     assert_eq!(StartupPhase::VersionDetection.name(), "Version Detection");
     assert_eq!(StartupPhase::ConfigLoad.name(), "Configuration Load");
-    assert_eq!(StartupPhase::HdrControllerInit.name(), "HDR Controller Init");
-    assert_eq!(StartupPhase::ProcessMonitorInit.name(), "Process Monitor Init");
-    assert_eq!(StartupPhase::AppControllerInit.name(), "App Controller Init");
-    assert_eq!(StartupPhase::GuiControllerInit.name(), "GUI Controller Init");
+    assert_eq!(
+        StartupPhase::HdrControllerInit.name(),
+        "HDR Controller Init"
+    );
+    assert_eq!(
+        StartupPhase::ProcessMonitorInit.name(),
+        "Process Monitor Init"
+    );
+    assert_eq!(
+        StartupPhase::AppControllerInit.name(),
+        "App Controller Init"
+    );
+    assert_eq!(
+        StartupPhase::GuiControllerInit.name(),
+        "GUI Controller Init"
+    );
     assert_eq!(StartupPhase::GuiDisplay.name(), "GUI Display");
     assert_eq!(StartupPhase::AppReady.name(), "Application Ready");
 }
@@ -132,45 +144,45 @@ fn test_global_profiler_instance() {
 fn test_realistic_startup_scenario() {
     // Simulate a realistic startup sequence with typical timings
     let profiler = startup_profiler::StartupProfiler::new();
-    
+
     // App start (instant)
     profiler.record_phase(StartupPhase::AppStart);
-    
+
     // Logging init (~5ms)
     std::thread::sleep(Duration::from_millis(5));
     profiler.record_phase(StartupPhase::LoggingInit);
-    
+
     // Version detection (~10ms)
     std::thread::sleep(Duration::from_millis(10));
     profiler.record_phase(StartupPhase::VersionDetection);
-    
+
     // Config load (~15ms)
     std::thread::sleep(Duration::from_millis(15));
     profiler.record_phase(StartupPhase::ConfigLoad);
-    
+
     // HDR controller init (~30ms)
     std::thread::sleep(Duration::from_millis(30));
     profiler.record_phase(StartupPhase::HdrControllerInit);
-    
+
     // Process monitor init (~5ms)
     std::thread::sleep(Duration::from_millis(5));
     profiler.record_phase(StartupPhase::ProcessMonitorInit);
-    
+
     // App controller init (~20ms)
     std::thread::sleep(Duration::from_millis(20));
     profiler.record_phase(StartupPhase::AppControllerInit);
-    
+
     // GUI controller init (~40ms)
     std::thread::sleep(Duration::from_millis(40));
     profiler.record_phase(StartupPhase::GuiControllerInit);
-    
+
     // GUI display (~30ms)
     std::thread::sleep(Duration::from_millis(30));
     profiler.record_phase(StartupPhase::GuiDisplay);
-    
+
     // App ready
     profiler.record_phase(StartupPhase::AppReady);
-    
+
     let timings = profiler.get_timings();
     assert_eq!(timings.len(), 10);
 
@@ -188,22 +200,22 @@ fn test_realistic_startup_scenario() {
 fn test_slow_startup_detection() {
     // Simulate a slow startup that exceeds the limit
     let profiler = startup_profiler::StartupProfiler::new();
-    
+
     // Simulate slow phases
     profiler.record_phase(StartupPhase::AppStart);
     std::thread::sleep(Duration::from_millis(50));
-    
+
     profiler.record_phase(StartupPhase::LoggingInit);
     std::thread::sleep(Duration::from_millis(50));
-    
+
     profiler.record_phase(StartupPhase::ConfigLoad);
     std::thread::sleep(Duration::from_millis(50));
-    
+
     profiler.record_phase(StartupPhase::GuiDisplay);
     std::thread::sleep(Duration::from_millis(60));
-    
+
     profiler.record_phase(StartupPhase::AppReady);
-    
+
     // Total should exceed 200ms
     let total_ms = profiler.total_startup_ms();
     assert!(total_ms >= 210.0);
@@ -245,14 +257,14 @@ fn test_phase_timing_accuracy() {
 #[test]
 fn test_log_summary_does_not_panic() {
     let profiler = startup_profiler::StartupProfiler::new();
-    
+
     // Record some phases
     profiler.record_phase(StartupPhase::AppStart);
     std::thread::sleep(Duration::from_millis(10));
     profiler.record_phase(StartupPhase::LoggingInit);
     std::thread::sleep(Duration::from_millis(10));
     profiler.record_phase(StartupPhase::GuiDisplay);
-    
+
     // This should not panic
     profiler.log_summary();
 }
@@ -260,12 +272,11 @@ fn test_log_summary_does_not_panic() {
 #[test]
 fn test_empty_profiler_summary() {
     let profiler = startup_profiler::StartupProfiler::new();
-    
+
     // Log summary with no phases recorded
     // This should not panic
     profiler.log_summary();
-    
+
     // Should still be within limits (0ms < 200ms)
     assert!(profiler.is_within_limits());
 }
-

@@ -9,16 +9,14 @@
 #[cfg(windows)]
 use std::sync::mpsc;
 #[cfg(windows)]
-use std::time::{Duration, Instant};
-#[cfg(windows)]
 use std::thread;
+#[cfg(windows)]
+use std::time::{Duration, Instant};
 
 #[cfg(windows)]
-use windows::Win32::System::Threading::{
-    GetCurrentProcess, GetProcessTimes,
-};
-#[cfg(windows)]
 use windows::Win32::Foundation::FILETIME;
+#[cfg(windows)]
+use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 
 /// Measure CPU usage of the process monitoring thread
 ///
@@ -98,7 +96,7 @@ fn test_process_monitor_cpu_usage() {
 fn get_process_cpu_time() -> Result<Duration, String> {
     unsafe {
         let process = GetCurrentProcess();
-        
+
         let mut creation_time = FILETIME::default();
         let mut exit_time = FILETIME::default();
         let mut kernel_time = FILETIME::default();
@@ -110,13 +108,16 @@ fn get_process_cpu_time() -> Result<Duration, String> {
             &mut exit_time,
             &mut kernel_time,
             &mut user_time,
-        ).map_err(|e| format!("GetProcessTimes failed: {}", e))?;
+        )
+        .map_err(|e| format!("GetProcessTimes failed: {}", e))?;
 
         // Convert FILETIME to Duration
         // FILETIME is in 100-nanosecond intervals
-        let kernel_100ns = ((kernel_time.dwHighDateTime as u64) << 32) | (kernel_time.dwLowDateTime as u64);
-        let user_100ns = ((user_time.dwHighDateTime as u64) << 32) | (user_time.dwLowDateTime as u64);
-        
+        let kernel_100ns =
+            ((kernel_time.dwHighDateTime as u64) << 32) | (kernel_time.dwLowDateTime as u64);
+        let user_100ns =
+            ((user_time.dwHighDateTime as u64) << 32) | (user_time.dwLowDateTime as u64);
+
         let total_100ns = kernel_100ns + user_100ns;
         let total_nanos = total_100ns * 100;
 
@@ -187,11 +188,11 @@ fn test_process_monitor_cpu_usage_different_intervals() {
 #[test]
 #[cfg(windows)]
 fn test_process_enumeration_performance() {
-    use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW,
-        PROCESSENTRY32W, TH32CS_SNAPPROCESS,
-    };
     use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES};
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
 
     println!("\n=== Process Enumeration Performance ===");
 
@@ -203,8 +204,8 @@ fn test_process_enumeration_performance() {
         let start = Instant::now();
 
         unsafe {
-            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-                .expect("Failed to create snapshot");
+            let snapshot =
+                CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).expect("Failed to create snapshot");
 
             let mut entry = PROCESSENTRY32W {
                 dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
@@ -239,8 +240,15 @@ fn test_process_enumeration_performance() {
 
     println!("  Iterations: {}", iterations);
     println!("  Processes enumerated: {}", total_processes);
-    println!("  Average time per enumeration: {:.2}ms", avg_duration.as_secs_f64() * 1000.0);
-    println!("  Total time for {} iterations: {:.2}ms", iterations, total_duration.as_secs_f64() * 1000.0);
+    println!(
+        "  Average time per enumeration: {:.2}ms",
+        avg_duration.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Total time for {} iterations: {:.2}ms",
+        iterations,
+        total_duration.as_secs_f64() * 1000.0
+    );
 
     // Process enumeration should be very fast (< 10ms on modern systems)
     assert!(
@@ -257,4 +265,3 @@ fn test_process_enumeration_performance() {
 fn test_cpu_usage_not_supported_on_non_windows() {
     println!("CPU usage tests are only supported on Windows");
 }
-

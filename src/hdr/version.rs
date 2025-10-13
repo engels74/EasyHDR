@@ -4,13 +4,13 @@
 //! to determine which HDR APIs to use.
 
 #[cfg(windows)]
-use windows::Win32::System::SystemInformation::{GetVersionExW, OSVERSIONINFOEXW};
-#[cfg(windows)]
-use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use std::mem::size_of;
 #[cfg(windows)]
 use windows::core::HSTRING;
 #[cfg(windows)]
-use std::mem::size_of;
+use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+#[cfg(windows)]
+use windows::Win32::System::SystemInformation::{GetVersionExW, OSVERSIONINFOEXW};
 
 /// Windows version enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,7 +59,7 @@ impl WindowsVersion {
                 }
                 Err(_e) => {
                     return Err(crate::error::EasyHdrError::WindowsApiError(
-                        windows::core::Error::from_win32()
+                        windows::core::Error::from_win32(),
                     ));
                 }
             }
@@ -90,7 +90,7 @@ impl WindowsVersion {
 
             if rtl_get_version_ptr.is_none() {
                 return Err(crate::error::EasyHdrError::HdrControlFailed(
-                    "RtlGetVersion not found in ntdll.dll".to_string()
+                    "RtlGetVersion not found in ntdll.dll".to_string(),
                 ));
             }
 
@@ -106,9 +106,10 @@ impl WindowsVersion {
             let status = rtl_get_version(&mut version_info);
 
             if status != 0 {
-                return Err(crate::error::EasyHdrError::HdrControlFailed(
-                    format!("RtlGetVersion failed with status: {}", status)
-                ));
+                return Err(crate::error::EasyHdrError::HdrControlFailed(format!(
+                    "RtlGetVersion failed with status: {}",
+                    status
+                )));
             }
 
             // Parse build number to determine version
@@ -132,7 +133,7 @@ impl WindowsVersion {
                 Ok(Self::parse_build_number(version_info.dwBuildNumber))
             } else {
                 Err(crate::error::EasyHdrError::WindowsApiError(
-                    windows::core::Error::from_win32()
+                    windows::core::Error::from_win32(),
                 ))
             }
         }
@@ -258,28 +259,76 @@ mod tests {
         // Test a comprehensive range of build numbers to ensure correct classification
 
         // Very old Windows 10 builds
-        assert_eq!(WindowsVersion::parse_build_number(10240), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(14393), WindowsVersion::Windows10);
+        assert_eq!(
+            WindowsVersion::parse_build_number(10240),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(14393),
+            WindowsVersion::Windows10
+        );
 
         // Windows 10 1809 through 22H2
-        assert_eq!(WindowsVersion::parse_build_number(17763), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(18362), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(18363), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(19041), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(19042), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(19043), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(19044), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(19045), WindowsVersion::Windows10);
+        assert_eq!(
+            WindowsVersion::parse_build_number(17763),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(18362),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(18363),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(19041),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(19042),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(19043),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(19044),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(19045),
+            WindowsVersion::Windows10
+        );
 
         // Windows 11 versions
-        assert_eq!(WindowsVersion::parse_build_number(22000), WindowsVersion::Windows11);
-        assert_eq!(WindowsVersion::parse_build_number(22621), WindowsVersion::Windows11);
-        assert_eq!(WindowsVersion::parse_build_number(22631), WindowsVersion::Windows11);
+        assert_eq!(
+            WindowsVersion::parse_build_number(22000),
+            WindowsVersion::Windows11
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(22621),
+            WindowsVersion::Windows11
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(22631),
+            WindowsVersion::Windows11
+        );
 
         // Windows 11 24H2 and beyond
-        assert_eq!(WindowsVersion::parse_build_number(26100), WindowsVersion::Windows11_24H2);
-        assert_eq!(WindowsVersion::parse_build_number(26200), WindowsVersion::Windows11_24H2);
-        assert_eq!(WindowsVersion::parse_build_number(30000), WindowsVersion::Windows11_24H2);
+        assert_eq!(
+            WindowsVersion::parse_build_number(26100),
+            WindowsVersion::Windows11_24H2
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(26200),
+            WindowsVersion::Windows11_24H2
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(30000),
+            WindowsVersion::Windows11_24H2
+        );
     }
 
     #[test]
@@ -287,23 +336,50 @@ mod tests {
         // Test boundary values around version thresholds
 
         // Around Windows 11 threshold (22000)
-        assert_eq!(WindowsVersion::parse_build_number(21998), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(21999), WindowsVersion::Windows10);
-        assert_eq!(WindowsVersion::parse_build_number(22000), WindowsVersion::Windows11);
-        assert_eq!(WindowsVersion::parse_build_number(22001), WindowsVersion::Windows11);
+        assert_eq!(
+            WindowsVersion::parse_build_number(21998),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(21999),
+            WindowsVersion::Windows10
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(22000),
+            WindowsVersion::Windows11
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(22001),
+            WindowsVersion::Windows11
+        );
 
         // Around Windows 11 24H2 threshold (26100)
-        assert_eq!(WindowsVersion::parse_build_number(26098), WindowsVersion::Windows11);
-        assert_eq!(WindowsVersion::parse_build_number(26099), WindowsVersion::Windows11);
-        assert_eq!(WindowsVersion::parse_build_number(26100), WindowsVersion::Windows11_24H2);
-        assert_eq!(WindowsVersion::parse_build_number(26101), WindowsVersion::Windows11_24H2);
+        assert_eq!(
+            WindowsVersion::parse_build_number(26098),
+            WindowsVersion::Windows11
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(26099),
+            WindowsVersion::Windows11
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(26100),
+            WindowsVersion::Windows11_24H2
+        );
+        assert_eq!(
+            WindowsVersion::parse_build_number(26101),
+            WindowsVersion::Windows11_24H2
+        );
     }
 
     #[test]
     fn test_version_enum_equality() {
         assert_eq!(WindowsVersion::Windows10, WindowsVersion::Windows10);
         assert_eq!(WindowsVersion::Windows11, WindowsVersion::Windows11);
-        assert_eq!(WindowsVersion::Windows11_24H2, WindowsVersion::Windows11_24H2);
+        assert_eq!(
+            WindowsVersion::Windows11_24H2,
+            WindowsVersion::Windows11_24H2
+        );
 
         assert_ne!(WindowsVersion::Windows10, WindowsVersion::Windows11);
         assert_ne!(WindowsVersion::Windows11, WindowsVersion::Windows11_24H2);
@@ -364,13 +440,21 @@ mod tests {
         let version = WindowsVersion::detect();
 
         // Should succeed on any Windows system
-        assert!(version.is_ok(), "Version detection should succeed on Windows");
+        assert!(
+            version.is_ok(),
+            "Version detection should succeed on Windows"
+        );
 
         let detected = version.unwrap();
 
         // Should be one of the three valid versions
         assert!(
-            matches!(detected, WindowsVersion::Windows10 | WindowsVersion::Windows11 | WindowsVersion::Windows11_24H2),
+            matches!(
+                detected,
+                WindowsVersion::Windows10
+                    | WindowsVersion::Windows11
+                    | WindowsVersion::Windows11_24H2
+            ),
             "Detected version should be one of the valid Windows versions"
         );
     }
@@ -394,28 +478,81 @@ mod tests {
         // Test specific known Windows versions for accuracy
 
         // Windows 10 versions
-        assert_eq!(WindowsVersion::parse_build_number(10240), WindowsVersion::Windows10); // 1507
-        assert_eq!(WindowsVersion::parse_build_number(10586), WindowsVersion::Windows10); // 1511
-        assert_eq!(WindowsVersion::parse_build_number(14393), WindowsVersion::Windows10); // 1607
-        assert_eq!(WindowsVersion::parse_build_number(15063), WindowsVersion::Windows10); // 1703
-        assert_eq!(WindowsVersion::parse_build_number(16299), WindowsVersion::Windows10); // 1709
-        assert_eq!(WindowsVersion::parse_build_number(17134), WindowsVersion::Windows10); // 1803
-        assert_eq!(WindowsVersion::parse_build_number(17763), WindowsVersion::Windows10); // 1809
-        assert_eq!(WindowsVersion::parse_build_number(18362), WindowsVersion::Windows10); // 1903
-        assert_eq!(WindowsVersion::parse_build_number(18363), WindowsVersion::Windows10); // 1909
-        assert_eq!(WindowsVersion::parse_build_number(19041), WindowsVersion::Windows10); // 2004
-        assert_eq!(WindowsVersion::parse_build_number(19042), WindowsVersion::Windows10); // 20H2
-        assert_eq!(WindowsVersion::parse_build_number(19043), WindowsVersion::Windows10); // 21H1
-        assert_eq!(WindowsVersion::parse_build_number(19044), WindowsVersion::Windows10); // 21H2
-        assert_eq!(WindowsVersion::parse_build_number(19045), WindowsVersion::Windows10); // 22H2
+        assert_eq!(
+            WindowsVersion::parse_build_number(10240),
+            WindowsVersion::Windows10
+        ); // 1507
+        assert_eq!(
+            WindowsVersion::parse_build_number(10586),
+            WindowsVersion::Windows10
+        ); // 1511
+        assert_eq!(
+            WindowsVersion::parse_build_number(14393),
+            WindowsVersion::Windows10
+        ); // 1607
+        assert_eq!(
+            WindowsVersion::parse_build_number(15063),
+            WindowsVersion::Windows10
+        ); // 1703
+        assert_eq!(
+            WindowsVersion::parse_build_number(16299),
+            WindowsVersion::Windows10
+        ); // 1709
+        assert_eq!(
+            WindowsVersion::parse_build_number(17134),
+            WindowsVersion::Windows10
+        ); // 1803
+        assert_eq!(
+            WindowsVersion::parse_build_number(17763),
+            WindowsVersion::Windows10
+        ); // 1809
+        assert_eq!(
+            WindowsVersion::parse_build_number(18362),
+            WindowsVersion::Windows10
+        ); // 1903
+        assert_eq!(
+            WindowsVersion::parse_build_number(18363),
+            WindowsVersion::Windows10
+        ); // 1909
+        assert_eq!(
+            WindowsVersion::parse_build_number(19041),
+            WindowsVersion::Windows10
+        ); // 2004
+        assert_eq!(
+            WindowsVersion::parse_build_number(19042),
+            WindowsVersion::Windows10
+        ); // 20H2
+        assert_eq!(
+            WindowsVersion::parse_build_number(19043),
+            WindowsVersion::Windows10
+        ); // 21H1
+        assert_eq!(
+            WindowsVersion::parse_build_number(19044),
+            WindowsVersion::Windows10
+        ); // 21H2
+        assert_eq!(
+            WindowsVersion::parse_build_number(19045),
+            WindowsVersion::Windows10
+        ); // 22H2
 
         // Windows 11 versions
-        assert_eq!(WindowsVersion::parse_build_number(22000), WindowsVersion::Windows11); // 21H2
-        assert_eq!(WindowsVersion::parse_build_number(22621), WindowsVersion::Windows11); // 22H2
-        assert_eq!(WindowsVersion::parse_build_number(22631), WindowsVersion::Windows11); // 23H2
+        assert_eq!(
+            WindowsVersion::parse_build_number(22000),
+            WindowsVersion::Windows11
+        ); // 21H2
+        assert_eq!(
+            WindowsVersion::parse_build_number(22621),
+            WindowsVersion::Windows11
+        ); // 22H2
+        assert_eq!(
+            WindowsVersion::parse_build_number(22631),
+            WindowsVersion::Windows11
+        ); // 23H2
 
         // Windows 11 24H2
-        assert_eq!(WindowsVersion::parse_build_number(26100), WindowsVersion::Windows11_24H2); // 24H2
+        assert_eq!(
+            WindowsVersion::parse_build_number(26100),
+            WindowsVersion::Windows11_24H2
+        ); // 24H2
     }
 }
-

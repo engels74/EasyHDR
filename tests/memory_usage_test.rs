@@ -113,7 +113,7 @@ fn test_monitored_app_release_icon() {
 fn test_memory_stats_within_limits() {
     // Test that typical usage is within 50MB limit
     let stats = memory_profiler::MemoryStats {
-        total_memory: 40 * 1024 * 1024, // 40 MB
+        total_memory: 40 * 1024 * 1024,     // 40 MB
         icon_cache_memory: 5 * 1024 * 1024, // 5 MB
         cached_icon_count: 100,
         config_memory: 10 * 1024, // 10 KB
@@ -129,7 +129,7 @@ fn test_memory_stats_within_limits() {
 fn test_memory_stats_exceeds_limits() {
     // Test that excessive usage is detected
     let stats = memory_profiler::MemoryStats {
-        total_memory: 60 * 1024 * 1024, // 60 MB (over limit)
+        total_memory: 60 * 1024 * 1024,      // 60 MB (over limit)
         icon_cache_memory: 10 * 1024 * 1024, // 10 MB
         cached_icon_count: 200,
         config_memory: 10 * 1024, // 10 KB
@@ -236,4 +236,3 @@ fn test_memory_stats_default() {
     assert_eq!(stats.config_memory, 0);
     assert_eq!(stats.monitor_memory, 0);
 }
-

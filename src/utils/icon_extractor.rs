@@ -15,15 +15,20 @@ use tracing::debug;
 use crate::error::EasyHdrError;
 
 #[cfg(windows)]
-use windows::Win32::UI::Shell::{ExtractIconExW, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON};
-#[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
-#[cfg(windows)]
-use windows::Win32::Graphics::Gdi::{GetDIBits, GetObjectW, DeleteObject, CreateCompatibleDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS};
+use windows::core::PCWSTR;
 #[cfg(windows)]
 use windows::Win32::Foundation::{HICON, HWND};
 #[cfg(windows)]
-use windows::core::PCWSTR;
+use windows::Win32::Graphics::Gdi::{
+    CreateCompatibleDC, DeleteObject, GetDIBits, GetObjectW, SelectObject, BITMAP, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+};
+#[cfg(windows)]
+use windows::Win32::UI::Shell::{
+    ExtractIconExW, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
+};
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
 
 /// Default icon size for extraction (32x32 pixels)
 #[cfg(windows)]
@@ -76,7 +81,8 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
 
     // Convert path to wide string for Windows API
-    let wide_path: Vec<u16> = path.as_os_str()
+    let wide_path: Vec<u16> = path
+        .as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
@@ -89,14 +95,17 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
     unsafe {
         let result = ExtractIconExW(
             PCWSTR(wide_path.as_ptr()),
-            0,  // Extract first icon
+            0, // Extract first icon
             Some(&mut large_icon as *mut HICON),
-            None,  // We only need large icon
-            1,  // Extract one icon
+            None, // We only need large icon
+            1,    // Extract one icon
         );
 
         if result == 0 {
-            warn!("ExtractIconExW failed for {:?}, trying SHGetFileInfoW", path);
+            warn!(
+                "ExtractIconExW failed for {:?}, trying SHGetFileInfoW",
+                path
+            );
             // Fallback to SHGetFileInfoW
             return extract_icon_using_shgetfileinfo(&wide_path);
         }
@@ -108,7 +117,9 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
         Err(e) => {
             warn!("Failed to convert HICON to RGBA: {}, using default icon", e);
             // Cleanup icon handle
-            unsafe { let _ = DestroyIcon(large_icon); }
+            unsafe {
+                let _ = DestroyIcon(large_icon);
+            }
             return Ok(create_default_icon());
         }
     };
@@ -172,7 +183,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         let mut icon_info: ICONINFO = zeroed();
         if !GetIconInfo(hicon, &mut icon_info).as_bool() {
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32()
+                windows::core::Error::from_win32(),
             ));
         }
 
@@ -185,12 +196,13 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         if GetObjectW(
             color_bitmap,
             std::mem::size_of::<BITMAP>() as i32,
-            Some(&mut bitmap as *mut BITMAP as *mut _)
-        ) == 0 {
+            Some(&mut bitmap as *mut BITMAP as *mut _),
+        ) == 0
+        {
             DeleteObject(color_bitmap);
             DeleteObject(mask_bitmap);
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32()
+                windows::core::Error::from_win32(),
             ));
         }
 
@@ -203,7 +215,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
             DeleteObject(color_bitmap);
             DeleteObject(mask_bitmap);
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32()
+                windows::core::Error::from_win32(),
             ));
         }
 
@@ -241,7 +253,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
 
         if result == 0 {
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32()
+                windows::core::Error::from_win32(),
             ));
         }
 
@@ -304,13 +316,13 @@ fn create_default_icon() -> Vec<u8> {
 
             // Border pixels (darker gray)
             if x == 0 || x == ICON_SIZE - 1 || y == 0 || y == ICON_SIZE - 1 {
-                icon[idx] = 64;      // R
-                icon[idx + 1] = 64;  // G
-                icon[idx + 2] = 64;  // B
+                icon[idx] = 64; // R
+                icon[idx + 1] = 64; // G
+                icon[idx + 2] = 64; // B
                 icon[idx + 3] = 255; // A
             } else {
                 // Interior pixels (lighter gray)
-                icon[idx] = 128;     // R
+                icon[idx] = 128; // R
                 icon[idx + 1] = 128; // G
                 icon[idx + 2] = 128; // B
                 icon[idx + 3] = 255; // A
@@ -357,7 +369,8 @@ pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
     #[cfg(not(windows))]
     {
         // Stub implementation for non-Windows platforms
-        Ok(path.file_stem()
+        Ok(path
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown Application")
             .to_string())
@@ -368,10 +381,13 @@ pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
 #[cfg(windows)]
 fn extract_display_name_windows(path: &Path) -> Result<String> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::Storage::FileSystem::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
+    use windows::Win32::Storage::FileSystem::{
+        GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW,
+    };
 
     // Convert path to wide string
-    let wide_path: Vec<u16> = path.as_os_str()
+    let wide_path: Vec<u16> = path
+        .as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
@@ -381,10 +397,7 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
     unsafe {
         // Get the size of version info
         let mut handle: u32 = 0;
-        let size = GetFileVersionInfoSizeW(
-            PCWSTR(wide_path.as_ptr()),
-            Some(&mut handle),
-        );
+        let size = GetFileVersionInfoSizeW(PCWSTR(wide_path.as_ptr()), Some(&mut handle));
 
         if size == 0 {
             debug!("No version info available, using filename");
@@ -400,7 +413,9 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
             handle,
             size,
             buffer.as_mut_ptr() as *mut _,
-        ).as_bool() {
+        )
+        .as_bool()
+        {
             debug!("GetFileVersionInfoW failed, using filename");
             return Ok(get_filename_fallback(path));
         }
@@ -408,9 +423,9 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
         // Query for FileDescription
         // Try common language/codepage combinations
         let queries = [
-            "\\StringFileInfo\\040904B0\\FileDescription\0",  // English (US)
-            "\\StringFileInfo\\040904E4\\FileDescription\0",  // English (US) Unicode
-            "\\StringFileInfo\\000004B0\\FileDescription\0",  // Language neutral
+            "\\StringFileInfo\\040904B0\\FileDescription\0", // English (US)
+            "\\StringFileInfo\\040904E4\\FileDescription\0", // English (US) Unicode
+            "\\StringFileInfo\\000004B0\\FileDescription\0", // Language neutral
         ];
 
         for query in &queries {
@@ -423,15 +438,17 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
                 PCWSTR(query_wide.as_ptr()),
                 &mut value_ptr as *mut *mut u16 as *mut *mut _,
                 &mut value_len,
-            ).as_bool() && !value_ptr.is_null() && value_len > 0 {
+            )
+            .as_bool()
+                && !value_ptr.is_null()
+                && value_len > 0
+            {
                 // Convert wide string to Rust String
-                let description_slice = std::slice::from_raw_parts(
-                    value_ptr,
-                    value_len as usize,
-                );
+                let description_slice = std::slice::from_raw_parts(value_ptr, value_len as usize);
 
                 // Find null terminator
-                let len = description_slice.iter()
+                let len = description_slice
+                    .iter()
                     .position(|&c| c == 0)
                     .unwrap_or(description_slice.len());
 
@@ -516,4 +533,3 @@ mod tests {
         }
     }
 }
-

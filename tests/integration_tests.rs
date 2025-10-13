@@ -35,25 +35,26 @@
 //!    - Display disconnection during operation
 
 use easyhdr::{
-    config::{ConfigManager, MonitoredApp, AppConfig},
+    config::{AppConfig, ConfigManager, MonitoredApp},
     controller::AppController,
-    monitor::{ProcessMonitor, ProcessEvent},
+    error::{get_user_friendly_error, EasyHdrError},
     hdr::HdrController,
-    error::{EasyHdrError, get_user_friendly_error},
+    monitor::{ProcessEvent, ProcessMonitor},
 };
-use std::sync::{mpsc, Arc};
-use std::collections::HashSet;
 use parking_lot::Mutex;
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::sync::{mpsc, Arc};
 use std::thread;
+use std::time::Duration;
 use uuid::Uuid;
 
 /// Test that configuration can be saved and loaded correctly
 #[test]
 fn test_config_persistence_integration() {
     // Create a temporary test directory
-    let test_dir = std::env::temp_dir().join(format!("easyhdr_integration_test_{}", Uuid::new_v4()));
+    let test_dir =
+        std::env::temp_dir().join(format!("easyhdr_integration_test_{}", Uuid::new_v4()));
     std::fs::create_dir_all(&test_dir).unwrap();
 
     // Create a config with some test data
@@ -109,7 +110,13 @@ fn test_process_monitor_integration() {
 
     // On macOS, we won't get any events since notepad.exe doesn't exist
     // On Windows, this would detect if notepad is running
-    assert!(result.is_err() || matches!(result, Ok(ProcessEvent::Started(_)) | Ok(ProcessEvent::Stopped(_))));
+    assert!(
+        result.is_err()
+            || matches!(
+                result,
+                Ok(ProcessEvent::Started(_)) | Ok(ProcessEvent::Stopped(_))
+            )
+    );
 }
 
 /// Test that AppController correctly manages HDR state based on process events
@@ -132,12 +139,7 @@ fn test_app_controller_hdr_logic_integration() {
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
     // Create the controller
-    let controller = AppController::new(
-        config,
-        event_rx,
-        state_tx,
-        watch_list,
-    );
+    let controller = AppController::new(config, event_rx, state_tx, watch_list);
 
     assert!(controller.is_ok(), "Controller creation should succeed");
 
@@ -151,7 +153,7 @@ fn test_app_controller_hdr_logic_integration() {
 fn test_error_handling_invalid_config() {
     // Try to create a MonitoredApp from a non-existent path
     let result = MonitoredApp::from_exe_path(PathBuf::from("C:\\NonExistent\\fake.exe"));
-    
+
     // Should return an error
     assert!(result.is_err());
 }
@@ -175,7 +177,10 @@ fn test_hdr_controller_initialization() {
 
     // On non-Windows platforms, the stub implementation returns Ok with empty displays
     // On Windows, this should succeed if HDR is available
-    assert!(result.is_ok(), "HDR controller creation should succeed (may have no displays on non-Windows)");
+    assert!(
+        result.is_ok(),
+        "HDR controller creation should succeed (may have no displays on non-Windows)"
+    );
 }
 
 /// Test that configuration manager handles missing directories
@@ -183,7 +188,7 @@ fn test_hdr_controller_initialization() {
 fn test_config_manager_creates_directory() {
     // This test verifies that ConfigManager can handle missing directories
     let result = ConfigManager::load();
-    
+
     // Should succeed even if directory doesn't exist (creates defaults)
     assert!(result.is_ok());
 }
@@ -215,12 +220,7 @@ fn test_multiple_apps_integration() {
 
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-    let controller = AppController::new(
-        config,
-        event_rx,
-        state_tx,
-        watch_list,
-    );
+    let controller = AppController::new(config, event_rx, state_tx, watch_list);
 
     assert!(controller.is_ok());
 
@@ -246,12 +246,7 @@ fn test_disabled_apps_ignored() {
 
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-    let controller = AppController::new(
-        config,
-        event_rx,
-        state_tx,
-        watch_list,
-    );
+    let controller = AppController::new(config, event_rx, state_tx, watch_list);
 
     assert!(controller.is_ok());
 }
@@ -260,7 +255,7 @@ fn test_disabled_apps_ignored() {
 #[test]
 fn test_preferences_update_integration() {
     let mut config = AppConfig::default();
-    
+
     // Update preferences
     config.preferences.auto_start = true;
     config.preferences.monitoring_interval_ms = 2000;
@@ -273,4 +268,3 @@ fn test_preferences_update_integration() {
     assert_eq!(config.preferences.startup_delay_ms, 5000);
     assert_eq!(config.preferences.show_tray_notifications, false);
 }
-

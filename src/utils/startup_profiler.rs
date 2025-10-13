@@ -179,11 +179,11 @@ impl StartupProfiler {
                 "⚠ Startup time ({:.2}ms) exceeds target limit of 200ms!",
                 total_ms
             );
-            
+
             // Identify slowest phases
             let mut sorted_timings = timings.clone();
             sorted_timings.sort_by(|a, b| b.duration.cmp(&a.duration));
-            
+
             warn!("Slowest phases:");
             for timing in sorted_timings.iter().take(3) {
                 let phase_ms = timing.duration.as_secs_f64() * 1000.0;
@@ -313,9 +313,8 @@ mod tests {
     #[test]
     fn test_global_profiler() {
         let profiler = get_profiler();
-        
+
         // Should be enabled by default
         assert!(profiler.enabled.load(Ordering::Relaxed));
     }
 }
-

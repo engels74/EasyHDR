@@ -101,7 +101,10 @@ impl AppController {
         };
 
         if startup_delay_ms > 0 {
-            info!("Applying startup delay of {}ms to avoid boot race conditions", startup_delay_ms);
+            info!(
+                "Applying startup delay of {}ms to avoid boot race conditions",
+                startup_delay_ms
+            );
             std::thread::sleep(std::time::Duration::from_millis(startup_delay_ms));
             info!("Startup delay complete, beginning process monitoring");
         } else {
@@ -118,7 +121,10 @@ impl AppController {
                 }
                 Err(e) => {
                     // Channel disconnected - this means the ProcessMonitor thread has stopped
-                    warn!("Event receiver channel disconnected: {}. Exiting event loop.", e);
+                    warn!(
+                        "Event receiver channel disconnected: {}. Exiting event loop.",
+                        e
+                    );
                     break;
                 }
             }
@@ -152,7 +158,9 @@ impl AppController {
 
                 // Check if this process is in our monitored list and enabled
                 let config = self.config.lock();
-                let is_monitored = config.monitored_apps.iter()
+                let is_monitored = config
+                    .monitored_apps
+                    .iter()
                     .any(|app| app.enabled && app.process_name.eq_ignore_ascii_case(&process_name));
                 drop(config); // Release lock early
 
@@ -183,7 +191,9 @@ impl AppController {
 
                 // Check if this process is in our monitored list and enabled
                 let config = self.config.lock();
-                let is_monitored = config.monitored_apps.iter()
+                let is_monitored = config
+                    .monitored_apps
+                    .iter()
                     .any(|app| app.enabled && app.process_name.eq_ignore_ascii_case(&process_name));
                 drop(config); // Release lock early
 
@@ -192,12 +202,18 @@ impl AppController {
 
                     // Decrement active process count
                     let prev_count = self.active_process_count.fetch_sub(1, Ordering::SeqCst);
-                    debug!("Active process count: {} -> {}", prev_count, prev_count.saturating_sub(1));
+                    debug!(
+                        "Active process count: {} -> {}",
+                        prev_count,
+                        prev_count.saturating_sub(1)
+                    );
 
                     // Debounce: wait 500ms before disabling to handle quick restarts
                     let last_toggle = *self.last_toggle_time.lock();
                     if last_toggle.elapsed() < std::time::Duration::from_millis(500) {
-                        debug!("Debouncing: last toggle was less than 500ms ago, skipping HDR disable");
+                        debug!(
+                            "Debouncing: last toggle was less than 500ms ago, skipping HDR disable"
+                        );
                         return;
                     }
 
@@ -258,10 +274,7 @@ impl AppController {
                 Err(e) => {
                     warn!(
                         "Failed to toggle HDR for display (adapter={:#x}:{:#x}, target={}): {}",
-                        target.adapter_id.LowPart,
-                        target.adapter_id.HighPart,
-                        target.target_id,
-                        e
+                        target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id, e
                     );
                 }
             }
@@ -284,7 +297,9 @@ impl AppController {
         use tracing::warn;
 
         let config = self.config.lock();
-        let active_apps: Vec<String> = config.monitored_apps.iter()
+        let active_apps: Vec<String> = config
+            .monitored_apps
+            .iter()
             .filter(|app| app.enabled)
             .map(|app| app.display_name.clone())
             .collect();
@@ -293,7 +308,10 @@ impl AppController {
         let state = AppState {
             hdr_enabled: self.current_hdr_state.load(Ordering::SeqCst),
             active_apps,
-            last_event: format!("Active processes: {}", self.active_process_count.load(Ordering::SeqCst)),
+            last_event: format!(
+                "Active processes: {}",
+                self.active_process_count.load(Ordering::SeqCst)
+            ),
         };
 
         if let Err(e) = self.gui_state_sender.send(state) {
@@ -327,7 +345,10 @@ impl AppController {
     pub fn add_application(&mut self, app: MonitoredApp) -> Result<()> {
         use tracing::{info, warn};
 
-        info!("Adding application: {} ({})", app.display_name, app.process_name);
+        info!(
+            "Adding application: {} ({})",
+            app.display_name, app.process_name
+        );
 
         // Add to config
         {
@@ -550,13 +571,18 @@ impl AppController {
         use tracing::debug;
 
         let config = self.config.lock();
-        let process_names: Vec<String> = config.monitored_apps.iter()
+        let process_names: Vec<String> = config
+            .monitored_apps
+            .iter()
             .filter(|app| app.enabled)
             .map(|app| app.process_name.clone())
             .collect();
         drop(config);
 
-        debug!("Updating ProcessMonitor watch list with {} processes", process_names.len());
+        debug!(
+            "Updating ProcessMonitor watch list with {} processes",
+            process_names.len()
+        );
 
         let mut watch_list = self.process_monitor_watch_list.lock();
         watch_list.clear();
@@ -782,7 +808,8 @@ mod tests {
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
 
         // Create a new app to add
         let app = MonitoredApp {
@@ -836,7 +863,8 @@ mod tests {
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
 
         // Remove the application
         let result = controller.remove_application(app_id);
@@ -879,7 +907,8 @@ mod tests {
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
 
         // Initially populate watch list
         controller.update_process_monitor_watch_list();
@@ -987,7 +1016,8 @@ mod tests {
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let controller = AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+        let controller =
+            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
 
         // Update watch list
         controller.update_process_monitor_watch_list();
@@ -1027,7 +1057,11 @@ mod tests {
         let elapsed = handle.join().unwrap();
 
         // Verify that at least the startup delay was applied
-        assert!(elapsed.as_millis() >= 100, "Startup delay should be at least 100ms, was {}ms", elapsed.as_millis());
+        assert!(
+            elapsed.as_millis() >= 100,
+            "Startup delay should be at least 100ms, was {}ms",
+            elapsed.as_millis()
+        );
     }
 
     #[test]
@@ -1057,7 +1091,11 @@ mod tests {
         let elapsed = handle.join().unwrap();
 
         // Verify that the delay is minimal (should be very quick)
-        assert!(elapsed.as_millis() < 50, "Should complete quickly without delay, took {}ms", elapsed.as_millis());
+        assert!(
+            elapsed.as_millis() < 50,
+            "Should complete quickly without delay, took {}ms",
+            elapsed.as_millis()
+        );
     }
 
     #[test]
@@ -1085,13 +1123,17 @@ mod tests {
         });
 
         // Send a process started event
-        event_tx.send(ProcessEvent::Started("app".to_string())).unwrap();
+        event_tx
+            .send(ProcessEvent::Started("app".to_string()))
+            .unwrap();
 
         // Wait a bit for the event to be processed
         std::thread::sleep(std::time::Duration::from_millis(50));
 
         // Verify state update was sent
-        let state = state_rx.recv_timeout(std::time::Duration::from_millis(100)).unwrap();
+        let state = state_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap();
         assert_eq!(state.hdr_enabled, true);
 
         // Close the channel to exit the event loop
@@ -1122,7 +1164,10 @@ mod tests {
 
         // Wait for the thread to complete - should exit gracefully
         let result = handle.join();
-        assert!(result.is_ok(), "Event loop should exit gracefully when channel disconnects");
+        assert!(
+            result.is_ok(),
+            "Event loop should exit gracefully when channel disconnects"
+        );
     }
 
     #[test]
@@ -1158,17 +1203,25 @@ mod tests {
         });
 
         // Send multiple events
-        event_tx.send(ProcessEvent::Started("app1".to_string())).unwrap();
-        event_tx.send(ProcessEvent::Started("app2".to_string())).unwrap();
+        event_tx
+            .send(ProcessEvent::Started("app1".to_string()))
+            .unwrap();
+        event_tx
+            .send(ProcessEvent::Started("app2".to_string()))
+            .unwrap();
 
         // Wait for events to be processed
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Verify state updates were sent
-        let state1 = state_rx.recv_timeout(std::time::Duration::from_millis(100)).unwrap();
+        let state1 = state_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap();
         assert_eq!(state1.hdr_enabled, true);
 
-        let state2 = state_rx.recv_timeout(std::time::Duration::from_millis(100)).unwrap();
+        let state2 = state_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .unwrap();
         assert_eq!(state2.hdr_enabled, true);
 
         // Close the channel to exit the event loop
@@ -1225,7 +1278,10 @@ mod tests {
 
         // Verify that the last toggle time hasn't changed (no toggle occurred)
         let second_toggle_time = *controller.last_toggle_time.lock();
-        assert_eq!(first_toggle_time, second_toggle_time, "Toggle time should not change during debounce");
+        assert_eq!(
+            first_toggle_time, second_toggle_time,
+            "Toggle time should not change during debounce"
+        );
 
         // Now test that after the debounce period expires, HDR can be toggled again
         // First, restart the app to get the count back to 1
@@ -1286,4 +1342,3 @@ mod tests {
         assert_eq!(controller.current_hdr_state.load(Ordering::SeqCst), true);
     }
 }
-

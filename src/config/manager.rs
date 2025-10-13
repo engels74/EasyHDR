@@ -27,12 +27,10 @@ impl ConfigManager {
         use tracing::{debug, error};
 
         let config_path = Self::get_config_path();
-        let config_dir = config_path
-            .parent()
-            .ok_or_else(|| {
-                error!("Invalid config path - no parent directory");
-                EasyHdrError::ConfigError("Invalid config path".to_string())
-            })?;
+        let config_dir = config_path.parent().ok_or_else(|| {
+            error!("Invalid config path - no parent directory");
+            EasyHdrError::ConfigError("Invalid config path".to_string())
+        })?;
 
         std::fs::create_dir_all(config_dir).map_err(|e| {
             error!("Failed to create config directory {:?}: {}", config_dir, e);
@@ -52,7 +50,10 @@ impl ConfigManager {
         let config_path = Self::get_config_path();
 
         if !config_path.exists() {
-            info!("Configuration file not found at {:?}, using defaults", config_path);
+            info!(
+                "Configuration file not found at {:?}, using defaults",
+                config_path
+            );
             return Ok(AppConfig::default());
         }
 
@@ -67,7 +68,10 @@ impl ConfigManager {
                 Ok(config)
             }
             Err(e) => {
-                warn!("Failed to parse configuration from {:?}, using defaults: {}", config_path, e);
+                warn!(
+                    "Failed to parse configuration from {:?}, using defaults: {}",
+                    config_path, e
+                );
                 Ok(AppConfig::default())
             }
         }
@@ -82,12 +86,10 @@ impl ConfigManager {
         let config_path = Self::get_config_path();
         Self::ensure_config_dir()?;
 
-        let config_dir = config_path
-            .parent()
-            .ok_or_else(|| {
-                error!("Invalid config path - no parent directory");
-                EasyHdrError::ConfigError("Invalid config path".to_string())
-            })?;
+        let config_dir = config_path.parent().ok_or_else(|| {
+            error!("Invalid config path - no parent directory");
+            EasyHdrError::ConfigError("Invalid config path".to_string())
+        })?;
 
         // Atomic write: write to temp file, then rename
         let temp_path = config_dir.join("config.json.tmp");
@@ -100,13 +102,19 @@ impl ConfigManager {
 
         debug!("Writing configuration to temp file: {:?}", temp_path);
         std::fs::write(&temp_path, &json).map_err(|e| {
-            error!("Failed to write configuration to temp file {:?}: {}", temp_path, e);
+            error!(
+                "Failed to write configuration to temp file {:?}: {}",
+                temp_path, e
+            );
             e
         })?;
 
         debug!("Renaming temp file to config file: {:?}", config_path);
         std::fs::rename(&temp_path, &config_path).map_err(|e| {
-            error!("Failed to rename temp file {:?} to {:?}: {}", temp_path, config_path, e);
+            error!(
+                "Failed to rename temp file {:?} to {:?}: {}",
+                temp_path, config_path, e
+            );
             e
         })?;
 
@@ -200,11 +208,26 @@ mod tests {
         let loaded_config: AppConfig = serde_json::from_str(&json_content).unwrap();
 
         // Verify the data matches
-        assert_eq!(config.monitored_apps.len(), loaded_config.monitored_apps.len());
-        assert_eq!(config.monitored_apps[0].id, loaded_config.monitored_apps[0].id);
-        assert_eq!(config.monitored_apps[0].display_name, loaded_config.monitored_apps[0].display_name);
-        assert_eq!(config.preferences.auto_start, loaded_config.preferences.auto_start);
-        assert_eq!(config.preferences.monitoring_interval_ms, loaded_config.preferences.monitoring_interval_ms);
+        assert_eq!(
+            config.monitored_apps.len(),
+            loaded_config.monitored_apps.len()
+        );
+        assert_eq!(
+            config.monitored_apps[0].id,
+            loaded_config.monitored_apps[0].id
+        );
+        assert_eq!(
+            config.monitored_apps[0].display_name,
+            loaded_config.monitored_apps[0].display_name
+        );
+        assert_eq!(
+            config.preferences.auto_start,
+            loaded_config.preferences.auto_start
+        );
+        assert_eq!(
+            config.preferences.monitoring_interval_ms,
+            loaded_config.preferences.monitoring_interval_ms
+        );
 
         // Cleanup
         cleanup_test_dir(&test_dir);
@@ -281,11 +304,11 @@ mod tests {
 
         // Write various types of malformed JSON
         let test_cases = vec![
-            "",  // Empty file
-            "{",  // Unclosed brace
-            "null",  // Null value
-            "[]",  // Array instead of object
-            r#"{"monitored_apps": "not an array"}"#,  // Wrong type
+            "",                                      // Empty file
+            "{",                                     // Unclosed brace
+            "null",                                  // Null value
+            "[]",                                    // Array instead of object
+            r#"{"monitored_apps": "not an array"}"#, // Wrong type
         ];
 
         for (i, malformed_json) in test_cases.iter().enumerate() {
@@ -293,10 +316,19 @@ mod tests {
             fs::write(&config_path, malformed_json).unwrap();
 
             let result = ConfigManager::load();
-            assert!(result.is_ok(), "Test case {} failed: Load should succeed with malformed JSON", i);
+            assert!(
+                result.is_ok(),
+                "Test case {} failed: Load should succeed with malformed JSON",
+                i
+            );
 
             let config = result.unwrap();
-            assert_eq!(config.monitored_apps.len(), 0, "Test case {} failed: Should return default config", i);
+            assert_eq!(
+                config.monitored_apps.len(),
+                0,
+                "Test case {} failed: Should return default config",
+                i
+            );
         }
 
         // Cleanup
@@ -322,7 +354,10 @@ mod tests {
 
         // Verify the temp file was cleaned up
         let temp_path = test_dir.join("EasyHDR").join("config.json.tmp");
-        assert!(!temp_path.exists(), "Temp file should be removed after atomic write");
+        assert!(
+            !temp_path.exists(),
+            "Temp file should be removed after atomic write"
+        );
 
         // Cleanup
         cleanup_test_dir(&test_dir);
@@ -493,11 +528,16 @@ mod tests {
         let json_content = fs::read_to_string(&config_path).unwrap();
 
         // Verify it's pretty-printed (contains newlines and indentation)
-        assert!(json_content.contains('\n'), "JSON should be pretty-printed with newlines");
-        assert!(json_content.contains("  "), "JSON should be pretty-printed with indentation");
+        assert!(
+            json_content.contains('\n'),
+            "JSON should be pretty-printed with newlines"
+        );
+        assert!(
+            json_content.contains("  "),
+            "JSON should be pretty-printed with indentation"
+        );
 
         // Cleanup
         cleanup_test_dir(&test_dir);
     }
 }
-

@@ -11,32 +11,32 @@ pub enum EasyHdrError {
     /// HDR is not supported on the display
     #[error("HDR not supported on this display")]
     HdrNotSupported,
-    
+
     /// Failed to control HDR settings
     #[error("Failed to control HDR: {0}")]
     HdrControlFailed(String),
-    
+
     /// Display driver error
     #[error("Display driver error: {0}")]
     DriverError(String),
-    
+
     /// Process monitoring error
     #[error("Process monitoring error: {0}")]
     ProcessMonitorError(String),
-    
+
     /// Configuration error
     #[error("Configuration error: {0}")]
     ConfigError(String),
-    
+
     /// Windows API error
     #[cfg(windows)]
     #[error("Windows API error: {0}")]
     WindowsApiError(#[from] windows::core::Error),
-    
+
     /// IO error
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
-    
+
     /// JSON serialization/deserialization error
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
@@ -52,7 +52,8 @@ pub type Result<T> = std::result::Result<T, EasyHdrError>;
 pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
     match error {
         EasyHdrError::HdrNotSupported => {
-            "Your display doesn't support HDR. Please check your hardware specifications.".to_string()
+            "Your display doesn't support HDR. Please check your hardware specifications."
+                .to_string()
         }
         EasyHdrError::HdrControlFailed(_) | EasyHdrError::DriverError(_) => {
             "Unable to control HDR. Please ensure your display drivers are up to date.".to_string()
@@ -65,13 +66,19 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
         }
         #[cfg(windows)]
         EasyHdrError::WindowsApiError(e) => {
-            format!("Windows API error: {}. Please check your system configuration.", e)
+            format!(
+                "Windows API error: {}. Please check your system configuration.",
+                e
+            )
         }
         EasyHdrError::IoError(e) => {
             format!("File system error: {}. Please check file permissions.", e)
         }
         EasyHdrError::JsonError(e) => {
-            format!("Configuration format error: {}. The configuration file may be corrupted.", e)
+            format!(
+                "Configuration format error: {}. The configuration file may be corrupted.",
+                e
+            )
         }
     }
 }
@@ -100,4 +107,3 @@ mod tests {
         assert!(matches!(error, EasyHdrError::IoError(_)));
     }
 }
-

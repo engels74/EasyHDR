@@ -126,33 +126,25 @@ impl TrayIcon {
         let exit_item = MenuItem::new("Exit", true, None);
 
         // Append items to menu
-        tray_menu
-            .append(&open_item)
-            .map_err(|e| {
-                error!("Failed to add Open menu item to tray: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to add Open menu item: {}", e))
-            })?;
+        tray_menu.append(&open_item).map_err(|e| {
+            error!("Failed to add Open menu item to tray: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to add Open menu item: {}", e))
+        })?;
 
-        tray_menu
-            .append(&status_item)
-            .map_err(|e| {
-                error!("Failed to add Status menu item to tray: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to add Status menu item: {}", e))
-            })?;
+        tray_menu.append(&status_item).map_err(|e| {
+            error!("Failed to add Status menu item to tray: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to add Status menu item: {}", e))
+        })?;
 
-        tray_menu
-            .append(&separator)
-            .map_err(|e| {
-                error!("Failed to add separator to tray menu: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to add separator: {}", e))
-            })?;
+        tray_menu.append(&separator).map_err(|e| {
+            error!("Failed to add separator to tray menu: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to add separator: {}", e))
+        })?;
 
-        tray_menu
-            .append(&exit_item)
-            .map_err(|e| {
-                error!("Failed to add Exit menu item to tray: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to add Exit menu item: {}", e))
-            })?;
+        tray_menu.append(&exit_item).map_err(|e| {
+            error!("Failed to add Exit menu item to tray: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to add Exit menu item: {}", e))
+        })?;
 
         debug!("Tray menu created with 4 items");
 
@@ -232,7 +224,10 @@ impl TrayIcon {
             ICON_HDR_OFF
         };
 
-        debug!("Loading tray icon from embedded assets (HDR: {})", if hdr_enabled { "ON" } else { "OFF" });
+        debug!(
+            "Loading tray icon from embedded assets (HDR: {})",
+            if hdr_enabled { "ON" } else { "OFF" }
+        );
 
         // Decode the ICO file using the image crate
         use image::io::Reader as ImageReader;
@@ -242,24 +237,28 @@ impl TrayIcon {
             .with_guessed_format()
             .map_err(|e| EasyHdrError::ConfigError(format!("Failed to guess icon format: {}", e)))
             .and_then(|reader| {
-                reader.decode()
+                reader
+                    .decode()
                     .map_err(|e| EasyHdrError::ConfigError(format!("Failed to decode icon: {}", e)))
-            })
-        {
+            }) {
             Ok(img) => {
                 // Convert to RGBA8
                 let rgba_img = img.to_rgba8();
                 let (width, height) = rgba_img.dimensions();
                 let rgba_data = rgba_img.into_raw();
 
-                debug!("Decoded icon: {}x{}, {} bytes", width, height, rgba_data.len());
+                debug!(
+                    "Decoded icon: {}x{}, {} bytes",
+                    width,
+                    height,
+                    rgba_data.len()
+                );
 
                 // Create Icon from RGBA data
-                Icon::from_rgba(rgba_data, width, height)
-                    .map_err(|e| {
-                        warn!("Failed to create icon from RGBA data: {}", e);
-                        EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
-                    })
+                Icon::from_rgba(rgba_data, width, height).map_err(|e| {
+                    warn!("Failed to create icon from RGBA data: {}", e);
+                    EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
+                })
             }
             Err(e) => {
                 warn!("Failed to decode icon from embedded assets: {}, falling back to generated icon", e);
@@ -317,13 +316,15 @@ impl TrayIcon {
             }
         }
 
-        debug!("Created fallback tray icon (HDR: {})", if hdr_enabled { "ON" } else { "OFF" });
+        debug!(
+            "Created fallback tray icon (HDR: {})",
+            if hdr_enabled { "ON" } else { "OFF" }
+        );
 
-        Icon::from_rgba(rgba, ICON_SIZE as u32, ICON_SIZE as u32)
-            .map_err(|e| {
-                error!("Failed to create tray icon from RGBA data: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
-            })
+        Icon::from_rgba(rgba, ICON_SIZE as u32, ICON_SIZE as u32).map_err(|e| {
+            error!("Failed to create tray icon from RGBA data: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
+        })
     }
 
     /// Set up menu event handler for tray icon menu
@@ -456,7 +457,10 @@ impl TrayIcon {
     pub fn update_icon(&mut self, hdr_enabled: bool) {
         use tracing::{info, warn};
 
-        info!("Updating tray icon: HDR {}", if hdr_enabled { "ON" } else { "OFF" });
+        info!(
+            "Updating tray icon: HDR {}",
+            if hdr_enabled { "ON" } else { "OFF" }
+        );
 
         // Task 15.1: Load icon_hdr_on.ico when HDR enabled, icon_hdr_off.ico when HDR disabled
         // Icons are embedded in the binary at compile time
