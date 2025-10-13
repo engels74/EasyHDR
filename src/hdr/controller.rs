@@ -207,6 +207,7 @@ impl HdrController {
     /// 2. Call `DisplayConfigGetDeviceInfo` to populate the structure
     /// 3. Check `highDynamicRangeSupported` bit field
     /// 4. Return true if bit is set, false otherwise
+    /// 5. If the API fails, fall back to the older DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO API
     ///
     /// ## Windows 10/11 (Before 24H2)
     ///
@@ -255,11 +256,11 @@ impl HdrController {
     pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
-            use tracing::debug;
+            use tracing::{debug, warn};
 
             match self.windows_version {
                 WindowsVersion::Windows11_24H2 => {
-                    // Windows 11 24H2+: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
+                    // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                             type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
@@ -277,71 +278,32 @@ impl HdrController {
                         let result =
                             DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
                         if result != 0 {
-                            error!(
-                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2) failed for adapter {:?}, target {}: error code {}",
+                            warn!(
+                                "Windows API - DisplayConfigGetDeviceInfo (advanced color info 2) failed for adapter {:?}, target {}: error code {}. Falling back to legacy API.",
                                 target.adapter_id, target.target_id, result
                             );
-                            return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to get advanced color info 2: error code {}",
-                                result
-                            )));
+
+                            // Fallback to the older API for compatibility
+                            // This handles cases where newer Windows builds may have changed the API
+                            return self.is_hdr_supported_legacy(target);
                         }
                     }
 
                     let supported = color_info.highDynamicRangeSupported();
                     debug!(
-                        "Display (adapter={:#x}:{:#x}, target={}): HDR supported (24H2+) = {}",
+                        "Display (adapter={:#x}:{:#x}, target={}): HDR supported (24H2+ API) = {}, value={:#x}",
                         target.adapter_id.LowPart,
                         target.adapter_id.HighPart,
                         target.target_id,
-                        supported
+                        supported,
+                        color_info.value
                     );
 
                     Ok(supported)
                 }
                 WindowsVersion::Windows10 | WindowsVersion::Windows11 => {
                     // Windows 10/11 (before 24H2): Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
-                    let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
-                        header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                            type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                            size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
-                            adapterId: target.adapter_id,
-                            id: target.target_id,
-                        },
-                        value: 0,
-                        colorEncoding: 0,
-                        bitsPerColorChannel: 0,
-                    };
-
-                    unsafe {
-                        let result =
-                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
-                        if result != 0 {
-                            error!(
-                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info) failed for adapter {:?}, target {}: error code {}",
-                                target.adapter_id, target.target_id, result
-                            );
-                            return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to get advanced color info: error code {}",
-                                result
-                            )));
-                        }
-                    }
-
-                    // HDR supported: advancedColorSupported == TRUE AND wideColorEnforced == FALSE
-                    let supported =
-                        color_info.advancedColorSupported() && !color_info.wideColorEnforced();
-                    debug!(
-                        "Display (adapter={:#x}:{:#x}, target={}): advancedColorSupported={}, wideColorEnforced={}, HDR supported={}",
-                        target.adapter_id.LowPart,
-                        target.adapter_id.HighPart,
-                        target.target_id,
-                        color_info.advancedColorSupported(),
-                        color_info.wideColorEnforced(),
-                        supported
-                    );
-
-                    Ok(supported)
+                    self.is_hdr_supported_legacy(target)
                 }
             }
         }
@@ -351,6 +313,65 @@ impl HdrController {
             // For non-Windows platforms (testing), return false
             Ok(false)
         }
+    }
+
+    /// Check if HDR is supported using the legacy API
+    ///
+    /// This method uses DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO which works on
+    /// Windows 10, Windows 11, and as a fallback for Windows 11 24H2+ if the
+    /// newer API fails.
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The display target to check
+    ///
+    /// # Returns
+    ///
+    /// Returns true if the display supports HDR, false otherwise.
+    #[cfg(windows)]
+    fn is_hdr_supported_legacy(&self, target: &DisplayTarget) -> Result<bool> {
+        use tracing::debug;
+
+        let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
+                adapterId: target.adapter_id,
+                id: target.target_id,
+            },
+            value: 0,
+            colorEncoding: 0,
+            bitsPerColorChannel: 0,
+        };
+
+        unsafe {
+            let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+            if result != 0 {
+                error!(
+                    "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info) failed for adapter {:?}, target {}: error code {}",
+                    target.adapter_id, target.target_id, result
+                );
+                return Err(EasyHdrError::HdrControlFailed(format!(
+                    "Failed to get advanced color info (legacy): error code {}",
+                    result
+                )));
+            }
+        }
+
+        // HDR supported: advancedColorSupported == TRUE AND wideColorEnforced == FALSE
+        let supported = color_info.advancedColorSupported() && !color_info.wideColorEnforced();
+        debug!(
+            "Display (adapter={:#x}:{:#x}, target={}): advancedColorSupported={}, wideColorEnforced={}, HDR supported (legacy API) = {}, value={:#x}",
+            target.adapter_id.LowPart,
+            target.adapter_id.HighPart,
+            target.target_id,
+            color_info.advancedColorSupported(),
+            color_info.wideColorEnforced(),
+            supported,
+            color_info.value
+        );
+
+        Ok(supported)
     }
 
     /// Check if HDR is enabled on a display
@@ -379,7 +400,7 @@ impl HdrController {
 
             match self.windows_version {
                 WindowsVersion::Windows11_24H2 => {
-                    // Windows 11 24H2+: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
+                    // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                             type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
@@ -397,14 +418,14 @@ impl HdrController {
                         let result =
                             DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
                         if result != 0 {
-                            error!(
-                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
+                            use tracing::warn;
+                            warn!(
+                                "Windows API - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: error code {}. Falling back to legacy API.",
                                 target.adapter_id, target.target_id, result
                             );
-                            return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to get advanced color info 2: error code {}",
-                                result
-                            )));
+
+                            // Fallback to the older API for compatibility
+                            return self.is_hdr_enabled_legacy(target);
                         }
                     }
 
@@ -413,7 +434,7 @@ impl HdrController {
                         == DISPLAYCONFIG_ADVANCED_COLOR_MODE::DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR
                             as u32;
                     debug!(
-                        "Display (adapter={:#x}:{:#x}, target={}): activeColorMode={}, HDR enabled (24H2+) = {}",
+                        "Display (adapter={:#x}:{:#x}, target={}): activeColorMode={}, HDR enabled (24H2+ API) = {}",
                         target.adapter_id.LowPart,
                         target.adapter_id.HighPart,
                         target.target_id,
@@ -425,49 +446,7 @@ impl HdrController {
                 }
                 WindowsVersion::Windows10 | WindowsVersion::Windows11 => {
                     // Windows 10/11 (before 24H2): Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
-                    let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
-                        header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                            type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                            size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
-                            adapterId: target.adapter_id,
-                            id: target.target_id,
-                        },
-                        value: 0,
-                        colorEncoding: 0,
-                        bitsPerColorChannel: 0,
-                    };
-
-                    unsafe {
-                        let result =
-                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
-                        if result != 0 {
-                            error!(
-                                "Windows API error - DisplayConfigGetDeviceInfo (advanced color info for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
-                                target.adapter_id, target.target_id, result
-                            );
-                            return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to get advanced color info: error code {}",
-                                result
-                            )));
-                        }
-                    }
-
-                    // HDR enabled: advancedColorSupported == TRUE AND advancedColorEnabled == TRUE AND wideColorEnforced == FALSE
-                    let enabled = color_info.advancedColorSupported()
-                        && color_info.advancedColorEnabled()
-                        && !color_info.wideColorEnforced();
-                    debug!(
-                        "Display (adapter={:#x}:{:#x}, target={}): advancedColorSupported={}, advancedColorEnabled={}, wideColorEnforced={}, HDR enabled={}",
-                        target.adapter_id.LowPart,
-                        target.adapter_id.HighPart,
-                        target.target_id,
-                        color_info.advancedColorSupported(),
-                        color_info.advancedColorEnabled(),
-                        color_info.wideColorEnforced(),
-                        enabled
-                    );
-
-                    Ok(enabled)
+                    self.is_hdr_enabled_legacy(target)
                 }
             }
         }
@@ -477,6 +456,67 @@ impl HdrController {
             // For non-Windows platforms (testing), return false
             Ok(false)
         }
+    }
+
+    /// Check if HDR is enabled using the legacy API
+    ///
+    /// This method uses DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO which works on
+    /// Windows 10, Windows 11, and as a fallback for Windows 11 24H2+ if the
+    /// newer API fails.
+    ///
+    /// # Arguments
+    ///
+    /// * `target` - The display target to check
+    ///
+    /// # Returns
+    ///
+    /// Returns true if HDR is currently enabled, false otherwise.
+    #[cfg(windows)]
+    fn is_hdr_enabled_legacy(&self, target: &DisplayTarget) -> Result<bool> {
+        use tracing::debug;
+
+        let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
+                adapterId: target.adapter_id,
+                id: target.target_id,
+            },
+            value: 0,
+            colorEncoding: 0,
+            bitsPerColorChannel: 0,
+        };
+
+        unsafe {
+            let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+            if result != 0 {
+                error!(
+                    "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
+                    target.adapter_id, target.target_id, result
+                );
+                return Err(EasyHdrError::HdrControlFailed(format!(
+                    "Failed to get advanced color info (legacy): error code {}",
+                    result
+                )));
+            }
+        }
+
+        // HDR enabled: advancedColorSupported == TRUE AND advancedColorEnabled == TRUE AND wideColorEnforced == FALSE
+        let enabled = color_info.advancedColorSupported()
+            && color_info.advancedColorEnabled()
+            && !color_info.wideColorEnforced();
+        debug!(
+            "Display (adapter={:#x}:{:#x}, target={}): advancedColorSupported={}, advancedColorEnabled={}, wideColorEnforced={}, HDR enabled (legacy API) = {}",
+            target.adapter_id.LowPart,
+            target.adapter_id.HighPart,
+            target.target_id,
+            color_info.advancedColorSupported(),
+            color_info.advancedColorEnabled(),
+            color_info.wideColorEnforced(),
+            enabled
+        );
+
+        Ok(enabled)
     }
 
     /// Set HDR state for a single display

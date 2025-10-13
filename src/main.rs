@@ -46,6 +46,28 @@ fn main() -> Result<()> {
 
     info!("EasyHDR v{} starting...", env!("CARGO_PKG_VERSION"));
 
+    // Enforce single instance - only one instance of EasyHDR should run at a time
+    // This must be done early, before any other initialization
+    let _single_instance_guard = match utils::SingleInstanceGuard::new() {
+        Ok(guard) => guard,
+        Err(e) => {
+            error!("Single instance check failed: {}", e);
+
+            #[cfg(windows)]
+            {
+                show_error_and_exit(
+                    "Another instance of EasyHDR is already running.\n\n\
+                     Please close the existing instance before starting a new one.\n\n\
+                     Check the system tray for the EasyHDR icon.",
+                );
+            }
+
+            return Err(e);
+        }
+    };
+
+    info!("Single instance check passed");
+
     // Detect Windows version and verify compatibility
     // Requirement 10.6: Function correctly on Windows 10 21H2+
     if let Err(e) = verify_windows_version() {
@@ -72,31 +94,35 @@ fn main() -> Result<()> {
 
     // Initialize core components
     // This may fail if run on macOS (development environment)
-    let (process_monitor, gui_controller) = match initialize_components(config) {
-        Ok(components) => components,
-        Err(e) => {
-            error!("Failed to initialize components: {}", e);
+    #[cfg_attr(not(windows), allow(unused_variables))]
+    let (process_monitor, gui_controller, should_show_hdr_warning) =
+        match initialize_components(config) {
+            Ok(components) => components,
+            Err(e) => {
+                error!("Failed to initialize components: {}", e);
 
-            // On macOS, show a friendly message
-            #[cfg(not(windows))]
-            {
-                eprintln!("EasyHDR is a Windows-only application.");
-                eprintln!("This application cannot run on macOS or other non-Windows platforms.");
-                return Err(e);
-            }
+                // On macOS, show a friendly message
+                #[cfg(not(windows))]
+                {
+                    eprintln!("EasyHDR is a Windows-only application.");
+                    eprintln!(
+                        "This application cannot run on macOS or other non-Windows platforms."
+                    );
+                    return Err(e);
+                }
 
-            // On Windows, show error dialog
-            #[cfg(windows)]
-            {
-                show_error_and_exit(&format!(
-                    "Failed to initialize EasyHDR:\n\n{}\n\n\
+                // On Windows, show error dialog
+                #[cfg(windows)]
+                {
+                    show_error_and_exit(&format!(
+                        "Failed to initialize EasyHDR:\n\n{}\n\n\
                          Please ensure your display drivers are up to date.",
-                    get_user_friendly_error(&e)
-                ));
-                return Err(e);
+                        get_user_friendly_error(&e)
+                    ));
+                    return Err(e);
+                }
             }
-        }
-    };
+        };
 
     info!("Core components initialized successfully");
 
@@ -121,6 +147,26 @@ fn main() -> Result<()> {
     // Task 16.3: Log startup performance summary
     profiler.record_phase(StartupPhase::AppReady);
     profiler.log_summary();
+
+    // Show HDR warning dialog if needed (after GUI is ready but before event loop)
+    // This ensures the dialog doesn't block the GUI from appearing
+    #[cfg(windows)]
+    if should_show_hdr_warning {
+        // Spawn the warning dialog in a separate thread so it doesn't block the GUI
+        std::thread::spawn(|| {
+            // Small delay to ensure the main window is visible first
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            show_warning_dialog(
+                "No HDR-capable displays were detected.\n\n\
+                 The application will run, but HDR toggling will not work until \
+                 an HDR-capable display is connected.\n\n\
+                 Please ensure:\n\
+                 - Your display supports HDR\n\
+                 - Display drivers are up to date\n\
+                 - HDR is enabled in Windows display settings",
+            );
+        });
+    }
 
     // Run GUI event loop (blocks until application exits)
     info!("Starting GUI event loop");
@@ -236,9 +282,13 @@ fn get_windows_build_number() -> Result<u32> {
 /// - Requirement 3.2: Enumerate displays
 /// - Requirement 2.1: Create process monitor with configured interval
 /// - Requirement 4.7: Apply startup delay if configured
+///
+/// # Returns
+///
+/// Returns a tuple of (ProcessMonitor, GuiController, should_show_hdr_warning)
 fn initialize_components(
     config: easyhdr::config::AppConfig,
-) -> Result<(ProcessMonitor, GuiController)> {
+) -> Result<(ProcessMonitor, GuiController, bool)> {
     // Task 16.3: Get profiler for tracking initialization phases
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
@@ -257,26 +307,14 @@ fn initialize_components(
         .filter(|d| d.supports_hdr)
         .count();
 
-    if hdr_capable_count == 0 {
+    let should_show_hdr_warning = if hdr_capable_count == 0 {
         warn!("No HDR-capable displays detected");
         warn!("The application will run but HDR toggling will not work");
-
-        #[cfg(windows)]
-        {
-            // Show a warning dialog but don't exit
-            show_warning_dialog(
-                "No HDR-capable displays were detected.\n\n\
-                 The application will run, but HDR toggling will not work until \
-                 an HDR-capable display is connected.\n\n\
-                 Please ensure:\n\
-                 - Your display supports HDR\n\
-                 - Display drivers are up to date\n\
-                 - HDR is enabled in Windows display settings",
-            );
-        }
+        true
     } else {
         info!("Found {} HDR-capable display(s)", hdr_capable_count);
-    }
+        false
+    };
 
     // Create mpsc channels for communication
     let (process_event_tx, process_event_rx) = mpsc::channel::<ProcessEvent>();
@@ -326,7 +364,7 @@ fn initialize_components(
     let gui_controller = GuiController::new(app_controller_handle, app_state_rx)?;
     profiler.record_phase(StartupPhase::GuiControllerInit);
 
-    Ok((process_monitor, gui_controller))
+    Ok((process_monitor, gui_controller, should_show_hdr_warning))
 }
 
 /// Show an error dialog and exit the application

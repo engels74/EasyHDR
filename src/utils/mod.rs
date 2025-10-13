@@ -11,6 +11,7 @@
 //! - **Logging system** with file rotation
 //! - **Memory profiling** for performance monitoring
 //! - **Startup profiling** for initialization performance
+//! - **Single instance enforcement** to prevent multiple instances
 //!
 //! # Modules
 //!
@@ -33,6 +34,11 @@
 //!
 //! Provides memory usage tracking and profiling to ensure the application
 //! stays within the 50MB RAM requirement.
+//!
+//! ## single_instance
+//!
+//! Provides single instance enforcement using a Windows named mutex to prevent
+//! multiple instances of the application from running simultaneously.
 //!
 //! ## startup_profiler
 //!
@@ -76,8 +82,10 @@ pub mod autostart;
 pub mod icon_extractor;
 pub mod logging;
 pub mod memory_profiler;
+pub mod single_instance;
 pub mod startup_profiler;
 
 pub use autostart::AutoStartManager;
 pub use icon_extractor::{extract_display_name_from_exe, extract_icon_from_exe};
 pub use logging::init_logging;
+pub use single_instance::SingleInstanceGuard;
