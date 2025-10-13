@@ -12,7 +12,8 @@ use tracing::{debug, info, warn};
 use crate::hdr::windows_api::{
     DISPLAYCONFIG_ADVANCED_COLOR_MODE, DISPLAYCONFIG_DEVICE_INFO_HEADER,
     DISPLAYCONFIG_DEVICE_INFO_TYPE, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO,
-    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2,
+    DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2, DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE,
+    DISPLAYCONFIG_SET_HDR_STATE,
 };
 
 #[cfg(windows)]
@@ -247,7 +248,8 @@ impl HdrController {
     /// }
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
-    pub fn is_hdr_supported(&self, _target: &DisplayTarget) -> Result<bool> {
+    #[cfg_attr(not(windows), allow(unused_variables))]
+    pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
             use tracing::debug;
@@ -364,7 +366,8 @@ impl HdrController {
     /// - Requirement 3.4: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 for Windows 11 24H2+
     /// - Requirement 3.5: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO for older Windows
     /// - Requirement 3.7: Check advancedColorSupported && advancedColorEnabled && !wideColorEnforced for older Windows
-    pub fn is_hdr_enabled(&self, _target: &DisplayTarget) -> Result<bool> {
+    #[cfg_attr(not(windows), allow(unused_variables))]
+    pub fn is_hdr_enabled(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
             use tracing::debug;

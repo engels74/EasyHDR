@@ -444,7 +444,7 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
                 &mut value_ptr as *mut *mut u16 as *mut *mut _,
                 &mut value_len,
             )
-            .is_ok()
+            .as_bool()
                 && !value_ptr.is_null()
                 && value_len > 0
             {
