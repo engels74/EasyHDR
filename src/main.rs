@@ -430,6 +430,14 @@ fn initialize_components(
     info!("Starting application controller thread");
     let _controller_handle = AppController::spawn_event_loop(Arc::clone(&app_controller_handle));
 
+    // Send initial state update to populate GUI with apps from config
+    // This ensures the GUI displays all monitored applications on startup
+    info!("Sending initial state to populate GUI");
+    {
+        let controller_guard = app_controller_handle.lock();
+        controller_guard.send_initial_state();
+    }
+
     Ok((process_monitor, gui_controller, should_show_hdr_warning))
 }
 
