@@ -1005,7 +1005,6 @@ mod tests {
         assert!(watch_list_guard.contains("app3"));
     }
 
-
     #[test]
     fn test_run_processes_events() {
         let mut config = AppConfig::default();
