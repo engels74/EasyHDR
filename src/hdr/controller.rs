@@ -331,18 +331,42 @@ impl HdrController {
                         "Display (adapter={:#x}:{:#x}, target={}) - Windows 11 24H2+ API results:",
                         target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id
                     );
-                    debug!("  Raw value: {:#034b} (hex: {:#010x})", color_info.value, color_info.value);
+                    debug!(
+                        "  Raw value: {:#034b} (hex: {:#010x})",
+                        color_info.value, color_info.value
+                    );
                     debug!("  colorEncoding: {}", color_info.colorEncoding);
                     debug!("  bitsPerColorChannel: {}", color_info.bitsPerColorChannel);
-                    debug!("  activeColorMode: {} (0=SDR, 1=WCG, 2=HDR)", color_info.activeColorMode);
+                    debug!(
+                        "  activeColorMode: {} (0=SDR, 1=WCG, 2=HDR)",
+                        color_info.activeColorMode
+                    );
                     debug!("  Bit fields:");
-                    debug!("    [bit 0] advancedColorSupported: {}", color_info.advancedColorSupported());
-                    debug!("    [bit 1] advancedColorActive: {}", color_info.advancedColorActive());
-                    debug!("    [bit 3] advancedColorLimitedByPolicy: {}", color_info.advancedColorLimitedByPolicy());
-                    debug!("    [bit 4] highDynamicRangeSupported: {} ← HDR DETECTION", hdr_supported);
-                    debug!("    [bit 5] highDynamicRangeUserEnabled: {}", color_info.highDynamicRangeUserEnabled());
+                    debug!(
+                        "    [bit 0] advancedColorSupported: {}",
+                        color_info.advancedColorSupported()
+                    );
+                    debug!(
+                        "    [bit 1] advancedColorActive: {}",
+                        color_info.advancedColorActive()
+                    );
+                    debug!(
+                        "    [bit 3] advancedColorLimitedByPolicy: {}",
+                        color_info.advancedColorLimitedByPolicy()
+                    );
+                    debug!(
+                        "    [bit 4] highDynamicRangeSupported: {} ← HDR DETECTION",
+                        hdr_supported
+                    );
+                    debug!(
+                        "    [bit 5] highDynamicRangeUserEnabled: {}",
+                        color_info.highDynamicRangeUserEnabled()
+                    );
                     debug!("    [bit 6] wideColorSupported: {}", wcg_supported);
-                    debug!("    [bit 7] wideColorUserEnabled: {}", color_info.wideColorUserEnabled());
+                    debug!(
+                        "    [bit 7] wideColorUserEnabled: {}",
+                        color_info.wideColorUserEnabled()
+                    );
                     debug!("  Final HDR supported: {}", hdr_supported);
 
                     Ok(hdr_supported)

@@ -204,7 +204,7 @@ impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
 
     /// Check if high dynamic range is supported (bit 4)
     pub fn highDynamicRangeSupported(&self) -> bool {
-        (self.value & 0x10) != 0  // Bit 4 = 0x10 (0001 0000)
+        (self.value & 0x10) != 0 // Bit 4 = 0x10 (0001 0000)
     }
 
     /// Check if HDR is user-enabled (bit 5)
@@ -214,7 +214,7 @@ impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
 
     /// Check if wide color gamut is supported (bit 6)
     pub fn wideColorGamutSupported(&self) -> bool {
-        (self.value & 0x40) != 0  // Bit 6 = 0x40 (0100 0000)
+        (self.value & 0x40) != 0 // Bit 6 = 0x40 (0100 0000)
     }
 
     /// Check if wide color is user-enabled (bit 7)
@@ -594,34 +594,34 @@ mod tests {
 
         // Test individual bit fields
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x1,  // Bit 0: advancedColorSupported
+            value: 0x1, // Bit 0: advancedColorSupported
             ..Default::default()
         };
         assert!(info.advancedColorSupported());
         assert!(!info.highDynamicRangeSupported());
 
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x2,  // Bit 1: advancedColorActive
+            value: 0x2, // Bit 1: advancedColorActive
             ..Default::default()
         };
         assert!(info.advancedColorActive());
         assert!(!info.highDynamicRangeSupported());
 
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x8,  // Bit 3: advancedColorLimitedByPolicy
+            value: 0x8, // Bit 3: advancedColorLimitedByPolicy
             ..Default::default()
         };
         assert!(info.advancedColorLimitedByPolicy());
 
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x20,  // Bit 5: highDynamicRangeUserEnabled
+            value: 0x20, // Bit 5: highDynamicRangeUserEnabled
             ..Default::default()
         };
         assert!(info.highDynamicRangeUserEnabled());
         assert!(!info.highDynamicRangeSupported());
 
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x80,  // Bit 7: wideColorUserEnabled
+            value: 0x80, // Bit 7: wideColorUserEnabled
             ..Default::default()
         };
         assert!(info.wideColorUserEnabled());
