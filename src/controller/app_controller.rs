@@ -35,8 +35,8 @@ pub struct AppController {
     active_process_count: AtomicUsize,
     /// Current HDR state
     current_hdr_state: AtomicBool,
-    /// Event receiver from process monitor
-    event_receiver: mpsc::Receiver<ProcessEvent>,
+    /// Event receiver from process monitor (taken when event loop starts)
+    event_receiver: Option<mpsc::Receiver<ProcessEvent>>,
     /// State sender to GUI
     gui_state_sender: mpsc::Sender<AppState>,
     /// Last toggle time for debouncing
@@ -67,11 +67,20 @@ impl AppController {
             hdr_controller,
             active_process_count: AtomicUsize::new(0),
             current_hdr_state: AtomicBool::new(false),
-            event_receiver,
+            event_receiver: Some(event_receiver),
             gui_state_sender,
             last_toggle_time: Arc::new(Mutex::new(Instant::now())),
             process_monitor_watch_list,
         })
+    }
+
+    /// Take ownership of the event receiver if it hasn't been taken yet
+    ///
+    /// The receiver is stored as an Option so it can be moved out exactly once.
+    /// Subsequent attempts to take it return None and should be treated as
+    /// a no-op by callers.
+    fn take_event_receiver(&mut self) -> Option<mpsc::Receiver<ProcessEvent>> {
+        self.event_receiver.take()
     }
 
     /// Run the main event loop
@@ -88,10 +97,15 @@ impl AppController {
     pub fn run(&mut self) {
         use tracing::{info, warn};
 
+        let Some(event_receiver) = self.take_event_receiver() else {
+            warn!("Event loop already running; run() call ignored");
+            return;
+        };
+
         // Main event loop
         info!("Entering main event loop");
         loop {
-            match self.event_receiver.recv() {
+            match event_receiver.recv() {
                 Ok(event) => {
                     // Handle the process event
                     self.handle_process_event(event);
@@ -108,6 +122,44 @@ impl AppController {
         }
 
         info!("Main event loop exited");
+    }
+
+    /// Spawn the event loop in a background thread for a shared controller instance
+    ///
+    /// This helper is used by the GUI setup to start processing process monitor events
+    /// without holding the controller mutex for the entire lifetime of the thread.
+    /// The background thread takes ownership of the event receiver and only locks
+    /// the controller while handling individual events, preventing GUI callbacks
+    /// from being blocked when they need short-lived access to the controller.
+    pub fn spawn_event_loop(controller: Arc<Mutex<AppController>>) -> std::thread::JoinHandle<()> {
+        let event_receiver = {
+            let mut controller_guard = controller.lock();
+            controller_guard
+                .take_event_receiver()
+                .expect("AppController event receiver already taken")
+        };
+
+        std::thread::spawn(move || {
+            use tracing::{info, warn};
+
+            info!("Entering main event loop");
+            loop {
+                match event_receiver.recv() {
+                    Ok(event) => {
+                        let mut controller_guard = controller.lock();
+                        controller_guard.handle_process_event(event);
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Event receiver channel disconnected: {}. Exiting event loop.",
+                            e
+                        );
+                        break;
+                    }
+                }
+            }
+            info!("Main event loop exited");
+        })
     }
 
     /// Handle a process event

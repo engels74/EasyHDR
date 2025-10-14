@@ -428,11 +428,7 @@ fn initialize_components(
     // This prevents a deadlock where the controller thread holds the lock while
     // the GUI is trying to initialize and needs temporary access to the controller
     info!("Starting application controller thread");
-    let controller_for_thread = Arc::clone(&app_controller_handle);
-    let _controller_handle = std::thread::spawn(move || {
-        let mut controller = controller_for_thread.lock();
-        controller.run();
-    });
+    let _controller_handle = AppController::spawn_event_loop(Arc::clone(&app_controller_handle));
 
     Ok((process_monitor, gui_controller, should_show_hdr_warning))
 }
