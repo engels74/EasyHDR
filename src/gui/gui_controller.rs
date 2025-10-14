@@ -129,7 +129,6 @@ impl GuiController {
             main_window.set_settings_monitoring_interval_ms(
                 config.preferences.monitoring_interval_ms as i32,
             );
-            main_window.set_settings_startup_delay_ms(config.preferences.startup_delay_ms as i32);
             main_window
                 .set_settings_show_tray_notifications(config.preferences.show_tray_notifications);
 
@@ -161,12 +160,11 @@ impl GuiController {
         // Requirement 6.8: Handle registry write failures gracefully
         let controller_clone = controller.clone();
         main_window.on_save_settings(
-            move |auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications| {
+            move |auto_start, monitoring_interval_ms, show_tray_notifications| {
                 Self::save_settings(
                     &controller_clone,
                     auto_start,
                     monitoring_interval_ms,
-                    startup_delay_ms,
                     show_tray_notifications,
                 );
             },
@@ -501,7 +499,6 @@ impl GuiController {
     /// * `controller` - Shared reference to the AppController
     /// * `auto_start` - Whether to auto-start on Windows login
     /// * `monitoring_interval_ms` - Process monitoring interval in milliseconds (500-2000)
-    /// * `startup_delay_ms` - Startup delay in milliseconds (0-10000)
     /// * `show_tray_notifications` - Whether to show tray notifications on HDR changes
     ///
     /// # Requirements
@@ -528,14 +525,13 @@ impl GuiController {
     /// use easyhdr::gui::GuiController;
     ///
     /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// GuiController::save_settings(&controller, true, 1000, 3000, true);
+    /// GuiController::save_settings(&controller, true, 1000, true);
     /// ```
     #[cfg(windows)]
     fn save_settings(
         controller: &Arc<Mutex<AppController>>,
         auto_start: bool,
         monitoring_interval_ms: i32,
-        startup_delay_ms: i32,
         show_tray_notifications: bool,
     ) {
         use easyhdr::config::models::UserPreferences;
@@ -543,15 +539,14 @@ impl GuiController {
         use tracing::{info, warn};
 
         info!(
-            "Saving settings: auto_start={}, monitoring_interval_ms={}, startup_delay_ms={}, show_tray_notifications={}",
-            auto_start, monitoring_interval_ms, startup_delay_ms, show_tray_notifications
+            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}",
+            auto_start, monitoring_interval_ms, show_tray_notifications
         );
 
         // Create UserPreferences struct with new values
         let prefs = UserPreferences {
             auto_start,
             monitoring_interval_ms: monitoring_interval_ms as u64,
-            startup_delay_ms: startup_delay_ms as u64,
             show_tray_notifications,
         };
 
@@ -625,7 +620,6 @@ impl GuiController {
         _controller: &Arc<Mutex<AppController>>,
         _auto_start: bool,
         _monitoring_interval_ms: i32,
-        _startup_delay_ms: i32,
         _show_tray_notifications: bool,
     ) {
         Self::show_error_dialog("Settings management is only supported on Windows");

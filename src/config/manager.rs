@@ -475,7 +475,6 @@ mod tests {
         // Set all preferences
         config.preferences.auto_start = true;
         config.preferences.monitoring_interval_ms = 1500;
-        config.preferences.startup_delay_ms = 7000;
         config.preferences.show_tray_notifications = false;
 
         // Set window state
@@ -501,7 +500,6 @@ mod tests {
 
         assert!(loaded.preferences.auto_start);
         assert_eq!(loaded.preferences.monitoring_interval_ms, 1500);
-        assert_eq!(loaded.preferences.startup_delay_ms, 7000);
         assert!(!loaded.preferences.show_tray_notifications);
 
         assert_eq!(loaded.window_state.x, 250);

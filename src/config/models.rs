@@ -214,8 +214,6 @@ pub struct UserPreferences {
     pub auto_start: bool,
     /// Process monitoring interval in milliseconds (500-2000)
     pub monitoring_interval_ms: u64,
-    /// Startup delay in milliseconds (0-10000)
-    pub startup_delay_ms: u64,
     /// Whether to show tray notifications on HDR changes
     pub show_tray_notifications: bool,
 }
@@ -238,7 +236,6 @@ impl Default for UserPreferences {
         Self {
             auto_start: false,
             monitoring_interval_ms: 1000,
-            startup_delay_ms: 3000,
             show_tray_notifications: true,
         }
     }
@@ -331,7 +328,6 @@ mod tests {
         });
         config.preferences.auto_start = true;
         config.preferences.monitoring_interval_ms = 500;
-        config.preferences.startup_delay_ms = 5000;
         config.preferences.show_tray_notifications = false;
         config.window_state.x = 200;
         config.window_state.y = 150;
@@ -389,10 +385,6 @@ mod tests {
             deserialized.preferences.monitoring_interval_ms
         );
         assert_eq!(
-            config.preferences.startup_delay_ms,
-            deserialized.preferences.startup_delay_ms
-        );
-        assert_eq!(
             config.preferences.show_tray_notifications,
             deserialized.preferences.show_tray_notifications
         );
@@ -409,7 +401,6 @@ mod tests {
         let prefs = UserPreferences {
             auto_start: true,
             monitoring_interval_ms: 2000,
-            startup_delay_ms: 10000,
             show_tray_notifications: false,
         };
 
@@ -421,7 +412,6 @@ mod tests {
             prefs.monitoring_interval_ms,
             deserialized.monitoring_interval_ms
         );
-        assert_eq!(prefs.startup_delay_ms, deserialized.startup_delay_ms);
         assert_eq!(
             prefs.show_tray_notifications,
             deserialized.show_tray_notifications
@@ -452,7 +442,6 @@ mod tests {
 
         assert!(!prefs.auto_start);
         assert_eq!(prefs.monitoring_interval_ms, 1000);
-        assert_eq!(prefs.startup_delay_ms, 3000);
         assert!(prefs.show_tray_notifications);
     }
 

@@ -77,39 +77,16 @@ impl AppController {
     /// Run the main event loop
     ///
     /// This method implements the main event loop that receives process events from the
-    /// ProcessMonitor and handles them appropriately. It implements an optional startup
-    /// delay to avoid boot race conditions.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.7: Implement optional startup delay of 2-5 seconds to avoid boot race conditions
+    /// ProcessMonitor and handles them appropriately.
     ///
     /// # Behavior
     ///
-    /// 1. Applies startup delay if configured in preferences (startup_delay_ms)
-    /// 2. Enters main event loop, receiving events from event_receiver
-    /// 3. Calls handle_process_event() for each received event
-    /// 4. Handles channel disconnection gracefully by exiting the loop
-    /// 5. Logs all significant events and errors
+    /// 1. Enters main event loop, receiving events from event_receiver
+    /// 2. Calls handle_process_event() for each received event
+    /// 3. Handles channel disconnection gracefully by exiting the loop
+    /// 4. Logs all significant events and errors
     pub fn run(&mut self) {
         use tracing::{info, warn};
-
-        // Apply startup delay if configured
-        let startup_delay_ms = {
-            let config = self.config.lock();
-            config.preferences.startup_delay_ms
-        };
-
-        if startup_delay_ms > 0 {
-            info!(
-                "Applying startup delay of {}ms to avoid boot race conditions",
-                startup_delay_ms
-            );
-            std::thread::sleep(std::time::Duration::from_millis(startup_delay_ms));
-            info!("Startup delay complete, beginning process monitoring");
-        } else {
-            info!("No startup delay configured, beginning process monitoring immediately");
-        }
 
         // Main event loop
         info!("Entering main event loop");
@@ -968,7 +945,6 @@ mod tests {
         let new_prefs = UserPreferences {
             auto_start: true,
             monitoring_interval_ms: 2000,
-            startup_delay_ms: 5000,
             show_tray_notifications: false,
         };
 
@@ -980,7 +956,6 @@ mod tests {
         let config = controller.config.lock();
         assert!(config.preferences.auto_start);
         assert_eq!(config.preferences.monitoring_interval_ms, 2000);
-        assert_eq!(config.preferences.startup_delay_ms, 5000);
         assert!(!config.preferences.show_tray_notifications);
     }
 
@@ -1030,78 +1005,10 @@ mod tests {
         assert!(watch_list_guard.contains("app3"));
     }
 
-    #[test]
-    fn test_run_applies_startup_delay() {
-        use std::time::Instant;
-
-        let mut config = AppConfig::default();
-        config.preferences.startup_delay_ms = 100; // Short delay for testing
-
-        let (event_tx, event_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
-
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
-
-        // Spawn thread to run the event loop
-        let start_time = Instant::now();
-        let handle = std::thread::spawn(move || {
-            controller.run();
-            start_time.elapsed()
-        });
-
-        // Close the channel to exit the event loop
-        drop(event_tx);
-
-        // Wait for the thread to complete
-        let elapsed = handle.join().unwrap();
-
-        // Verify that at least the startup delay was applied
-        assert!(
-            elapsed.as_millis() >= 100,
-            "Startup delay should be at least 100ms, was {}ms",
-            elapsed.as_millis()
-        );
-    }
-
-    #[test]
-    fn test_run_no_startup_delay_when_zero() {
-        use std::time::Instant;
-
-        let mut config = AppConfig::default();
-        config.preferences.startup_delay_ms = 0; // No delay
-
-        let (event_tx, event_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
-
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
-
-        // Spawn thread to run the event loop
-        let start_time = Instant::now();
-        let handle = std::thread::spawn(move || {
-            controller.run();
-            start_time.elapsed()
-        });
-
-        // Close the channel to exit the event loop
-        drop(event_tx);
-
-        // Wait for the thread to complete
-        let elapsed = handle.join().unwrap();
-
-        // Verify that the delay is minimal (should be very quick)
-        assert!(
-            elapsed.as_millis() < 50,
-            "Should complete quickly without delay, took {}ms",
-            elapsed.as_millis()
-        );
-    }
 
     #[test]
     fn test_run_processes_events() {
         let mut config = AppConfig::default();
-        config.preferences.startup_delay_ms = 0; // No delay for faster test
         config.monitored_apps.push(MonitoredApp {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
@@ -1145,8 +1052,7 @@ mod tests {
 
     #[test]
     fn test_run_handles_channel_disconnection_gracefully() {
-        let mut config = AppConfig::default();
-        config.preferences.startup_delay_ms = 0; // No delay for faster test
+        let config = AppConfig::default();
 
         let (event_tx, event_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
@@ -1173,7 +1079,6 @@ mod tests {
     #[test]
     fn test_run_processes_multiple_events() {
         let mut config = AppConfig::default();
-        config.preferences.startup_delay_ms = 0; // No delay for faster test
         config.monitored_apps.push(MonitoredApp {
             id: Uuid::new_v4(),
             display_name: "App 1".to_string(),

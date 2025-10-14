@@ -86,7 +86,6 @@
 //! - Requirement 4.2: Disable HDR when last monitored application transitions to NOT_RUNNING
 //! - Requirement 4.3: Maintain counter of active monitored processes
 //! - Requirement 4.4: Prevent redundant toggle operations
-//! - Requirement 4.7: Implement optional startup delay (2-5 seconds)
 //! - Requirement 4.8: Debounce rapid state changes (500ms)
 
 pub mod app_controller;
