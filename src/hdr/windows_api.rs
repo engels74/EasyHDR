@@ -134,32 +134,92 @@ impl DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
 
 /// DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 structure (Windows 11 24H2+)
 ///
-/// Used to get advanced color information for a display target on Windows 11 24H2+.
-/// This is the new structure that provides more detailed HDR information.
+/// Used to query advanced color capabilities for a display target on Windows 11 24H2+.
+///
+/// # Critical: Field Order Matters!
+///
+/// This structure MUST match the Windows SDK layout exactly. The field order is:
+/// 1. `header` - DISPLAYCONFIG_DEVICE_INFO_HEADER (20 bytes, offset 0)
+/// 2. `value` - Bit fields for HDR/WCG capabilities (4 bytes, offset 20) ← MUST BE SECOND!
+/// 3. `colorEncoding` - Current color encoding (4 bytes, offset 24)
+/// 4. `bitsPerColorChannel` - Bits per color channel (4 bytes, offset 28)
+/// 5. `activeColorMode` - Active color mode (SDR/WCG/HDR) (4 bytes, offset 32)
+///
+/// Total size: 36 bytes
+///
+/// # Bit Field Layout in `value`
+///
+/// - Bit 0: `advancedColorSupported` - Display supports advanced color
+/// - Bit 1: `advancedColorActive` - Advanced color currently active
+/// - Bit 2: Reserved
+/// - Bit 3: `advancedColorLimitedByPolicy` - Advanced color limited by policy
+/// - **Bit 4: `highDynamicRangeSupported` - Display supports HDR** (mask: 0x10)
+/// - Bit 5: `highDynamicRangeUserEnabled` - User enabled HDR
+/// - **Bit 6: `wideColorSupported` - Display supports wide color gamut** (mask: 0x40)
+/// - Bit 7: `wideColorUserEnabled` - User enabled WCG
+/// - Bits 8-31: Reserved
+///
+/// # References
+///
+/// - Windows SDK 10.0.26100.0 or later
+/// - Source: XBMC/Kodi HDR implementation (tested on thousands of systems)
+/// - Header: wingdi.h
+/// - Verified against: <https://github.com/xbmc/xbmc/pull/26096>
+///
+/// # Safety
+///
+/// If the field order is wrong, Windows writes HDR capability data to the wrong
+/// memory location (e.g., into `colorEncoding` instead of `value`), causing complete
+/// failure of HDR detection.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
     /// Header
     pub header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    /// Anonymous union containing bit fields (CRITICAL: Must be second field!)
+    pub value: u32,
     /// Color encoding (DISPLAYCONFIG_COLOR_ENCODING)
     pub colorEncoding: u32,
     /// Bits per color channel
     pub bitsPerColorChannel: u32,
     /// Active color mode (DISPLAYCONFIG_ADVANCED_COLOR_MODE)
     pub activeColorMode: u32,
-    /// Anonymous union containing bit fields
-    pub value: u32,
 }
 
 impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-    /// Check if high dynamic range is supported
-    pub fn highDynamicRangeSupported(&self) -> bool {
+    /// Check if advanced color is supported (bit 0)
+    pub fn advancedColorSupported(&self) -> bool {
         (self.value & 0x1) != 0
     }
 
-    /// Check if wide color gamut is supported
-    pub fn wideColorGamutSupported(&self) -> bool {
+    /// Check if advanced color is currently active (bit 1)
+    pub fn advancedColorActive(&self) -> bool {
         (self.value & 0x2) != 0
+    }
+
+    /// Check if advanced color is limited by policy (bit 3)
+    pub fn advancedColorLimitedByPolicy(&self) -> bool {
+        (self.value & 0x8) != 0
+    }
+
+    /// Check if high dynamic range is supported (bit 4)
+    pub fn highDynamicRangeSupported(&self) -> bool {
+        (self.value & 0x10) != 0  // Bit 4 = 0x10 (0001 0000)
+    }
+
+    /// Check if HDR is user-enabled (bit 5)
+    pub fn highDynamicRangeUserEnabled(&self) -> bool {
+        (self.value & 0x20) != 0
+    }
+
+    /// Check if wide color gamut is supported (bit 6)
+    pub fn wideColorGamutSupported(&self) -> bool {
+        (self.value & 0x40) != 0  // Bit 6 = 0x40 (0100 0000)
+    }
+
+    /// Check if wide color is user-enabled (bit 7)
+    pub fn wideColorUserEnabled(&self) -> bool {
+        (self.value & 0x80) != 0
     }
 }
 
@@ -455,10 +515,10 @@ impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                 adapterId: LUID { LowPart: 0, HighPart: 0 },
                 id: 0,
             },
+            value: 0,
             colorEncoding: 0,
             bitsPerColorChannel: 0,
             activeColorMode: 0,
-            value: 0,
         }
     }
 }
@@ -508,29 +568,64 @@ mod tests {
 
     #[test]
     fn test_displayconfig_get_advanced_color_info_2_bit_fields() {
-        // Test highDynamicRangeSupported bit
+        // Test highDynamicRangeSupported bit (bit 4 = 0x10)
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x1,
+            value: 0x10,
             ..Default::default()
         };
         assert!(info.highDynamicRangeSupported());
         assert!(!info.wideColorGamutSupported());
 
-        // Test wideColorGamutSupported bit
+        // Test wideColorGamutSupported bit (bit 6 = 0x40)
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x2,
+            value: 0x40,
             ..Default::default()
         };
         assert!(!info.highDynamicRangeSupported());
         assert!(info.wideColorGamutSupported());
 
-        // Test both bits
+        // Test both bits (0x10 | 0x40 = 0x50)
         let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-            value: 0x3,
+            value: 0x50,
             ..Default::default()
         };
         assert!(info.highDynamicRangeSupported());
         assert!(info.wideColorGamutSupported());
+
+        // Test individual bit fields
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x1,  // Bit 0: advancedColorSupported
+            ..Default::default()
+        };
+        assert!(info.advancedColorSupported());
+        assert!(!info.highDynamicRangeSupported());
+
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x2,  // Bit 1: advancedColorActive
+            ..Default::default()
+        };
+        assert!(info.advancedColorActive());
+        assert!(!info.highDynamicRangeSupported());
+
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x8,  // Bit 3: advancedColorLimitedByPolicy
+            ..Default::default()
+        };
+        assert!(info.advancedColorLimitedByPolicy());
+
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x20,  // Bit 5: highDynamicRangeUserEnabled
+            ..Default::default()
+        };
+        assert!(info.highDynamicRangeUserEnabled());
+        assert!(!info.highDynamicRangeSupported());
+
+        let info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+            value: 0x80,  // Bit 7: wideColorUserEnabled
+            ..Default::default()
+        };
+        assert!(info.wideColorUserEnabled());
+        assert!(!info.wideColorGamutSupported());
     }
 
     #[test]
@@ -597,5 +692,38 @@ mod tests {
         assert!(std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>().is_multiple_of(4));
         assert!(std::mem::size_of::<DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE>().is_multiple_of(4));
         assert!(std::mem::size_of::<DISPLAYCONFIG_SET_HDR_STATE>().is_multiple_of(4));
+    }
+
+    #[test]
+    fn test_displayconfig_device_info_header_exact_size() {
+        // Verify header size matches Windows SDK expectations
+        // Size should be: type (4 bytes) + size (4) + adapter (8) + id (4) = 20 bytes
+        assert_eq!(
+            std::mem::size_of::<DISPLAYCONFIG_DEVICE_INFO_HEADER>(),
+            20,
+            "DISPLAYCONFIG_DEVICE_INFO_HEADER size must be 20 bytes to match Windows SDK"
+        );
+    }
+
+    #[test]
+    fn test_displayconfig_get_advanced_color_info_2_exact_size() {
+        // Verify structure size matches Windows SDK expectations
+        // Size should be: header (20 bytes) + value (4) + encoding (4) + bits (4) + mode (4) = 36 bytes
+        assert_eq!(
+            std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>(),
+            36,
+            "DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 size must be 36 bytes to match Windows SDK"
+        );
+    }
+
+    #[test]
+    fn test_displayconfig_get_advanced_color_info_exact_size() {
+        // Verify legacy structure size matches Windows SDK expectations
+        // Size should be: header (20 bytes) + value (4) + encoding (4) + bits (4) = 32 bytes
+        assert_eq!(
+            std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>(),
+            32,
+            "DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO size must be 32 bytes to match Windows SDK"
+        );
     }
 }
