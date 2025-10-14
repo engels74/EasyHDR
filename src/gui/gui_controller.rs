@@ -19,7 +19,7 @@
 use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Model, Timer, TimerMode};
+use slint::{ComponentHandle, Timer, TimerMode};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::TryRecvError;
@@ -544,8 +544,8 @@ impl GuiController {
         let app_list = Self::collect_app_list_items(controller);
 
         // Update the app list in the UI
+        let count = app_list.len();
         let app_list_model = std::rc::Rc::new(slint::VecModel::from(app_list));
-        let count = app_list_model.row_count();
         window.set_app_list(app_list_model.into());
         debug!("Manually updated application list in UI ({} apps)", count);
     }
