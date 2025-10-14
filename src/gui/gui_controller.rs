@@ -620,13 +620,8 @@ impl GuiController {
         }
 
         info!("All settings saved successfully");
-
-        // Show success message
-        rfd::MessageDialog::new()
-            .set_title("EasyHDR - Settings")
-            .set_description("Settings saved successfully!")
-            .set_buttons(rfd::MessageButtons::Ok)
-            .show();
+        // Settings saved successfully - dialog will close automatically via the callback
+        // No need to show a success message as modern apps typically save settings silently
     }
 
     /// Stub implementation for non-Windows platforms
