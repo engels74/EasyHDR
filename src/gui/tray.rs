@@ -406,21 +406,22 @@ impl TrayIcon {
             }
             // Handle "Exit" menu item click
             else if event.id == exit_item_id {
-                info!("Exit menu item clicked - exiting application gracefully");
+                info!("Exit menu item clicked - exiting application");
 
-                // Task 11.3: Handle "Exit" click - exit application gracefully
+                // Task 11.3: Handle "Exit" click - exit application
                 // Note: Configuration is automatically saved by AppController when changes occur.
-                // Window state will be saved in the run() method after the event loop exits.
+                // Window state is saved by the window close handler when the user clicks the X button.
+                // For tray exit, we don't need to save window state since the window is already closed
+                // or minimized to tray.
 
-                // Exit the application gracefully by quitting the event loop
-                // This allows main() to complete and all background threads to terminate properly
-                info!("Requesting event loop termination from tray menu");
-                if let Err(e) = slint::quit_event_loop() {
-                    error!("Failed to quit event loop: {}", e);
-                    // Fallback to forceful exit if quit_event_loop fails
-                    warn!("Falling back to forceful exit");
-                    std::process::exit(0);
-                }
+                // Exit the application immediately
+                // We use std::process::exit(0) because:
+                // 1. Background threads (ProcessMonitor, AppController) run infinite loops with no shutdown signal
+                // 2. slint::quit_event_loop() only stops the GUI event loop but doesn't terminate background threads
+                // 3. The OS will clean up all resources (memory, handles, threads) on process exit
+                // 4. Configuration is automatically saved by AppController, so no data loss occurs
+                info!("Exiting application");
+                std::process::exit(0);
             }
         }));
 
