@@ -182,7 +182,13 @@ impl GuiController {
             info!("Window close requested - hiding window and releasing resources");
 
             // Release icon resources when minimizing to tray
-            Self::release_gui_resources(&controller_for_close);
+            // IMPORTANT: Do this in a separate thread to avoid deadlock!
+            // The GUI thread must not block waiting for locks, as the state sync
+            // thread may be holding locks while trying to update the GUI.
+            let controller_clone = controller_for_close.clone();
+            std::thread::spawn(move || {
+                Self::release_gui_resources(&controller_clone);
+            });
 
             // Return HideWindow to minimize to tray instead of closing the application
             slint::CloseRequestResponse::HideWindow
