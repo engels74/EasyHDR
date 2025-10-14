@@ -524,6 +524,7 @@ impl GuiController {
     /// 2. Reads the monitored apps from the config
     /// 3. Converts them to Slint AppListItem format
     /// 4. Updates the UI's app_list property
+    #[cfg(windows)]
     fn update_app_list_ui(
         controller: &Arc<Mutex<AppController>>,
         window: &slint::Weak<MainWindow>,
