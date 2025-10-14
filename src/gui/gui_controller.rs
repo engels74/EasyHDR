@@ -19,7 +19,7 @@
 use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
 use parking_lot::Mutex;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 use std::sync::{mpsc, Arc};
 
 #[cfg(windows)]
@@ -138,8 +138,9 @@ impl GuiController {
         // Set up callbacks
         // Task 10.2: Implement file picker integration
         let controller_clone = controller.clone();
+        let window_weak = main_window.as_weak();
         main_window.on_add_application(move || {
-            Self::show_file_picker(&controller_clone);
+            Self::show_file_picker(&controller_clone, &window_weak);
         });
 
         // Task 10.3: Implement application management callbacks
@@ -224,9 +225,14 @@ impl GuiController {
     /// multiple files at once. When the user selects files, extracts metadata and icon
     /// for each, then adds them to the application list via the controller.
     ///
+    /// After adding applications, explicitly triggers a GUI update to ensure the new
+    /// applications appear in the list immediately, even if the state sync thread
+    /// failed to update due to the modal dialog.
+    ///
     /// # Arguments
     ///
     /// * `controller` - Shared reference to the AppController
+    /// * `window` - Weak reference to the main window for triggering GUI updates
     ///
     /// # Requirements
     ///
@@ -243,6 +249,7 @@ impl GuiController {
     /// 3. Calls controller.add_application() with each new app
     /// 4. Shows error dialog if extraction or addition fails for any file
     /// 5. Reports summary of successful and failed additions
+    /// 6. Triggers manual GUI update to ensure new apps appear immediately
     ///
     /// # Example
     ///
@@ -253,10 +260,11 @@ impl GuiController {
     /// use easyhdr::gui::GuiController;
     ///
     /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// GuiController::show_file_picker(&controller);
+    /// let window = main_window.as_weak();
+    /// GuiController::show_file_picker(&controller, &window);
     /// ```
     #[cfg(windows)]
-    fn show_file_picker(controller: &Arc<Mutex<AppController>>) {
+    fn show_file_picker(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
         use tracing::{info, warn};
 
         info!("Opening file picker dialog with multi-select support");
@@ -341,6 +349,17 @@ impl GuiController {
             } else if success_count > 0 {
                 info!("Successfully added {} application(s)", success_count);
             }
+
+            // Manually trigger GUI update after file picker closes
+            // This ensures the new applications appear immediately, even if the state sync
+            // thread's update was skipped due to the modal dialog.
+            // Since show_file_picker is called from the GUI thread and the file picker
+            // dialog is blocking, we're already on the GUI thread when we reach here,
+            // so we can directly call the update function.
+            if success_count > 0 {
+                info!("Triggering manual GUI update after file picker operation");
+                Self::update_app_list_ui(controller, window);
+            }
         } else {
             info!("User cancelled file picker");
         }
@@ -348,8 +367,84 @@ impl GuiController {
 
     /// Stub implementation for non-Windows platforms
     #[cfg(not(windows))]
-    fn show_file_picker(_controller: &Arc<Mutex<AppController>>) {
+    fn show_file_picker(
+        _controller: &Arc<Mutex<AppController>>,
+        _window: &slint::Weak<MainWindow>,
+    ) {
         Self::show_error_dialog("File picker is only supported on Windows");
+    }
+
+    /// Update the application list in the UI
+    ///
+    /// This helper method reads the current application list from the controller
+    /// and updates the GUI display. It's used to manually refresh the UI after
+    /// operations that might be missed by the state sync thread (like after
+    /// modal dialogs close).
+    ///
+    /// # Arguments
+    ///
+    /// * `controller` - Shared reference to the AppController
+    /// * `window` - Weak reference to the main window
+    ///
+    /// # Implementation Details
+    ///
+    /// 1. Upgrades the weak window reference
+    /// 2. Reads the monitored apps from the config
+    /// 3. Converts them to Slint AppListItem format
+    /// 4. Updates the UI's app_list property
+    fn update_app_list_ui(
+        controller: &Arc<Mutex<AppController>>,
+        window: &slint::Weak<MainWindow>,
+    ) {
+        use tracing::{debug, warn};
+
+        // Upgrade weak reference to strong reference
+        let window = match window.upgrade() {
+            Some(w) => w,
+            None => {
+                warn!("Failed to upgrade window reference in update_app_list_ui");
+                return;
+            }
+        };
+
+        // Read the application list from config
+        let app_list = {
+            let controller_guard = controller.lock();
+            let config = controller_guard.config.lock();
+
+            let items: Vec<_> = config
+                .monitored_apps
+                .iter()
+                .map(|app| {
+                    // Convert icon_data to Slint image
+                    let icon = if let Some(ref _icon_data) = app.icon_data {
+                        // Convert RGBA bytes to Slint image
+                        // For now, use empty image - icon conversion will be implemented later
+                        slint::Image::default()
+                    } else {
+                        slint::Image::default()
+                    };
+
+                    crate::AppListItem {
+                        id: app.id.to_string().into(),
+                        display_name: app.display_name.clone().into(),
+                        exe_path: app.exe_path.to_string_lossy().to_string().into(),
+                        enabled: app.enabled,
+                        icon,
+                    }
+                })
+                .collect();
+
+            drop(config);
+            drop(controller_guard);
+            items
+        };
+
+        // Update the app list in the UI
+        let app_list_model = std::rc::Rc::new(slint::VecModel::from(app_list));
+        let count = app_list_model.row_count();
+        window.set_app_list(app_list_model.into());
+        debug!("Manually updated application list in UI ({} apps)", count);
     }
 
     /// Remove application at the specified index
