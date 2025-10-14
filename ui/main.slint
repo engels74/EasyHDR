@@ -316,6 +316,7 @@ export component MainWindow inherits Window {
         y: (parent.height - 400px) / 2;
         width: 500px;
         height: 400px;
+        close-policy: PopupClosePolicy.no-auto-close;
 
         SettingsDialogContent {
             auto-start <=> settings-auto-start;
