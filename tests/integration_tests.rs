@@ -259,12 +259,10 @@ fn test_preferences_update_integration() {
     // Update preferences
     config.preferences.auto_start = true;
     config.preferences.monitoring_interval_ms = 2000;
-    config.preferences.startup_delay_ms = 5000;
     config.preferences.show_tray_notifications = false;
 
     // Verify updates
     assert!(config.preferences.auto_start);
     assert_eq!(config.preferences.monitoring_interval_ms, 2000);
-    assert_eq!(config.preferences.startup_delay_ms, 5000);
     assert!(!config.preferences.show_tray_notifications);
 }

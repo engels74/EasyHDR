@@ -354,7 +354,6 @@ fn log_hdr_startup_summary(_hdr_controller: &HdrController) {
 /// - Requirement 3.1: Detect Windows version
 /// - Requirement 3.2: Enumerate displays
 /// - Requirement 2.1: Create process monitor with configured interval
-/// - Requirement 4.7: Apply startup delay if configured
 ///
 /// # Returns
 ///
@@ -405,14 +404,6 @@ fn initialize_components(
     let process_monitor = ProcessMonitor::new(monitoring_interval, process_event_tx);
     let watch_list_ref = process_monitor.get_watch_list_ref();
     profiler.record_phase(StartupPhase::ProcessMonitorInit);
-
-    // Apply startup delay if configured
-    // Requirement 4.7: Implement optional startup delay
-    let startup_delay = config.preferences.startup_delay_ms;
-    if startup_delay > 0 {
-        info!("Applying startup delay: {}ms", startup_delay);
-        std::thread::sleep(Duration::from_millis(startup_delay));
-    }
 
     // Create AppController (it will create its own HdrController)
     info!("Creating application controller");

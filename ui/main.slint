@@ -20,17 +20,15 @@ export struct AppListItem {
 // Provides UI for configuring user preferences:
 // - Auto-start on Windows login
 // - Monitoring interval (500-2000ms)
-// - Startup delay (0-10 seconds)
 // - Tray notifications on HDR changes
 component SettingsDialogContent inherits Rectangle {
     // Properties for settings values
     in-out property <bool> auto-start: false;
     in-out property <int> monitoring-interval-ms: 1000;
-    in-out property <int> startup-delay-ms: 3000;
     in-out property <bool> show-tray-notifications: true;
 
     // Callbacks
-    callback save-settings(bool, int, int, bool);
+    callback save-settings(bool, int, bool);
     callback cancel-settings();
 
     background: Palette.background;
@@ -93,40 +91,6 @@ component SettingsDialogContent inherits Rectangle {
                 }
             }
 
-            // Startup delay setting (Requirement 6.3)
-            VerticalLayout {
-                spacing: 4px;
-                Text {
-                    text: "Startup delay: " + round(startup-delay-ms / 1000) + " seconds";
-                    color: Palette.foreground;
-                    font-size: 13px;
-                }
-                HorizontalLayout {
-                    spacing: StyleMetrics.layout-spacing;
-                    Text {
-                        text: "0s";
-                        color: Palette.foreground.transparentize(0.4);
-                        font-size: 11px;
-                        vertical-alignment: center;
-                    }
-                    Slider {
-                        minimum: 0;
-                        maximum: 10000;
-                        value: startup-delay-ms;
-                        horizontal-stretch: 1;
-                        changed(value) => {
-                            startup-delay-ms = round(value);
-                        }
-                    }
-                    Text {
-                        text: "10s";
-                        color: Palette.foreground.transparentize(0.4);
-                        font-size: 11px;
-                        vertical-alignment: center;
-                    }
-                }
-            }
-
             // Tray notifications setting (Requirement 6.4)
             HorizontalLayout {
                 spacing: StyleMetrics.layout-spacing;
@@ -159,7 +123,7 @@ component SettingsDialogContent inherits Rectangle {
                 Button {
                     text: "Save";
                     clicked => {
-                        save-settings(auto-start, monitoring-interval-ms, startup-delay-ms, show-tray-notifications);
+                        save-settings(auto-start, monitoring-interval-ms, show-tray-notifications);
                     }
                 }
             }
@@ -179,7 +143,6 @@ export component MainWindow inherits Window {
     // Settings properties (synced with backend)
     in-out property <bool> settings-auto-start: false;
     in-out property <int> settings-monitoring-interval-ms: 1000;
-    in-out property <int> settings-startup-delay-ms: 3000;
     in-out property <bool> settings-show-tray-notifications: true;
 
     // Callbacks
@@ -188,7 +151,7 @@ export component MainWindow inherits Window {
     callback toggle-enabled(int, bool);
     callback minimize-to-tray();
     callback open-settings();
-    callback save-settings(bool, int, int, bool);
+    callback save-settings(bool, int, bool);
 
     VerticalLayout {
         padding: StyleMetrics.layout-padding;
@@ -357,11 +320,10 @@ export component MainWindow inherits Window {
         SettingsDialogContent {
             auto-start <=> settings-auto-start;
             monitoring-interval-ms <=> settings-monitoring-interval-ms;
-            startup-delay-ms <=> settings-startup-delay-ms;
             show-tray-notifications <=> settings-show-tray-notifications;
 
-            save-settings(auto-start, monitoring-interval-ms, startup-delay-ms, show-tray-notifications) => {
-                root.save-settings(auto-start, monitoring-interval-ms, startup-delay-ms, show-tray-notifications);
+            save-settings(auto-start, monitoring-interval-ms, show-tray-notifications) => {
+                root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications);
                 settings-dialog.close();
             }
 
