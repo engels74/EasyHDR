@@ -19,8 +19,12 @@
 use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Model};
+use slint::{ComponentHandle, Model, Timer, TimerMode};
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::sync::mpsc::TryRecvError;
 use std::sync::{mpsc, Arc};
+use std::time::Duration;
 
 #[cfg(windows)]
 use easyhdr::config::models::MonitoredApp;
@@ -32,6 +36,11 @@ use crate::MainWindow;
 
 // Import TrayIcon for system tray integration
 use super::tray::TrayIcon;
+
+/// Messages sent from background threads to the GUI event loop
+enum UiMessage {
+    ApplyState(AppState),
+}
 
 /// GUI controller that bridges Slint UI and application logic
 ///
@@ -374,6 +383,129 @@ impl GuiController {
         Self::show_error_dialog("File picker is only supported on Windows");
     }
 
+    /// Collect application list items for UI consumption
+    ///
+    /// Converts the monitored applications from the controller configuration
+    /// into `AppListItem` instances that can be displayed by the Slint UI.
+    fn collect_app_list_items(controller: &Arc<Mutex<AppController>>) -> Vec<crate::AppListItem> {
+        let controller_guard = controller.lock();
+        let config = controller_guard.config.lock();
+
+        let items = config
+            .monitored_apps
+            .iter()
+            .map(|app| {
+                let icon = if let Some(ref _icon_data) = app.icon_data {
+                    // TODO: Convert stored icon bytes into a Slint image
+                    slint::Image::default()
+                } else {
+                    slint::Image::default()
+                };
+
+                crate::AppListItem {
+                    id: app.id.to_string().into(),
+                    display_name: app.display_name.clone().into(),
+                    exe_path: app.exe_path.to_string_lossy().to_string().into(),
+                    enabled: app.enabled,
+                    icon,
+                }
+            })
+            .collect();
+
+        drop(config);
+        drop(controller_guard);
+
+        items
+    }
+
+    /// Apply a new AppState to the GUI on the main thread
+    ///
+    /// Updates the status indicator, application list, tray icon, and optional
+    /// notifications to reflect the latest HDR state.
+    fn apply_ui_state(
+        window_weak: &slint::Weak<MainWindow>,
+        controller: &Arc<Mutex<AppController>>,
+        tray_icon: &Rc<RefCell<TrayIcon>>,
+        window_visibility: &Cell<bool>,
+        previous_hdr_state: &Cell<Option<bool>>,
+        state: AppState,
+    ) {
+        use tracing::{debug, info, warn};
+
+        let window_opt = window_weak.upgrade();
+        if let Some(window) = window_opt {
+            let window_visible = window.window().is_visible();
+            if window_visible && !window_visibility.get() {
+                info!("Window shown, reloading GUI resources");
+                Self::reload_gui_resources(controller);
+            }
+            window_visibility.set(window_visible);
+
+            window.set_hdr_enabled(state.hdr_enabled);
+            debug!("Updated HDR enabled state to: {}", state.hdr_enabled);
+
+            let app_list = Self::collect_app_list_items(controller);
+            let app_list_model = Rc::new(slint::VecModel::from(app_list));
+            window.set_app_list(app_list_model.into());
+            debug!("Updated application list in UI");
+        } else {
+            warn!("Window no longer exists, skipping UI update");
+        }
+
+        let previous_state = previous_hdr_state.replace(Some(state.hdr_enabled));
+        let state_changed = previous_state
+            .map(|prev| prev != state.hdr_enabled)
+            .unwrap_or(true);
+        let had_previous = previous_state.is_some();
+
+        if !state_changed {
+            return;
+        }
+
+        if had_previous {
+            info!(
+                "HDR state changed to: {}",
+                if state.hdr_enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+        } else {
+            debug!(
+                "Initial HDR state applied: {}",
+                if state.hdr_enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+        }
+
+        let show_notifications = {
+            let controller_guard = controller.lock();
+            let config = controller_guard.config.lock();
+            config.preferences.show_tray_notifications
+        };
+
+        match tray_icon.try_borrow_mut() {
+            Ok(mut tray_icon_mut) => {
+                tray_icon_mut.update_icon(state.hdr_enabled);
+                if had_previous && show_notifications {
+                    let message = if state.hdr_enabled {
+                        "HDR Enabled"
+                    } else {
+                        "HDR Disabled"
+                    };
+                    tray_icon_mut.show_notification(message);
+                }
+            }
+            Err(_) => {
+                warn!("Tray icon borrow failed, skipping tray update");
+            }
+        }
+    }
+
     /// Update the application list in the UI
     ///
     /// This helper method reads the current application list from the controller
@@ -408,37 +540,7 @@ impl GuiController {
         };
 
         // Read the application list from config
-        let app_list = {
-            let controller_guard = controller.lock();
-            let config = controller_guard.config.lock();
-
-            let items: Vec<_> = config
-                .monitored_apps
-                .iter()
-                .map(|app| {
-                    // Convert icon_data to Slint image
-                    let icon = if let Some(ref _icon_data) = app.icon_data {
-                        // Convert RGBA bytes to Slint image
-                        // For now, use empty image - icon conversion will be implemented later
-                        slint::Image::default()
-                    } else {
-                        slint::Image::default()
-                    };
-
-                    crate::AppListItem {
-                        id: app.id.to_string().into(),
-                        display_name: app.display_name.clone().into(),
-                        exe_path: app.exe_path.to_string_lossy().to_string().into(),
-                        enabled: app.enabled,
-                        icon,
-                    }
-                })
-                .collect();
-
-            drop(config);
-            drop(controller_guard);
-            items
-        };
+        let app_list = Self::collect_app_list_items(controller);
 
         // Update the app list in the UI
         let app_list_model = std::rc::Rc::new(slint::VecModel::from(app_list));
@@ -1150,24 +1252,56 @@ impl GuiController {
         let window_weak = self.main_window.as_weak();
         let controller_handle = self.controller_handle.clone();
 
-        // Keep tray_icon on the main thread since it's not Send (contains Rc<RefCell>)
-        // It must stay in scope for the lifetime of the application to keep the system tray icon visible
-        // TODO: Implement proper tray icon updates using a channel or callback mechanism
-        let _tray_icon = self.tray_icon;
+        // Channel for delivering background state updates to the GUI thread
+        let (ui_cmd_tx, ui_cmd_rx) = mpsc::channel::<UiMessage>();
 
-        // Spawn thread to receive AppState updates and update GUI
-        // Task 10.4: Implement state synchronization
+        // Keep tray_icon on the main thread since it's not Send (contains Rc<RefCell>)
+        // Wrap it in Rc<RefCell> so the GUI event loop can mutate it safely.
+        let tray_icon = Rc::new(RefCell::new(self.tray_icon));
+
+        // State shared with the timer-driven UI pump
+        let window_visibility = Rc::new(Cell::new(true));
+        let previous_hdr_state = Rc::new(Cell::new(None::<bool>));
+        let ui_cmd_rx = Rc::new(ui_cmd_rx);
+        let ui_update_timer = Rc::new(Timer::default());
+
+        {
+            let window_weak = window_weak.clone();
+            let controller_handle = controller_handle.clone();
+            let tray_icon = tray_icon.clone();
+            let window_visibility = window_visibility.clone();
+            let previous_hdr_state = previous_hdr_state.clone();
+            let ui_cmd_rx = ui_cmd_rx.clone();
+            let timer_handle = ui_update_timer.clone();
+
+            ui_update_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
+                loop {
+                    match ui_cmd_rx.try_recv() {
+                        Ok(UiMessage::ApplyState(state)) => {
+                            Self::apply_ui_state(
+                                &window_weak,
+                                &controller_handle,
+                                &tray_icon,
+                                &window_visibility,
+                                &previous_hdr_state,
+                                state,
+                            );
+                        }
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => {
+                            warn!("UI update channel disconnected; stopping UI update timer");
+                            timer_handle.stop();
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // Spawn thread to receive AppState updates and forward them to the GUI thread
         let state_receiver = self.state_receiver;
         std::thread::spawn(move || {
             info!("State synchronization thread started");
-
-            // Track previous HDR state to detect changes for notifications
-            let mut previous_hdr_state: Option<bool> = None;
-
-            // Track window visibility for resource management
-            // Note: This is captured by value in the closure, so it can't be updated from there.
-            // This is acceptable since this is just an optimization for resource management.
-            let window_was_visible = true;
 
             while let Ok(state) = state_receiver.recv() {
                 debug!(
@@ -1175,114 +1309,10 @@ impl GuiController {
                     state.hdr_enabled, state.active_apps
                 );
 
-                // Clone data needed for the UI update closure
-                let hdr_enabled = state.hdr_enabled;
-                let window_weak_clone = window_weak.clone();
-                let controller_handle_clone = controller_handle.clone();
-
-                // Schedule UI update on the event loop thread
-                // This is the proper way to update Slint UI from background threads
-                let invoke_result = slint::invoke_from_event_loop(move || {
-                    // Upgrade weak reference to strong reference
-                    // This should succeed now that we're on the event loop thread
-                    let window = match window_weak_clone.upgrade() {
-                        Some(w) => w,
-                        None => {
-                            // Window has been destroyed, which is unexpected during normal operation
-                            warn!("Window no longer exists, cannot update UI");
-                            return;
-                        }
-                    };
-
-                    // Task 16.1: Check window visibility and reload resources if needed
-                    let window_visible = window.window().is_visible();
-                    if window_visible && !window_was_visible {
-                        // Window was just shown, reload GUI resources
-                        info!("Window shown, reloading GUI resources");
-                        Self::reload_gui_resources(&controller_handle_clone);
-                    }
-                    // Note: window_was_visible is captured by value, so we can't update it here
-                    // This is acceptable since this is just an optimization for resource management
-
-                    // Update HDR enabled state
-                    // Requirement 5.8: Update status indicator when HDR state changes
-                    window.set_hdr_enabled(hdr_enabled);
-                    debug!("Updated HDR enabled state to: {}", hdr_enabled);
-
-                    // Update application list
-                    // Convert MonitoredApp to AppListItem for Slint
-                    let app_list = {
-                        let controller = controller_handle_clone.lock();
-                        let config = controller.config.lock();
-
-                        let items: Vec<_> = config
-                            .monitored_apps
-                            .iter()
-                            .map(|app| {
-                                // Convert icon_data to Slint image
-                                let icon = if let Some(ref _icon_data) = app.icon_data {
-                                    // Convert RGBA bytes to Slint image
-                                    // For now, use empty image - icon conversion will be implemented later
-                                    slint::Image::default()
-                                } else {
-                                    slint::Image::default()
-                                };
-
-                                crate::AppListItem {
-                                    id: app.id.to_string().into(),
-                                    display_name: app.display_name.clone().into(),
-                                    exe_path: app.exe_path.to_string_lossy().to_string().into(),
-                                    enabled: app.enabled,
-                                    icon,
-                                }
-                            })
-                            .collect();
-
-                        drop(config);
-                        drop(controller);
-                        items
-                    };
-
-                    // Update the app list in the UI
-                    let app_list_model = std::rc::Rc::new(slint::VecModel::from(app_list));
-                    window.set_app_list(app_list_model.into());
-                    debug!("Updated application list in UI");
-                });
-
-                // Handle invoke_from_event_loop errors
-                if let Err(e) = invoke_result {
-                    warn!("Failed to invoke UI update from event loop: {:?}", e);
+                if ui_cmd_tx.send(UiMessage::ApplyState(state)).is_err() {
+                    warn!("UI update channel closed; stopping state synchronization thread");
+                    break;
                 }
-
-                // Task 11.5: Show notification when HDR state changes
-                // Check if HDR state has changed and show notification if enabled in preferences
-                if let Some(prev_state) = previous_hdr_state {
-                    if prev_state != state.hdr_enabled {
-                        // HDR state has changed, check if notifications are enabled
-                        let show_notifications = {
-                            let controller = controller_handle.lock();
-                            let config = controller.config.lock();
-                            config.preferences.show_tray_notifications
-                        };
-
-                        // Prepare the notification message and HDR state
-                        let hdr_enabled = state.hdr_enabled;
-
-                        // Note: TrayIcon is not Send, so we cannot access it from this thread.
-                        // For now, we skip the tray icon update. This needs to be refactored
-                        // to use a message-passing mechanism to update the tray icon on the main thread.
-                        // TODO: Implement proper tray icon updates using a channel or callback mechanism
-                        if show_notifications {
-                            info!(
-                                "HDR state changed to: {} (tray notification skipped - needs refactoring)",
-                                if hdr_enabled { "enabled" } else { "disabled" }
-                            );
-                        }
-                    }
-                }
-
-                // Update previous state for next iteration
-                previous_hdr_state = Some(state.hdr_enabled);
             }
 
             info!("State synchronization thread stopped");
