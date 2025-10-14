@@ -142,7 +142,7 @@ fn main() -> Result<()> {
     let _monitor_handle = process_monitor.start();
 
     // Note: AppController thread is started inside initialize_components
-    // and is managed by GuiController
+    // after GUI initialization to prevent deadlock during window state restoration
 
     // Task 16.3: Log startup performance summary
     profiler.record_phase(StartupPhase::AppReady);
@@ -427,18 +427,21 @@ fn initialize_components(
     // Wrap AppController in Arc<Mutex<>> for sharing between GUI and background thread
     let app_controller_handle = Arc::new(Mutex::new(app_controller));
 
-    // Start AppController event loop in background thread
+    // Create GuiController first (before starting the controller thread)
+    // This allows the GUI to initialize and lock the controller temporarily during setup
+    info!("Creating GUI controller");
+    let gui_controller = GuiController::new(Arc::clone(&app_controller_handle), app_state_rx)?;
+    profiler.record_phase(StartupPhase::GuiControllerInit);
+
+    // Start AppController event loop in background thread AFTER GUI is initialized
+    // This prevents a deadlock where the controller thread holds the lock while
+    // the GUI is trying to initialize and needs temporary access to the controller
     info!("Starting application controller thread");
     let controller_for_thread = Arc::clone(&app_controller_handle);
     let _controller_handle = std::thread::spawn(move || {
         let mut controller = controller_for_thread.lock();
         controller.run();
     });
-
-    // Create GuiController
-    info!("Creating GUI controller");
-    let gui_controller = GuiController::new(app_controller_handle, app_state_rx)?;
-    profiler.record_phase(StartupPhase::GuiControllerInit);
 
     Ok((process_monitor, gui_controller, should_show_hdr_warning))
 }
