@@ -406,15 +406,21 @@ impl TrayIcon {
             }
             // Handle "Exit" menu item click
             else if event.id == exit_item_id {
-                info!("Exit menu item clicked - saving config and exiting application");
+                info!("Exit menu item clicked - exiting application gracefully");
 
-                // Task 11.3: Handle "Exit" click - save config and exit application
-                // Note: Configuration is automatically saved by AppController when changes occur,
-                // but we could add an explicit save here if needed for window state, etc.
+                // Task 11.3: Handle "Exit" click - exit application gracefully
+                // Note: Configuration is automatically saved by AppController when changes occur.
+                // Window state will be saved in the run() method after the event loop exits.
 
-                // Exit the application
-                info!("Exiting EasyHDR");
-                std::process::exit(0);
+                // Exit the application gracefully by quitting the event loop
+                // This allows main() to complete and all background threads to terminate properly
+                info!("Requesting event loop termination from tray menu");
+                if let Err(e) = slint::quit_event_loop() {
+                    error!("Failed to quit event loop: {}", e);
+                    // Fallback to forceful exit if quit_event_loop fails
+                    warn!("Falling back to forceful exit");
+                    std::process::exit(0);
+                }
             }
         }));
 

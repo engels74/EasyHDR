@@ -172,16 +172,27 @@ impl GuiController {
 
         info!("GUI callbacks connected");
 
-        // Task 11.6: Implement minimize to tray
-        // Requirement 5.9: Handle window close event to minimize to tray instead of exit
-        // Task 16.1: Release GUI resources when minimized to tray
-        // Set up close request handler to hide window instead of closing
+        // Task 11.6: Implement window close handler
+        // Requirement 5.9: Handle window close event to exit application properly
+        // Task 16.1: Release GUI resources and save window state before exit
+        // Set up close request handler to properly exit the application
         let controller_for_close = controller.clone();
+        let window_for_close = main_window.as_weak();
         main_window.window().on_close_requested(move || {
             use tracing::info;
-            info!("Window close requested - hiding window and releasing resources");
+            info!("Window close requested - saving state and exiting application");
 
-            // Release icon resources when minimizing to tray
+            // Save window state before exiting
+            // We need to upgrade the weak reference to access the window
+            if let Some(window) = window_for_close.upgrade() {
+                info!("Saving window state before exit");
+                if let Err(e) = Self::save_window_state(&window, &controller_for_close) {
+                    use tracing::warn;
+                    warn!("Failed to save window state on close: {}", e);
+                }
+            }
+
+            // Release icon resources to reduce memory usage
             // IMPORTANT: Do this in a separate thread to avoid deadlock!
             // The GUI thread must not block waiting for locks, as the state sync
             // thread may be holding locks while trying to update the GUI.
@@ -190,11 +201,21 @@ impl GuiController {
                 Self::release_gui_resources(&controller_clone);
             });
 
-            // Return HideWindow to minimize to tray instead of closing the application
-            slint::CloseRequestResponse::HideWindow
+            // Exit the Slint event loop to allow the application to terminate
+            // This will cause main_window.run() to return, allowing main() to complete
+            // and all background threads to terminate gracefully
+            info!("Requesting event loop termination");
+            if let Err(e) = slint::quit_event_loop() {
+                use tracing::error;
+                error!("Failed to quit event loop: {}", e);
+            }
+
+            // Return KeepWindowShown to prevent default close behavior
+            // We're handling the exit ourselves via quit_event_loop()
+            slint::CloseRequestResponse::KeepWindowShown
         });
 
-        info!("Close request handler configured to minimize to tray");
+        info!("Close request handler configured to exit application");
 
         // Task 11.1: Create TrayIcon
         // Create the system tray icon
@@ -1176,9 +1197,11 @@ impl GuiController {
 
         info!("GUI event loop stopped");
 
-        // Task 10.7: Save window state before exiting
+        // Task 10.7: Save window state before exiting (fallback)
         // Requirement 5.15: Save window position and size to config on close
-        info!("Saving window state before exit");
+        // Note: Window state is also saved in the close request handler when user clicks X button.
+        // This is a fallback in case the event loop exits for other reasons.
+        info!("Saving window state before exit (fallback)");
         Self::save_window_state(&self.main_window, &self.controller_handle)?;
 
         Ok(())
