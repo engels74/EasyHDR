@@ -1165,7 +1165,9 @@ impl GuiController {
             let mut previous_hdr_state: Option<bool> = None;
 
             // Track window visibility for resource management
-            let mut window_was_visible = true;
+            // Note: This is captured by value in the closure, so it can't be updated from there.
+            // This is acceptable since this is just an optimization for resource management.
+            let window_was_visible = true;
 
             while let Ok(state) = state_receiver.recv() {
                 debug!(
@@ -1173,35 +1175,84 @@ impl GuiController {
                     state.hdr_enabled, state.active_apps
                 );
 
-                // Upgrade weak reference to strong reference
-                // If upgrade fails, the window might be temporarily unavailable (e.g., during
-                // a modal dialog), so we log a warning and skip this update but continue listening.
-                // This prevents the state sync thread from stopping prematurely.
-                let window = match window_weak.upgrade() {
-                    Some(w) => w,
-                    None => {
-                        warn!(
-                            "Window upgrade failed, skipping this state update. \
-                             This can happen when a modal dialog is open. \
-                             Will retry on next state update."
-                        );
-                        continue; // Skip this update but keep listening
+                // Clone data needed for the UI update closure
+                let hdr_enabled = state.hdr_enabled;
+                let window_weak_clone = window_weak.clone();
+                let controller_handle_clone = controller_handle.clone();
+
+                // Schedule UI update on the event loop thread
+                // This is the proper way to update Slint UI from background threads
+                let invoke_result = slint::invoke_from_event_loop(move || {
+                    // Upgrade weak reference to strong reference
+                    // This should succeed now that we're on the event loop thread
+                    let window = match window_weak_clone.upgrade() {
+                        Some(w) => w,
+                        None => {
+                            // Window has been destroyed, which is unexpected during normal operation
+                            warn!("Window no longer exists, cannot update UI");
+                            return;
+                        }
+                    };
+
+                    // Task 16.1: Check window visibility and reload resources if needed
+                    let window_visible = window.window().is_visible();
+                    if window_visible && !window_was_visible {
+                        // Window was just shown, reload GUI resources
+                        info!("Window shown, reloading GUI resources");
+                        Self::reload_gui_resources(&controller_handle_clone);
                     }
-                };
+                    // Note: window_was_visible is captured by value, so we can't update it here
+                    // This is acceptable since this is just an optimization for resource management
 
-                // Task 16.1: Check window visibility and reload resources if needed
-                let window_visible = window.window().is_visible();
-                if window_visible && !window_was_visible {
-                    // Window was just shown, reload GUI resources
-                    info!("Window shown, reloading GUI resources");
-                    Self::reload_gui_resources(&controller_handle);
+                    // Update HDR enabled state
+                    // Requirement 5.8: Update status indicator when HDR state changes
+                    window.set_hdr_enabled(hdr_enabled);
+                    debug!("Updated HDR enabled state to: {}", hdr_enabled);
+
+                    // Update application list
+                    // Convert MonitoredApp to AppListItem for Slint
+                    let app_list = {
+                        let controller = controller_handle_clone.lock();
+                        let config = controller.config.lock();
+
+                        let items: Vec<_> = config
+                            .monitored_apps
+                            .iter()
+                            .map(|app| {
+                                // Convert icon_data to Slint image
+                                let icon = if let Some(ref _icon_data) = app.icon_data {
+                                    // Convert RGBA bytes to Slint image
+                                    // For now, use empty image - icon conversion will be implemented later
+                                    slint::Image::default()
+                                } else {
+                                    slint::Image::default()
+                                };
+
+                                crate::AppListItem {
+                                    id: app.id.to_string().into(),
+                                    display_name: app.display_name.clone().into(),
+                                    exe_path: app.exe_path.to_string_lossy().to_string().into(),
+                                    enabled: app.enabled,
+                                    icon,
+                                }
+                            })
+                            .collect();
+
+                        drop(config);
+                        drop(controller);
+                        items
+                    };
+
+                    // Update the app list in the UI
+                    let app_list_model = std::rc::Rc::new(slint::VecModel::from(app_list));
+                    window.set_app_list(app_list_model.into());
+                    debug!("Updated application list in UI");
+                });
+
+                // Handle invoke_from_event_loop errors
+                if let Err(e) = invoke_result {
+                    warn!("Failed to invoke UI update from event loop: {:?}", e);
                 }
-                window_was_visible = window_visible;
-
-                // Update HDR enabled state
-                // Requirement 5.8: Update status indicator when HDR state changes
-                window.set_hdr_enabled(state.hdr_enabled);
-                debug!("Updated HDR enabled state to: {}", state.hdr_enabled);
 
                 // Task 11.5: Show notification when HDR state changes
                 // Check if HDR state has changed and show notification if enabled in preferences
@@ -1232,45 +1283,6 @@ impl GuiController {
 
                 // Update previous state for next iteration
                 previous_hdr_state = Some(state.hdr_enabled);
-
-                // Update application list
-                // Convert MonitoredApp to AppListItem for Slint
-                let app_list = {
-                    let controller = controller_handle.lock();
-                    let config = controller.config.lock();
-
-                    let items: Vec<_> = config
-                        .monitored_apps
-                        .iter()
-                        .map(|app| {
-                            // Convert icon_data to Slint image
-                            let icon = if let Some(ref _icon_data) = app.icon_data {
-                                // Convert RGBA bytes to Slint image
-                                // For now, use empty image - icon conversion will be implemented later
-                                slint::Image::default()
-                            } else {
-                                slint::Image::default()
-                            };
-
-                            crate::AppListItem {
-                                id: app.id.to_string().into(),
-                                display_name: app.display_name.clone().into(),
-                                exe_path: app.exe_path.to_string_lossy().to_string().into(),
-                                enabled: app.enabled,
-                                icon,
-                            }
-                        })
-                        .collect();
-
-                    drop(config);
-                    drop(controller);
-                    items
-                };
-
-                // Update the app list in the UI
-                let app_list_model = std::rc::Rc::new(slint::VecModel::from(app_list));
-                window.set_app_list(app_list_model.into());
-                debug!("Updated application list in UI");
             }
 
             info!("State synchronization thread stopped");
