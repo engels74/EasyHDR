@@ -322,6 +322,9 @@ impl AppController {
     ///
     /// Sends the current application state to the GUI via the state sender channel.
     /// This includes HDR enabled state, active applications, and last event.
+    ///
+    /// This is an internal method called automatically when state changes.
+    /// For sending the initial state after startup, use `send_initial_state()` instead.
     fn send_state_update(&self) {
         use tracing::warn;
 
@@ -346,6 +349,35 @@ impl AppController {
         if let Err(e) = self.gui_state_sender.send(state) {
             warn!("Failed to send state update to GUI: {}", e);
         }
+    }
+
+    /// Send initial state update to GUI
+    ///
+    /// Sends the current application state to the GUI to populate it with the
+    /// initial configuration. This should be called once after the GUI and
+    /// controller are fully initialized to ensure the GUI displays all apps
+    /// from the configuration file.
+    ///
+    /// # Requirements
+    ///
+    /// - GUI should display all monitored applications from config on startup
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use parking_lot::Mutex;
+    /// use easyhdr::controller::AppController;
+    ///
+    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// let controller_guard = controller.lock();
+    /// controller_guard.send_initial_state();
+    /// ```
+    pub fn send_initial_state(&self) {
+        use tracing::info;
+
+        info!("Sending initial state update to populate GUI");
+        self.send_state_update();
     }
 
     /// Add a new application to the configuration

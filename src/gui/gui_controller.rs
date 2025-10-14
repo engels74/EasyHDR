@@ -1084,11 +1084,18 @@ impl GuiController {
                 );
 
                 // Upgrade weak reference to strong reference
+                // If upgrade fails, the window might be temporarily unavailable (e.g., during
+                // a modal dialog), so we log a warning and skip this update but continue listening.
+                // This prevents the state sync thread from stopping prematurely.
                 let window = match window_weak.upgrade() {
                     Some(w) => w,
                     None => {
-                        warn!("Window has been destroyed, stopping state synchronization");
-                        break;
+                        warn!(
+                            "Window upgrade failed, skipping this state update. \
+                             This can happen when a modal dialog is open. \
+                             Will retry on next state update."
+                        );
+                        continue; // Skip this update but keep listening
                     }
                 };
 
