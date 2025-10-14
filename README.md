@@ -124,7 +124,6 @@ Access settings from the main window to configure:
 
 - **Auto-start on Windows login** - Launch EasyHDR automatically when you log in
 - **Monitoring interval** - How often to check for running processes (500-2000ms)
-- **Startup delay** - Delay before monitoring starts (0-10 seconds)
 - **Tray notifications** - Show notifications when HDR state changes
 
 ### Configuration File
@@ -146,7 +145,6 @@ Settings are stored at: `%APPDATA%\EasyHDR\config.json`
   "preferences": {
     "auto_start": true,
     "monitoring_interval_ms": 1000,
-    "startup_delay_ms": 3000,
     "show_tray_notifications": true
   },
   "window_state": {
