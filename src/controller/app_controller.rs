@@ -365,11 +365,20 @@ impl AppController {
     /// # Example
     ///
     /// ```no_run
-    /// use std::sync::Arc;
+    /// use std::sync::{Arc, mpsc};
+    /// use std::collections::HashSet;
     /// use parking_lot::Mutex;
     /// use easyhdr::controller::AppController;
+    /// use easyhdr::config::AppConfig;
     ///
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
+    /// let config = AppConfig::default();
+    /// let (_event_tx, event_rx) = mpsc::channel();
+    /// let (state_tx, _state_rx) = mpsc::channel();
+    /// let watch_list = Arc::new(Mutex::new(HashSet::new()));
+    ///
+    /// let controller = Arc::new(Mutex::new(
+    ///     AppController::new(config, event_rx, state_tx, watch_list).unwrap()
+    /// ));
     /// let controller_guard = controller.lock();
     /// controller_guard.send_initial_state();
     /// ```
