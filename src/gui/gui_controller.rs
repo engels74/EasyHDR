@@ -174,8 +174,8 @@ impl GuiController {
 
         // Task 11.6: Implement window close handler
         // Requirement 5.9: Handle window close event to exit application properly
-        // Task 16.1: Release GUI resources and save window state before exit
-        // Set up close request handler to properly exit the application
+        // Task 16.1: Save window state before exit
+        // Set up close request handler to save state and exit the application
         let controller_for_close = controller.clone();
         let window_for_close = main_window.as_weak();
         main_window.window().on_close_requested(move || {
@@ -192,27 +192,15 @@ impl GuiController {
                 }
             }
 
-            // Release icon resources to reduce memory usage
-            // IMPORTANT: Do this in a separate thread to avoid deadlock!
-            // The GUI thread must not block waiting for locks, as the state sync
-            // thread may be holding locks while trying to update the GUI.
-            let controller_clone = controller_for_close.clone();
-            std::thread::spawn(move || {
-                Self::release_gui_resources(&controller_clone);
-            });
-
-            // Exit the Slint event loop to allow the application to terminate
-            // This will cause main_window.run() to return, allowing main() to complete
-            // and all background threads to terminate gracefully
-            info!("Requesting event loop termination");
-            if let Err(e) = slint::quit_event_loop() {
-                use tracing::error;
-                error!("Failed to quit event loop: {}", e);
-            }
-
-            // Return KeepWindowShown to prevent default close behavior
-            // We're handling the exit ourselves via quit_event_loop()
-            slint::CloseRequestResponse::KeepWindowShown
+            // Exit the application immediately
+            // Note: We use std::process::exit(0) instead of slint::quit_event_loop() because:
+            // 1. quit_event_loop() is asynchronous and doesn't guarantee immediate termination
+            // 2. Background threads (ProcessMonitor, AppController) run infinite loops with no shutdown signal
+            // 3. Returning KeepWindowShown after quit_event_loop() causes the window to hang
+            // 4. The OS will clean up all resources (memory, handles, threads) on process exit
+            // 5. Configuration has already been saved above, so no data loss occurs
+            info!("Exiting application");
+            std::process::exit(0);
         });
 
         info!("Close request handler configured to exit application");
@@ -942,6 +930,10 @@ impl GuiController {
     ///
     /// Releases icon data from all monitored applications to free memory.
     /// The icons will be lazily reloaded when the window is shown again.
+    ///
+    /// Note: Currently unused since we exit immediately on window close instead of
+    /// minimizing to tray. Kept for potential future use.
+    #[allow(dead_code)]
     fn release_gui_resources(controller: &Arc<Mutex<AppController>>) {
         use tracing::info;
 
