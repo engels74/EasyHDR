@@ -19,7 +19,7 @@ use easyhdr::{
     controller::{AppController, AppState},
     error::{EasyHdrError, Result},
     hdr::HdrController,
-    monitor::{ProcessEvent, ProcessMonitor},
+    monitor::{HdrStateEvent, HdrStateMonitor, ProcessEvent, ProcessMonitor},
     utils,
 };
 use gui::GuiController;
@@ -393,6 +393,7 @@ fn initialize_components(
 
     // Create mpsc channels for communication
     let (process_event_tx, process_event_rx) = mpsc::channel::<ProcessEvent>();
+    let (hdr_state_tx, hdr_state_rx) = mpsc::channel::<HdrStateEvent>();
     let (app_state_tx, app_state_rx) = mpsc::channel::<AppState>();
 
     // Create ProcessMonitor with configured interval
@@ -405,11 +406,17 @@ fn initialize_components(
     let watch_list_ref = process_monitor.get_watch_list_ref();
     profiler.record_phase(StartupPhase::ProcessMonitorInit);
 
+    // Create HdrStateMonitor for real-time HDR state change detection
+    info!("Creating HDR state monitor");
+    let hdr_state_monitor = HdrStateMonitor::new(HdrController::new()?, hdr_state_tx)?;
+    profiler.record_phase(StartupPhase::HdrMonitorInit);
+
     // Create AppController (it will create its own HdrController)
     info!("Creating application controller");
     let app_controller = AppController::new(
         config.clone(),
         process_event_rx,
+        hdr_state_rx,
         app_state_tx,
         watch_list_ref,
     )?;
@@ -437,6 +444,10 @@ fn initialize_components(
         let controller_guard = app_controller_handle.lock();
         controller_guard.send_initial_state();
     }
+
+    // Start HDR state monitor in background thread
+    info!("Starting HDR state monitor thread");
+    let _hdr_monitor_handle = hdr_state_monitor.start();
 
     Ok((process_monitor, gui_controller, should_show_hdr_warning))
 }

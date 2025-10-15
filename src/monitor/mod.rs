@@ -89,6 +89,8 @@
 //! - Requirement 2.6: Fire events to application logic controller
 //! - Requirement 2.7: Document process name collision limitation
 
+pub mod hdr_state_monitor;
 pub mod process_monitor;
 
+pub use hdr_state_monitor::{HdrStateEvent, HdrStateMonitor};
 pub use process_monitor::{ProcessEvent, ProcessMonitor};

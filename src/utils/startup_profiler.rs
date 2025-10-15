@@ -27,6 +27,8 @@ pub enum StartupPhase {
     ConfigLoad,
     /// HDR controller initialization
     HdrControllerInit,
+    /// HDR state monitor creation
+    HdrMonitorInit,
     /// Process monitor creation
     ProcessMonitorInit,
     /// Application controller creation
@@ -48,6 +50,7 @@ impl StartupPhase {
             StartupPhase::VersionDetection => "Version Detection",
             StartupPhase::ConfigLoad => "Configuration Load",
             StartupPhase::HdrControllerInit => "HDR Controller Init",
+            StartupPhase::HdrMonitorInit => "HDR State Monitor Init",
             StartupPhase::ProcessMonitorInit => "Process Monitor Init",
             StartupPhase::AppControllerInit => "App Controller Init",
             StartupPhase::GuiControllerInit => "GUI Controller Init",

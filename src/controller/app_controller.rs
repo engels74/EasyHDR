@@ -6,7 +6,7 @@
 use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
 use crate::error::Result;
 use crate::hdr::HdrController;
-use crate::monitor::ProcessEvent;
+use crate::monitor::{HdrStateEvent, ProcessEvent};
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -37,6 +37,8 @@ pub struct AppController {
     current_hdr_state: AtomicBool,
     /// Event receiver from process monitor (taken when event loop starts)
     event_receiver: Option<mpsc::Receiver<ProcessEvent>>,
+    /// Event receiver from HDR state monitor (taken when event loop starts)
+    hdr_state_receiver: Option<mpsc::Receiver<HdrStateEvent>>,
     /// State sender to GUI
     gui_state_sender: mpsc::Sender<AppState>,
     /// Last toggle time for debouncing
@@ -52,11 +54,13 @@ impl AppController {
     ///
     /// * `config` - Application configuration
     /// * `event_receiver` - Channel receiver for process events from ProcessMonitor
+    /// * `hdr_state_receiver` - Channel receiver for HDR state events from HdrStateMonitor
     /// * `gui_state_sender` - Channel sender for state updates to GUI
     /// * `process_monitor_watch_list` - Shared reference to ProcessMonitor's watch list
     pub fn new(
         config: AppConfig,
         event_receiver: mpsc::Receiver<ProcessEvent>,
+        hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
         gui_state_sender: mpsc::Sender<AppState>,
         process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
     ) -> Result<Self> {
@@ -75,6 +79,7 @@ impl AppController {
             active_process_count: AtomicUsize::new(0),
             current_hdr_state: AtomicBool::new(initial_hdr_state),
             event_receiver: Some(event_receiver),
+            hdr_state_receiver: Some(hdr_state_receiver),
             gui_state_sender,
             last_toggle_time: Arc::new(Mutex::new(Instant::now())),
             process_monitor_watch_list,
@@ -134,18 +139,28 @@ impl AppController {
         self.event_receiver.take()
     }
 
+    /// Take ownership of the HDR state receiver if it hasn't been taken yet
+    ///
+    /// The receiver is stored as an Option so it can be moved out exactly once.
+    /// Subsequent attempts to take it return None and should be treated as
+    /// a no-op by callers.
+    fn take_hdr_state_receiver(&mut self) -> Option<mpsc::Receiver<HdrStateEvent>> {
+        self.hdr_state_receiver.take()
+    }
+
     /// Run the main event loop
     ///
     /// This method implements the main event loop that receives process events from the
-    /// ProcessMonitor and handles them appropriately.
+    /// ProcessMonitor and HDR state events from the HdrStateMonitor.
     ///
     /// # Behavior
     ///
-    /// 1. Enters main event loop, receiving events from event_receiver
-    /// 2. Calls handle_process_event() for each received event
+    /// 1. Enters main event loop, receiving events from both channels
+    /// 2. Calls handle_process_event() for ProcessEvent or handle_hdr_state_event() for HdrStateEvent
     /// 3. Handles channel disconnection gracefully by exiting the loop
     /// 4. Logs all significant events and errors
     pub fn run(&mut self) {
+        use std::sync::mpsc::TryRecvError;
         use tracing::{info, warn};
 
         let Some(event_receiver) = self.take_event_receiver() else {
@@ -153,21 +168,37 @@ impl AppController {
             return;
         };
 
+        let Some(hdr_state_receiver) = self.take_hdr_state_receiver() else {
+            warn!("Event loop already running; run() call ignored");
+            return;
+        };
+
         // Main event loop
-        info!("Entering main event loop");
+        info!("Entering main event loop (process events + HDR state events)");
         loop {
+            // Check for process events (blocking)
             match event_receiver.recv() {
                 Ok(event) => {
-                    // Handle the process event
                     self.handle_process_event(event);
                 }
-                Err(e) => {
-                    // Channel disconnected - this means the ProcessMonitor thread has stopped
-                    warn!(
-                        "Event receiver channel disconnected: {}. Exiting event loop.",
-                        e
-                    );
+                Err(_) => {
+                    warn!("Process event receiver channel disconnected. Exiting event loop.");
                     break;
+                }
+            }
+
+            // Check for HDR state events (non-blocking, drain all available)
+            loop {
+                match hdr_state_receiver.try_recv() {
+                    Ok(event) => {
+                        self.handle_hdr_state_event(event);
+                    }
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        warn!("HDR state receiver channel disconnected.");
+                        // Continue processing process events even if HDR monitor stops
+                        break;
+                    }
                 }
             }
         }
@@ -178,34 +209,55 @@ impl AppController {
     /// Spawn the event loop in a background thread for a shared controller instance
     ///
     /// This helper is used by the GUI setup to start processing process monitor events
-    /// without holding the controller mutex for the entire lifetime of the thread.
-    /// The background thread takes ownership of the event receiver and only locks
-    /// the controller while handling individual events, preventing GUI callbacks
+    /// and HDR state events without holding the controller mutex for the entire lifetime
+    /// of the thread. The background thread takes ownership of both event receivers and
+    /// only locks the controller while handling individual events, preventing GUI callbacks
     /// from being blocked when they need short-lived access to the controller.
     pub fn spawn_event_loop(controller: Arc<Mutex<AppController>>) -> std::thread::JoinHandle<()> {
-        let event_receiver = {
+        use std::sync::mpsc::TryRecvError;
+
+        let (event_receiver, hdr_state_receiver) = {
             let mut controller_guard = controller.lock();
-            controller_guard
-                .take_event_receiver()
-                .expect("AppController event receiver already taken")
+            (
+                controller_guard
+                    .take_event_receiver()
+                    .expect("AppController event receiver already taken"),
+                controller_guard
+                    .take_hdr_state_receiver()
+                    .expect("AppController HDR state receiver already taken"),
+            )
         };
 
         std::thread::spawn(move || {
             use tracing::{info, warn};
 
-            info!("Entering main event loop");
+            info!("Entering main event loop (process events + HDR state events)");
             loop {
+                // Check for process events (blocking)
                 match event_receiver.recv() {
                     Ok(event) => {
                         let mut controller_guard = controller.lock();
                         controller_guard.handle_process_event(event);
                     }
-                    Err(e) => {
-                        warn!(
-                            "Event receiver channel disconnected: {}. Exiting event loop.",
-                            e
-                        );
+                    Err(_) => {
+                        warn!("Process event receiver channel disconnected. Exiting event loop.");
                         break;
+                    }
+                }
+
+                // Check for HDR state events (non-blocking, drain all available)
+                loop {
+                    match hdr_state_receiver.try_recv() {
+                        Ok(event) => {
+                            let mut controller_guard = controller.lock();
+                            controller_guard.handle_hdr_state_event(event);
+                        }
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => {
+                            warn!("HDR state receiver channel disconnected.");
+                            // Continue processing process events even if HDR monitor stops
+                            break;
+                        }
                     }
                 }
             }
@@ -312,6 +364,38 @@ impl AppController {
                 }
             }
         }
+    }
+
+    /// Handle an HDR state event
+    ///
+    /// Processes HdrStateEvent::Enabled and HdrStateEvent::Disabled events from the HDR state monitor.
+    /// These events are sent when HDR is manually toggled via Windows settings, allowing the application
+    /// to update its internal state and GUI to reflect the external change.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - The HDR state event to handle (Enabled or Disabled)
+    ///
+    /// # Note
+    ///
+    /// This method does NOT call toggle_hdr() because the HDR state has already been changed externally.
+    /// It only updates the application's cached state and sends a GUI update to reflect the new state.
+    fn handle_hdr_state_event(&mut self, event: HdrStateEvent) {
+        use tracing::info;
+
+        match event {
+            HdrStateEvent::Enabled => {
+                info!("HDR was enabled externally (via Windows settings)");
+                self.current_hdr_state.store(true, Ordering::SeqCst);
+            }
+            HdrStateEvent::Disabled => {
+                info!("HDR was disabled externally (via Windows settings)");
+                self.current_hdr_state.store(false, Ordering::SeqCst);
+            }
+        }
+
+        // Send state update to GUI to reflect the external change
+        self.send_state_update();
     }
 
     /// Toggle HDR state
@@ -737,10 +821,11 @@ mod tests {
     fn test_app_controller_creation() {
         let config = AppConfig::default();
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let controller = AppController::new(config, event_rx, state_tx, watch_list);
+        let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
         assert!(controller.is_ok());
     }
 
@@ -758,10 +843,12 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Initial count should be 0
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
@@ -791,10 +878,12 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Handle a started event with different case
         controller.handle_process_event(ProcessEvent::Started("APP".to_string()));
@@ -817,10 +906,12 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Handle a started event for the disabled app
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
@@ -843,10 +934,12 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start the app first
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
@@ -891,10 +984,12 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start first app
         controller.handle_process_event(ProcessEvent::Started("app1".to_string()));
@@ -937,11 +1032,13 @@ mod tests {
     fn test_add_application() {
         let config = AppConfig::default();
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
-            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
+                .unwrap();
 
         // Create a new app to add
         let app = MonitoredApp {
@@ -992,11 +1089,13 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
-            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
+                .unwrap();
 
         // Remove the application
         let result = controller.remove_application(app_id);
@@ -1036,11 +1135,13 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
-            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
+                .unwrap();
 
         // Initially populate watch list
         controller.update_process_monitor_watch_list();
@@ -1091,10 +1192,12 @@ mod tests {
     fn test_update_preferences() {
         let config = AppConfig::default();
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Create new preferences
         let new_prefs = UserPreferences {
@@ -1147,7 +1250,8 @@ mod tests {
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let controller =
-            AppController::new(config, event_rx, state_tx, watch_list.clone()).unwrap();
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
+                .unwrap();
 
         // Update watch list
         controller.update_process_monitor_watch_list();
@@ -1173,10 +1277,12 @@ mod tests {
         });
 
         let (event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Spawn thread to run the event loop
         let handle = std::thread::spawn(move || {
@@ -1209,10 +1315,12 @@ mod tests {
         let config = AppConfig::default();
 
         let (event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Spawn thread to run the event loop
         let handle = std::thread::spawn(move || {
@@ -1251,10 +1359,12 @@ mod tests {
         });
 
         let (event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Spawn thread to run the event loop
         let handle = std::thread::spawn(move || {
@@ -1313,10 +1423,12 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start the app - HDR should turn on
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
@@ -1376,10 +1488,12 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-        let mut controller = AppController::new(config, event_rx, state_tx, watch_list).unwrap();
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start the app - HDR should turn on immediately
         controller.handle_process_event(ProcessEvent::Started("app".to_string()));
