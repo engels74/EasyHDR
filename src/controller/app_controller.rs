@@ -409,9 +409,14 @@ impl AppController {
     /// controller are fully initialized to ensure the GUI displays all apps
     /// from the configuration file.
     ///
+    /// This method also populates the ProcessMonitor watch list with enabled
+    /// applications from the loaded configuration, ensuring process detection
+    /// works immediately after startup.
+    ///
     /// # Requirements
     ///
     /// - GUI should display all monitored applications from config on startup
+    /// - ProcessMonitor should be initialized with enabled applications
     ///
     /// # Example
     ///
@@ -437,6 +442,12 @@ impl AppController {
         use tracing::info;
 
         info!("Sending initial state update to populate GUI");
+
+        // Populate ProcessMonitor watch list with enabled apps from loaded config
+        // This is critical for process detection to work after startup
+        info!("Initializing ProcessMonitor watch list from loaded configuration");
+        self.update_process_monitor_watch_list();
+
         self.send_state_update();
     }
 
