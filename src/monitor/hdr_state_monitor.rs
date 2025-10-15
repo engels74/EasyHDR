@@ -56,6 +56,9 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 #[cfg(windows)]
+use tracing::error;
+
+#[cfg(windows)]
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -269,7 +272,7 @@ impl HdrStateMonitor {
             let atom = RegisterClassW(&wnd_class);
             if atom == 0 {
                 return Err(crate::error::EasyHdrError::WindowsApiError(
-                    "Failed to register window class".to_string(),
+                    windows::core::Error::from_thread(),
                 ));
             }
 
@@ -290,16 +293,16 @@ impl HdrStateMonitor {
                 0,
                 0,
                 0,
-                HWND_MESSAGE, // Message-only window (no GUI)
+                Some(HWND_MESSAGE), // Message-only window (no GUI)
                 None,
                 None,
                 None,
-            );
+            )?;
 
-            if hwnd.0 == 0 {
-                UnregisterClassW(PCWSTR(class_name_wide.as_ptr()), None);
+            if hwnd.0.is_null() {
+                let _ = UnregisterClassW(PCWSTR(class_name_wide.as_ptr()), None);
                 return Err(crate::error::EasyHdrError::WindowsApiError(
-                    "Failed to create message-only window".to_string(),
+                    windows::core::Error::from_thread(),
                 ));
             }
 
@@ -312,7 +315,7 @@ impl HdrStateMonitor {
             }
 
             // Cleanup
-            UnregisterClassW(PCWSTR(class_name_wide.as_ptr()), None);
+            let _ = UnregisterClassW(PCWSTR(class_name_wide.as_ptr()), None);
             debug!("Unregistered window class and cleaned up");
 
             Ok(())
@@ -331,7 +334,7 @@ struct MonitorState {
 // Thread-local storage for monitor state
 #[cfg(windows)]
 thread_local! {
-    static MONITOR_STATE_TLS: std::cell::RefCell<Option<Arc<MonitorState>>> = std::cell::RefCell::new(None);
+    static MONITOR_STATE_TLS: std::cell::RefCell<Option<Arc<MonitorState>>> = const { std::cell::RefCell::new(None) };
 }
 
 /// Window procedure for the message-only window
@@ -437,11 +440,9 @@ mod tests {
         // Create HDR controller
         let hdr_controller = HdrController::new().expect("Failed to create HDR controller");
 
-        // Detect current state
-        let state = HdrStateMonitor::detect_current_hdr_state_internal(&hdr_controller);
-
-        // State should be a valid boolean
-        assert!(state == true || state == false);
+        // Detect current state - this should not panic
+        let _state = HdrStateMonitor::detect_current_hdr_state_internal(&hdr_controller);
+        // The state is either true or false, both are valid
     }
 
     #[test]
