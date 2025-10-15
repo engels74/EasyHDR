@@ -1246,6 +1246,7 @@ mod tests {
         });
 
         let (_event_tx, event_rx) = mpsc::channel();
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
         let (state_tx, _state_rx) = mpsc::channel();
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 

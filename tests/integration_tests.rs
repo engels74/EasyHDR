@@ -123,6 +123,7 @@ fn test_process_monitor_integration() {
 #[test]
 fn test_app_controller_hdr_logic_integration() {
     let (_event_tx, event_rx) = mpsc::channel();
+    let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
     let (state_tx, _state_rx) = mpsc::channel();
 
     // Create a test config
@@ -139,7 +140,7 @@ fn test_app_controller_hdr_logic_integration() {
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
     // Create the controller
-    let controller = AppController::new(config, event_rx, state_tx, watch_list);
+    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
 
     assert!(controller.is_ok(), "Controller creation should succeed");
 
@@ -197,6 +198,7 @@ fn test_config_manager_creates_directory() {
 #[test]
 fn test_multiple_apps_integration() {
     let (_event_tx, event_rx) = mpsc::channel();
+    let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
     let (state_tx, _state_rx) = mpsc::channel();
 
     // Create a config with multiple apps
@@ -220,7 +222,7 @@ fn test_multiple_apps_integration() {
 
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-    let controller = AppController::new(config, event_rx, state_tx, watch_list);
+    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
 
     assert!(controller.is_ok());
 
@@ -232,6 +234,7 @@ fn test_multiple_apps_integration() {
 #[test]
 fn test_disabled_apps_ignored() {
     let (_event_tx, event_rx) = mpsc::channel();
+    let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
     let (state_tx, _state_rx) = mpsc::channel();
 
     let mut config = AppConfig::default();
@@ -246,7 +249,7 @@ fn test_disabled_apps_ignored() {
 
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
-    let controller = AppController::new(config, event_rx, state_tx, watch_list);
+    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
 
     assert!(controller.is_ok());
 }
