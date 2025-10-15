@@ -60,18 +60,69 @@ impl AppController {
         gui_state_sender: mpsc::Sender<AppState>,
         process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
     ) -> Result<Self> {
+        use tracing::info;
+
         let hdr_controller = HdrController::new()?;
+
+        // Detect the actual current HDR state at startup
+        // This ensures the GUI displays the correct initial state
+        let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
+        info!("Detected initial HDR state: {}", initial_hdr_state);
 
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
             hdr_controller,
             active_process_count: AtomicUsize::new(0),
-            current_hdr_state: AtomicBool::new(false),
+            current_hdr_state: AtomicBool::new(initial_hdr_state),
             event_receiver: Some(event_receiver),
             gui_state_sender,
             last_toggle_time: Arc::new(Mutex::new(Instant::now())),
             process_monitor_watch_list,
         })
+    }
+
+    /// Detect the current HDR state from the system
+    ///
+    /// Checks all HDR-capable displays and returns true if any of them have HDR enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `hdr_controller` - Reference to the HDR controller
+    ///
+    /// # Returns
+    ///
+    /// Returns true if HDR is enabled on any HDR-capable display, false otherwise.
+    fn detect_current_hdr_state(hdr_controller: &HdrController) -> bool {
+        use tracing::{debug, warn};
+
+        let displays = hdr_controller.get_display_cache();
+
+        // Check each HDR-capable display
+        for disp in displays.iter().filter(|d| d.supports_hdr) {
+            match hdr_controller.is_hdr_enabled(disp) {
+                Ok(enabled) => {
+                    if enabled {
+                        debug!(
+                            "Display (adapter={:#x}:{:#x}, target={}) has HDR enabled",
+                            disp.adapter_id.LowPart, disp.adapter_id.HighPart, disp.target_id
+                        );
+                        return true;
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to check HDR state for display (adapter={:#x}:{:#x}, target={}): {}",
+                        disp.adapter_id.LowPart,
+                        disp.adapter_id.HighPart,
+                        disp.target_id,
+                        e
+                    );
+                }
+            }
+        }
+
+        // No displays have HDR enabled
+        false
     }
 
     /// Take ownership of the event receiver if it hasn't been taken yet
