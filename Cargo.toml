@@ -53,9 +53,9 @@ windows = { version = "0.52", features = [
     "Win32_System_Threading",
 ] }
 winreg = "0.52"
-tray-icon = "0.12"
+tray-icon = "0.21"
 rfd = "0.12"  # File dialogs
-winrt-notification = "0.5"  # Windows toast notifications
+tauri-winrt-notification = "0.7"  # Windows toast notifications
 image = { version = "0.24", default-features = false, features = ["ico"] }  # ICO decoding for tray icons
 
 [build-dependencies]

@@ -526,7 +526,7 @@ impl TrayIcon {
     ///
     /// # Implementation Notes
     ///
-    /// This method uses the `winrt-notification` crate to display Windows toast notifications.
+    /// This method uses the `tauri-winrt-notification` crate to display Windows toast notifications.
     /// The notification includes:
     /// - Title: "EasyHDR"
     /// - Message: The provided message (e.g., "HDR Enabled" or "HDR Disabled")
@@ -555,11 +555,11 @@ impl TrayIcon {
 
         info!("Showing tray notification: {}", message);
 
-        // Use winrt-notification to show a Windows toast notification
+        // Use tauri-winrt-notification to show a Windows toast notification
         // This is only available on Windows
         #[cfg(windows)]
         {
-            use winrt_notification::{Duration, Sound, Toast};
+            use tauri_winrt_notification::{Duration, Sound, Toast};
 
             // Create and show the toast notification
             // Use POWERSHELL_APP_ID as a fallback since we don't have a registered AppUserModelID yet
