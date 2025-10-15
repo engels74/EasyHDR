@@ -188,7 +188,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         let mut icon_info: ICONINFO = zeroed();
         if GetIconInfo(hicon, &mut icon_info).is_err() {
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32(),
+                windows::core::Error::from_thread(),
             ));
         }
 
@@ -199,15 +199,15 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         // Get bitmap information
         let mut bitmap: BITMAP = zeroed();
         if GetObjectW(
-            color_bitmap,
+            color_bitmap.into(),
             std::mem::size_of::<BITMAP>() as i32,
             Some(&mut bitmap as *mut BITMAP as *mut _),
         ) == 0
         {
-            DeleteObject(color_bitmap);
-            DeleteObject(mask_bitmap);
+            let _ = DeleteObject(color_bitmap.into());
+            let _ = DeleteObject(mask_bitmap.into());
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32(),
+                windows::core::Error::from_thread(),
             ));
         }
 
@@ -217,15 +217,15 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         // Create a device context
         let hdc = CreateCompatibleDC(None);
         if hdc.is_invalid() {
-            DeleteObject(color_bitmap);
-            DeleteObject(mask_bitmap);
+            let _ = DeleteObject(color_bitmap.into());
+            let _ = DeleteObject(mask_bitmap.into());
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32(),
+                windows::core::Error::from_thread(),
             ));
         }
 
         // Select the bitmap into the DC
-        let old_bitmap = SelectObject(hdc, color_bitmap);
+        let old_bitmap = SelectObject(hdc, color_bitmap.into());
 
         // Prepare BITMAPINFO structure
         let mut bmi: BITMAPINFO = zeroed();
@@ -251,14 +251,14 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         );
 
         // Cleanup
-        SelectObject(hdc, old_bitmap);
-        DeleteDC(hdc);
-        DeleteObject(color_bitmap);
-        DeleteObject(mask_bitmap);
+        let _ = SelectObject(hdc, old_bitmap);
+        let _ = DeleteDC(hdc);
+        let _ = DeleteObject(color_bitmap.into());
+        let _ = DeleteObject(mask_bitmap.into());
 
         if result == 0 {
             return Err(EasyHdrError::WindowsApiError(
-                windows::core::Error::from_win32(),
+                windows::core::Error::from_thread(),
             ));
         }
 
@@ -415,7 +415,7 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
         // Get version info
         if GetFileVersionInfoW(
             PCWSTR(wide_path.as_ptr()),
-            handle,
+            Some(handle),
             size,
             buffer.as_mut_ptr() as *mut _,
         )

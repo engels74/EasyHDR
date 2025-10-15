@@ -56,7 +56,7 @@ impl WindowsVersion {
             match Self::detect_with_get_version_ex() {
                 Ok(version) => Ok(version),
                 Err(_e) => Err(crate::error::EasyHdrError::WindowsApiError(
-                    windows::core::Error::from_win32(),
+                    windows::core::Error::from_thread(),
                 )),
             }
         }
@@ -186,7 +186,7 @@ impl WindowsVersion {
                 Ok(version_info.dwBuildNumber)
             } else {
                 Err(crate::error::EasyHdrError::WindowsApiError(
-                    windows::core::Error::from_win32(),
+                    windows::core::Error::from_thread(),
                 ))
             }
         }

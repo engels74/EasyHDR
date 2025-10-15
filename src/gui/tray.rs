@@ -239,7 +239,7 @@ impl TrayIcon {
         );
 
         // Decode the ICO file using the image crate
-        use image::io::Reader as ImageReader;
+        use image::ImageReader;
         use std::io::Cursor;
 
         match ImageReader::new(Cursor::new(icon_data))
