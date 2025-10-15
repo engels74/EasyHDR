@@ -62,6 +62,7 @@
 //!
 //! // Create channels
 //! let (event_tx, event_rx) = mpsc::channel();
+//! let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
 //! let (state_tx, state_rx) = mpsc::channel();
 //!
 //! // Create shared watch list
@@ -71,6 +72,7 @@
 //! let mut controller = AppController::new(
 //!     config,
 //!     event_rx,
+//!     hdr_state_rx,
 //!     state_tx,
 //!     watch_list,
 //! )?;

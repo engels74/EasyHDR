@@ -513,11 +513,12 @@ impl AppController {
     ///
     /// let config = AppConfig::default();
     /// let (_event_tx, event_rx) = mpsc::channel();
+    /// let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
     /// let (state_tx, _state_rx) = mpsc::channel();
     /// let watch_list = Arc::new(Mutex::new(HashSet::new()));
     ///
     /// let controller = Arc::new(Mutex::new(
-    ///     AppController::new(config, event_rx, state_tx, watch_list).unwrap()
+    ///     AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap()
     /// ));
     /// let controller_guard = controller.lock();
     /// controller_guard.send_initial_state();
