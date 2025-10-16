@@ -1104,59 +1104,6 @@ impl GuiController {
         Ok(())
     }
 
-    /// Release GUI resources when minimized to tray
-    ///
-    /// This method releases cached icon data to reduce memory usage when the
-    /// window is minimized to the system tray. Icons can be reloaded when
-    /// the window is restored.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 9.6: Release GUI resources when minimized to tray
-    /// - Task 16.1: Optimize memory usage
-    ///
-    /// # Implementation Details
-    ///
-    /// Releases icon data from all monitored applications to free memory.
-    /// The icons will be lazily reloaded when the window is shown again.
-    ///
-    /// Note: Currently unused since we exit immediately on window close instead of
-    /// minimizing to tray. Kept for potential future use.
-    #[allow(dead_code)]
-    fn release_gui_resources(controller: &Arc<Mutex<AppController>>) {
-        use tracing::info;
-
-        info!("Releasing GUI resources (icon cache) to reduce memory usage");
-
-        let controller_guard = controller.lock();
-        let mut config = controller_guard.config.lock();
-
-        // Release all icon data
-        let mut released_count = 0;
-        for app in &mut config.monitored_apps {
-            if app.icon_data.is_some() {
-                app.release_icon();
-                released_count += 1;
-            }
-        }
-
-        drop(config);
-        drop(controller_guard);
-
-        info!("Released {} icon(s) from cache", released_count);
-
-        // Log memory stats after release
-        #[cfg(windows)]
-        {
-            use crate::utils::memory_profiler;
-            memory_profiler::get_profiler().log_stats();
-        }
-    }
-
     /// Reload GUI resources when window is shown
     ///
     /// This method reloads icon data that was released when the window was

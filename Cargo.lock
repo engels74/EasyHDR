@@ -1314,7 +1314,6 @@ name = "easyhdr"
 version = "0.1.0"
 dependencies = [
  "image",
- "once_cell",
  "parking_lot",
  "rfd",
  "serde",

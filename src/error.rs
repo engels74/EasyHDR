@@ -49,34 +49,53 @@ pub type Result<T> = std::result::Result<T, EasyHdrError>;
 ///
 /// This function takes an EasyHdrError and returns a message suitable
 /// for displaying to end users in error dialogs.
+///
+/// The messages include detailed troubleshooting hints to help users
+/// resolve common issues.
 pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
     match error {
-        EasyHdrError::HdrNotSupported => {
-            "Your display doesn't support HDR. Please check your hardware specifications."
+        EasyHdrError::HdrNotSupported => "Your display doesn't support HDR.\n\n\
+             Please check your hardware specifications and ensure:\n\
+             - Your display supports HDR10 or higher\n\
+             - Your GPU supports HDR output\n\
+             - You're using a compatible connection (HDMI 2.0+ or DisplayPort 1.4+)"
+            .to_string(),
+        EasyHdrError::HdrControlFailed(_) | EasyHdrError::DriverError(_) => {
+            "Unable to control HDR.\n\n\
+             Please ensure:\n\
+             - Your display drivers are up to date\n\
+             - HDR is enabled in Windows display settings\n\
+             - Your display is properly connected"
                 .to_string()
         }
-        EasyHdrError::HdrControlFailed(_) | EasyHdrError::DriverError(_) => {
-            "Unable to control HDR. Please ensure your display drivers are up to date.".to_string()
-        }
-        EasyHdrError::ProcessMonitorError(_) => {
-            "Failed to monitor processes. The application may not function correctly.".to_string()
-        }
-        EasyHdrError::ConfigError(_) => {
-            "Failed to load or save configuration. Your settings may not persist.".to_string()
-        }
+        EasyHdrError::ProcessMonitorError(_) => "Failed to monitor processes.\n\n\
+             The application may not function correctly.\n\
+             Try restarting the application."
+            .to_string(),
+        EasyHdrError::ConfigError(_) => "Failed to load or save configuration.\n\n\
+             Your settings may not persist.\n\
+             Check that you have write permissions to:\n\
+             %APPDATA%\\EasyHDR"
+            .to_string(),
         #[cfg(windows)]
         EasyHdrError::WindowsApiError(e) => {
             format!(
-                "Windows API error: {}. Please check your system configuration.",
+                "A Windows API error occurred:\n\n{}\n\n\
+                 Please ensure your Windows installation is up to date.",
                 e
             )
         }
         EasyHdrError::IoError(e) => {
-            format!("File system error: {}. Please check file permissions.", e)
+            format!(
+                "A file system error occurred:\n\n{}\n\n\
+                 Please check file permissions and disk space.",
+                e
+            )
         }
         EasyHdrError::JsonError(e) => {
             format!(
-                "Configuration format error: {}. The configuration file may be corrupted.",
+                "Configuration file is corrupted:\n\n{}\n\n\
+                 The application will use default settings.",
                 e
             )
         }

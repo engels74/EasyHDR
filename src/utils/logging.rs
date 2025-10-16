@@ -11,11 +11,6 @@ use tracing_subscriber::{fmt, EnvFilter};
 /// Maximum log file size in bytes (5MB)
 const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024;
 
-/// Number of historical log files to keep
-// TODO: Use in rotation logic or remove if not needed
-#[allow(dead_code)]
-const MAX_LOG_FILES: usize = 3;
-
 /// Initialize the logging system
 ///
 /// Sets up logging to %APPDATA%\EasyHDR\app.log with rotation at 5MB

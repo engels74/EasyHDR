@@ -189,8 +189,8 @@ impl Default for MemoryProfiler {
 }
 
 /// Global memory profiler instance
-static MEMORY_PROFILER: once_cell::sync::Lazy<MemoryProfiler> =
-    once_cell::sync::Lazy::new(MemoryProfiler::new);
+static MEMORY_PROFILER: std::sync::LazyLock<MemoryProfiler> =
+    std::sync::LazyLock::new(MemoryProfiler::new);
 
 /// Get the global memory profiler instance
 pub fn get_profiler() -> &'static MemoryProfiler {

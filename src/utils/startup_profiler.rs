@@ -220,8 +220,8 @@ impl Default for StartupProfiler {
 }
 
 /// Global startup profiler instance
-static STARTUP_PROFILER: once_cell::sync::Lazy<StartupProfiler> =
-    once_cell::sync::Lazy::new(StartupProfiler::new);
+static STARTUP_PROFILER: std::sync::LazyLock<StartupProfiler> =
+    std::sync::LazyLock::new(StartupProfiler::new);
 
 /// Get the global startup profiler instance
 pub fn get_profiler() -> &'static StartupProfiler {
