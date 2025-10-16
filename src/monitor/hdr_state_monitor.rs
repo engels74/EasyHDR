@@ -394,7 +394,10 @@ unsafe extern "system" fn window_proc(
             // Try immediate check
             if !check_hdr_state_change() {
                 // State didn't change - schedule first recheck at 250ms
-                debug!("HDR state unchanged on WM_DISPLAYCHANGE, scheduling first recheck at {}ms", INITIAL_DELAY_MS);
+                debug!(
+                    "HDR state unchanged on WM_DISPLAYCHANGE, scheduling first recheck at {}ms",
+                    INITIAL_DELAY_MS
+                );
                 SetTimer(Some(hwnd), TIMER_ID_HDR_RECHECK_1, INITIAL_DELAY_MS, None);
             }
             LRESULT(0)
@@ -405,7 +408,10 @@ unsafe extern "system" fn window_proc(
             // Try immediate check
             if !check_hdr_state_change() {
                 // State didn't change - schedule first recheck at 250ms
-                debug!("HDR state unchanged on WM_SETTINGCHANGE, scheduling first recheck at {}ms", INITIAL_DELAY_MS);
+                debug!(
+                    "HDR state unchanged on WM_SETTINGCHANGE, scheduling first recheck at {}ms",
+                    INITIAL_DELAY_MS
+                );
                 SetTimer(Some(hwnd), TIMER_ID_HDR_RECHECK_1, INITIAL_DELAY_MS, None);
             }
             LRESULT(0)
