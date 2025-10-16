@@ -129,16 +129,47 @@ mod tests {
     use crate::config::models::MonitoredApp;
     use std::fs;
     use std::path::PathBuf;
+    use tempfile::TempDir;
     use uuid::Uuid;
 
-    /// Helper function to create a temporary test directory
-    fn create_test_dir() -> PathBuf {
-        let test_dir = std::env::temp_dir().join(format!("easyhdr_test_{}", Uuid::new_v4()));
-        fs::create_dir_all(&test_dir).unwrap();
-        test_dir
+    /// Helper function to create a temporary test directory using tempfile
+    /// Returns a TempDir that automatically cleans up when dropped
+    fn create_test_dir() -> TempDir {
+        tempfile::tempdir().expect("Failed to create temp directory")
     }
 
-    /// Helper function to clean up test directory
+    /// Helper to set APPDATA for a test scope
+    /// Returns a guard that restores the original value when dropped
+    struct AppdataGuard {
+        original: Option<String>,
+    }
+
+    impl AppdataGuard {
+        fn new(temp_dir: &TempDir) -> Self {
+            let original = std::env::var("APPDATA").ok();
+            unsafe {
+                std::env::set_var("APPDATA", temp_dir.path());
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for AppdataGuard {
+        fn drop(&mut self) {
+            if let Some(ref original) = self.original {
+                unsafe {
+                    std::env::set_var("APPDATA", original);
+                }
+            } else {
+                unsafe {
+                    std::env::remove_var("APPDATA");
+                }
+            }
+        }
+    }
+
+    /// Helper function to clean up test directory (deprecated - use TempDir instead)
+    #[allow(dead_code)]
     fn cleanup_test_dir(dir: &PathBuf) {
         if dir.exists() {
             fs::remove_dir_all(dir).ok();
@@ -177,6 +208,7 @@ mod tests {
     #[test]
     fn test_save_and_load_round_trip() {
         let test_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&test_dir);
 
         // Create a config with data
         let mut config = AppConfig::default();
@@ -192,7 +224,7 @@ mod tests {
         config.preferences.monitoring_interval_ms = 500;
 
         // Create config directory manually
-        let config_dir = test_dir.join("EasyHDR");
+        let config_dir = test_dir.path().join("EasyHDR");
         fs::create_dir_all(&config_dir).unwrap();
 
         // Write config directly to test directory
@@ -229,20 +261,16 @@ mod tests {
             loaded_config.preferences.monitoring_interval_ms
         );
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
     fn test_load_corrupt_json_returns_defaults() {
         let test_dir = create_test_dir();
-
-        // Override APPDATA for this test
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
+        let _guard = AppdataGuard::new(&test_dir);
 
         // Create config directory
-        let config_dir = test_dir.join("EasyHDR");
+        let config_dir = test_dir.path().join("EasyHDR");
         fs::create_dir_all(&config_dir).unwrap();
 
         // Write corrupt JSON to config file
@@ -260,20 +288,16 @@ mod tests {
         assert_eq!(config.preferences.monitoring_interval_ms, 1000);
         assert!(!config.preferences.auto_start);
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
     fn test_load_incomplete_json_returns_defaults() {
         let test_dir = create_test_dir();
-
-        // Override APPDATA for this test
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
+        let _guard = AppdataGuard::new(&test_dir);
 
         // Create config directory
-        let config_dir = test_dir.join("EasyHDR");
+        let config_dir = test_dir.path().join("EasyHDR");
         fs::create_dir_all(&config_dir).unwrap();
 
         // Write incomplete JSON (missing required fields)
@@ -289,20 +313,16 @@ mod tests {
         // Verify we got default config
         assert_eq!(config.monitored_apps.len(), 0);
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
     fn test_load_malformed_json_returns_defaults() {
         let test_dir = create_test_dir();
-
-        // Override APPDATA for this test
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
+        let _guard = AppdataGuard::new(&test_dir);
 
         // Create config directory
-        let config_dir = test_dir.join("EasyHDR");
+        let config_dir = test_dir.path().join("EasyHDR");
         fs::create_dir_all(&config_dir).unwrap();
 
         // Write various types of malformed JSON
@@ -334,17 +354,13 @@ mod tests {
             );
         }
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
     fn test_atomic_write_creates_temp_file() {
         let test_dir = create_test_dir();
-
-        // Override APPDATA for this test
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
+        let _guard = AppdataGuard::new(&test_dir);
 
         let config = AppConfig::default();
 
@@ -353,30 +369,26 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify the final config file exists
-        let config_path = test_dir.join("EasyHDR").join("config.json");
+        let config_path = test_dir.path().join("EasyHDR").join("config.json");
         assert!(config_path.exists(), "Final config file should exist");
 
         // Verify the temp file was cleaned up
-        let temp_path = test_dir.join("EasyHDR").join("config.json.tmp");
+        let temp_path = test_dir.path().join("EasyHDR").join("config.json.tmp");
         assert!(
             !temp_path.exists(),
             "Temp file should be removed after atomic write"
         );
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
     fn test_save_creates_directory_if_missing() {
         let test_dir = create_test_dir();
-
-        // Override APPDATA for this test
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
+        let _guard = AppdataGuard::new(&test_dir);
 
         // Ensure directory doesn't exist
-        let config_dir = test_dir.join("EasyHDR");
+        let config_dir = test_dir.path().join("EasyHDR");
         if config_dir.exists() {
             fs::remove_dir_all(&config_dir).unwrap();
         }
@@ -394,17 +406,13 @@ mod tests {
         let config_path = config_dir.join("config.json");
         assert!(config_path.exists(), "Config file should exist");
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
     fn test_ensure_config_dir() {
         let test_dir = create_test_dir();
-
-        // Override APPDATA for this test
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
+        let _guard = AppdataGuard::new(&test_dir);
 
         // Call ensure_config_dir
         let result = ConfigManager::ensure_config_dir();
@@ -416,14 +424,13 @@ mod tests {
         assert!(config_dir.exists());
         assert!(config_dir.to_string_lossy().contains("EasyHDR"));
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
     fn test_multiple_saves_overwrite_correctly() {
         let test_dir = create_test_dir();
-        let config_dir = test_dir.join("EasyHDR");
+        let config_dir = test_dir.path().join("EasyHDR");
         fs::create_dir_all(&config_dir).unwrap();
         let config_path = config_dir.join("config.json");
 
@@ -446,14 +453,13 @@ mod tests {
         assert_eq!(loaded.preferences.monitoring_interval_ms, 2000);
         assert!(loaded.preferences.auto_start);
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir automatically cleans up when dropped
     }
 
     #[test]
     fn test_save_preserves_all_fields() {
         let test_dir = create_test_dir();
-        let config_dir = test_dir.join("EasyHDR");
+        let config_dir = test_dir.path().join("EasyHDR");
         fs::create_dir_all(&config_dir).unwrap();
         let config_path = config_dir.join("config.json");
 
@@ -513,23 +519,19 @@ mod tests {
         assert_eq!(loaded.window_state.width, 1024);
         assert_eq!(loaded.window_state.height, 768);
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir automatically cleans up when dropped
     }
 
     #[test]
     fn test_config_json_is_pretty_printed() {
         let test_dir = create_test_dir();
-
-        // Override APPDATA for this test
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
+        let _guard = AppdataGuard::new(&test_dir);
 
         let config = AppConfig::default();
         ConfigManager::save(&config).unwrap();
 
         // Read the raw JSON file
-        let config_path = test_dir.join("EasyHDR").join("config.json");
+        let config_path = test_dir.path().join("EasyHDR").join("config.json");
         let json_content = fs::read_to_string(&config_path).unwrap();
 
         // Verify it's pretty-printed (contains newlines and indentation)
@@ -542,7 +544,122 @@ mod tests {
             "JSON should be pretty-printed with indentation"
         );
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+        // TempDir and AppdataGuard automatically clean up when dropped
+    }
+
+    // Property-based tests using proptest
+    #[cfg(test)]
+    mod proptests {
+        use super::*;
+        use crate::config::models::{MonitoredApp, UserPreferences, WindowState};
+        use proptest::prelude::*;
+        use std::path::PathBuf;
+        use uuid::Uuid;
+
+        /// Strategy for generating valid UserPreferences
+        fn user_preferences_strategy() -> impl Strategy<Value = UserPreferences> {
+            (any::<bool>(), 500u64..=2000u64, any::<bool>()).prop_map(
+                |(auto_start, monitoring_interval_ms, show_tray_notifications)| UserPreferences {
+                    auto_start,
+                    monitoring_interval_ms,
+                    show_tray_notifications,
+                },
+            )
+        }
+
+        /// Strategy for generating valid WindowState
+        fn window_state_strategy() -> impl Strategy<Value = WindowState> {
+            (
+                0i32..=2000i32,
+                0i32..=2000i32,
+                400u32..=2000u32,
+                300u32..=1500u32,
+            )
+                .prop_map(|(x, y, width, height)| WindowState {
+                    x,
+                    y,
+                    width,
+                    height,
+                })
+        }
+
+        /// Strategy for generating valid MonitoredApp
+        fn monitored_app_strategy() -> impl Strategy<Value = MonitoredApp> {
+            ("[a-zA-Z0-9_-]{1,20}", "[a-zA-Z0-9_-]{1,20}", any::<bool>()).prop_map(
+                |(display_name, process_name, enabled)| MonitoredApp {
+                    id: Uuid::new_v4(),
+                    display_name,
+                    exe_path: PathBuf::from(format!("C:\\Program Files\\{}.exe", process_name)),
+                    process_name,
+                    enabled,
+                    icon_data: None,
+                },
+            )
+        }
+
+        /// Strategy for generating valid AppConfig
+        fn app_config_strategy() -> impl Strategy<Value = AppConfig> {
+            (
+                prop::collection::vec(monitored_app_strategy(), 0..5),
+                user_preferences_strategy(),
+                window_state_strategy(),
+            )
+                .prop_map(|(monitored_apps, preferences, window_state)| AppConfig {
+                    monitored_apps,
+                    preferences,
+                    window_state,
+                })
+        }
+
+        proptest! {
+            /// Property: Config serialization round-trip preserves data
+            #[test]
+            fn config_serialization_roundtrip(config in app_config_strategy()) {
+                let json = serde_json::to_string(&config).unwrap();
+                let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
+
+                // Compare fields (can't use PartialEq due to PathBuf and other types)
+                prop_assert_eq!(deserialized.monitored_apps.len(), config.monitored_apps.len());
+                prop_assert_eq!(deserialized.preferences.auto_start, config.preferences.auto_start);
+                prop_assert_eq!(deserialized.preferences.monitoring_interval_ms, config.preferences.monitoring_interval_ms);
+                prop_assert_eq!(deserialized.window_state.x, config.window_state.x);
+                prop_assert_eq!(deserialized.window_state.y, config.window_state.y);
+            }
+
+            /// Property: UserPreferences serialization is always valid JSON
+            #[test]
+            fn user_preferences_serialization_is_valid_json(prefs in user_preferences_strategy()) {
+                let json = serde_json::to_string(&prefs).unwrap();
+                let _: UserPreferences = serde_json::from_str(&json).unwrap();
+            }
+
+            /// Property: WindowState serialization preserves all coordinates
+            #[test]
+            fn window_state_serialization_preserves_coordinates(state in window_state_strategy()) {
+                let json = serde_json::to_string(&state).unwrap();
+                let deserialized: WindowState = serde_json::from_str(&json).unwrap();
+
+                prop_assert_eq!(deserialized.x, state.x);
+                prop_assert_eq!(deserialized.y, state.y);
+                prop_assert_eq!(deserialized.width, state.width);
+                prop_assert_eq!(deserialized.height, state.height);
+            }
+
+            /// Property: Monitoring interval is always within valid range after deserialization
+            #[test]
+            fn monitoring_interval_stays_in_valid_range(interval in 500u64..=2000u64) {
+                let prefs = UserPreferences {
+                    auto_start: false,
+                    monitoring_interval_ms: interval,
+                    show_tray_notifications: false,
+                };
+
+                let json = serde_json::to_string(&prefs).unwrap();
+                let deserialized: UserPreferences = serde_json::from_str(&json).unwrap();
+
+                prop_assert!(deserialized.monitoring_interval_ms >= 500);
+                prop_assert!(deserialized.monitoring_interval_ms <= 2000);
+            }
+        }
     }
 }

@@ -1,0 +1,60 @@
+# cargo-deny configuration
+# See https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# Deny crates with security vulnerabilities
+vulnerability = "deny"
+# Warn about unmaintained crates
+unmaintained = "warn"
+# Warn about crates with unsound code
+unsound = "warn"
+# Ignore specific advisories (add IDs here if needed)
+ignore = []
+
+[licenses]
+# Allow AGPL-3.0 (our project license) and common permissive licenses
+allow = [
+    "AGPL-3.0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+]
+# Deny copyleft licenses that conflict with AGPL-3.0
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+]
+# Confidence threshold for license detection
+confidence-threshold = 0.8
+# Allow exceptions for specific crates (if needed)
+exceptions = []
+
+[bans]
+# Warn about multiple versions of the same crate
+multiple-versions = "warn"
+# Deny specific crates (add here if needed)
+deny = []
+# Skip certain crates from duplicate version checking
+skip = []
+# Skip checking for duplicates in tree
+skip-tree = []
+
+[sources]
+# Deny crates from unknown registries
+unknown-registry = "deny"
+# Deny crates from git sources (prefer crates.io)
+unknown-git = "deny"
+# Allow crates.io
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# Allow specific git sources if needed
+allow-git = []
+

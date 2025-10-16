@@ -114,6 +114,40 @@ impl ProcessMonitor {
     ///
     /// Enumerates all running processes using Windows Toolhelp32 API, extracts process names
     /// (lowercase, without extension), and detects state transitions.
+    ///
+    /// # Safety
+    ///
+    /// This function contains unsafe code that is sound because:
+    ///
+    /// 1. **CreateToolhelp32Snapshot**: Called with valid flags (TH32CS_SNAPPROCESS) and
+    ///    process ID (0 for all processes). Returns a handle that must be closed, which
+    ///    is guaranteed by the SnapshotGuard RAII wrapper.
+    ///
+    /// 2. **PROCESSENTRY32W Initialization**: The structure is properly initialized with
+    ///    the correct size in `dwSize`, which is required by the Windows API to prevent
+    ///    buffer overruns and ensure correct structure versioning.
+    ///
+    /// 3. **Process32FirstW/Process32NextW**: Called with a valid snapshot handle and a
+    ///    properly initialized PROCESSENTRY32W structure. These functions:
+    ///    - Only write to the structure we provide
+    ///    - Return error codes we check before using the data
+    ///    - Write null-terminated wide strings to szExeFile (fixed-size array)
+    ///
+    /// 4. **String Extraction**: The `szExeFile` field is a fixed-size array of u16 that
+    ///    contains a null-terminated wide string. We safely extract this using
+    ///    `extract_process_name` which handles the null terminator correctly.
+    ///
+    /// # Invariants
+    ///
+    /// - The snapshot handle must be valid (checked via Result from CreateToolhelp32Snapshot)
+    /// - PROCESSENTRY32W.dwSize must be set to the structure size before API calls
+    /// - The snapshot handle must be closed when done (enforced by SnapshotGuard)
+    /// - Process32FirstW must be called before Process32NextW
+    ///
+    /// # Potential Issues
+    ///
+    /// - If the Windows API contract changes (extremely unlikely for this stable API)
+    /// - If a process terminates between snapshot creation and enumeration (handled gracefully)
     fn poll_processes(&mut self) -> Result<()> {
         #[cfg(windows)]
         {
@@ -770,5 +804,69 @@ mod tests {
         assert!(watch_list.contains("notepad"));
         assert!(watch_list.contains("myapp.exe"));
         assert_eq!(watch_list.len(), 3);
+    }
+
+    // Property-based tests using proptest
+    #[cfg(test)]
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// Property: Process name normalization always produces lowercase output
+            #[test]
+            fn process_name_is_always_lowercase(s in "[a-zA-Z0-9_-]+\\.exe") {
+                let normalized = extract_filename_without_extension(&s);
+                let lowercase = normalized.to_lowercase();
+                prop_assert_eq!(normalized, lowercase);
+            }
+
+            /// Property: Normalization removes .exe extension
+            #[test]
+            fn normalization_removes_exe_extension(name in "[a-zA-Z0-9_-]+") {
+                let input = format!("{}.exe", name);
+                let normalized = extract_filename_without_extension(&input);
+                prop_assert!(!normalized.ends_with(".exe"));
+                prop_assert_eq!(normalized, name.to_lowercase());
+            }
+
+            /// Property: Path extraction gets only the filename
+            #[test]
+            fn path_extraction_gets_filename_only(
+                dirs in prop::collection::vec("[a-zA-Z0-9_-]+", 1..5),
+                filename in "[a-zA-Z0-9_-]+"
+            ) {
+                let path = format!("C:\\{}\\{}.exe", dirs.join("\\"), filename);
+                let normalized = extract_filename_without_extension(&path);
+                prop_assert_eq!(normalized, filename.to_lowercase());
+            }
+
+            /// Property: Empty or whitespace-only input produces empty output
+            #[test]
+            fn empty_input_produces_empty_output(s in "\\s*") {
+                let normalized = extract_filename_without_extension(&s);
+                prop_assert!(normalized.is_empty() || normalized.chars().all(char::is_whitespace));
+            }
+
+            /// Property: Watch list normalization is idempotent
+            #[test]
+            fn watch_list_normalization_is_idempotent(
+                names in prop::collection::vec("[a-zA-Z0-9_-]+(\\.exe)?", 1..10)
+            ) {
+                let (tx, _rx) = mpsc::channel();
+                let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+
+                // Normalize once
+                monitor.update_watch_list(names.clone());
+                let first_result = monitor.watch_list.lock().clone();
+
+                // Normalize again with the same input
+                monitor.update_watch_list(names);
+                let second_result = monitor.watch_list.lock().clone();
+
+                // Results should be identical
+                prop_assert_eq!(first_result, second_result);
+            }
+        }
     }
 }

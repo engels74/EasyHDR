@@ -139,6 +139,15 @@ impl MonitoredApp {
     }
 }
 
+/// Implement TryFrom<PathBuf> for MonitoredApp to follow Rust conversion trait conventions
+impl std::convert::TryFrom<PathBuf> for MonitoredApp {
+    type Error = crate::error::EasyHdrError;
+
+    fn try_from(exe_path: PathBuf) -> Result<Self> {
+        Self::from_exe_path(exe_path)
+    }
+}
+
 /// Top-level application configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {

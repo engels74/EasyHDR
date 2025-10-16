@@ -53,6 +53,28 @@ pub fn extract_icon_from_exe(#[allow(unused_variables)] path: &Path) -> Result<V
 }
 
 /// Windows-specific icon extraction implementation
+///
+/// # Safety
+///
+/// This function contains unsafe code that is sound because:
+///
+/// 1. **Wide String Conversion**: The path is converted to a null-terminated wide string
+///    using the standard Windows FFI pattern (encode_wide + null terminator).
+///
+/// 2. **ExtractIconExW**: Called with:
+///    - Valid null-terminated wide string pointer
+///    - Valid mutable pointer to HICON for large icon output
+///    - None for small icon (we don't need it)
+///    - Icon index 0 and count 1 (extract first icon only)
+///
+/// 3. **DestroyIcon**: Called to cleanup the HICON handle returned by ExtractIconExW,
+///    preventing resource leaks. This is safe because we own the handle.
+///
+/// # Invariants
+///
+/// - The wide_path must be null-terminated
+/// - HICON handles must be destroyed after use to prevent resource leaks
+/// - Icon handles are only valid until DestroyIcon is called
 #[cfg(windows)]
 fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
@@ -111,6 +133,27 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
 }
 
 /// Fallback icon extraction using SHGetFileInfoW
+///
+/// # Safety
+///
+/// This function contains unsafe code that is sound because:
+///
+/// 1. **zeroed() for SHFILEINFOW**: Safe because SHFILEINFOW is a C-compatible struct
+///    where all-zeros is a valid initial state.
+///
+/// 2. **SHGetFileInfoW**: Called with:
+///    - Valid null-terminated wide string pointer from the caller
+///    - Valid mutable pointer to SHFILEINFOW structure
+///    - Correct structure size
+///    - Valid flags (SHGFI_ICON | SHGFI_LARGEICON)
+///
+/// 3. **DestroyIcon**: Called to cleanup the HICON handle returned in file_info.hIcon,
+///    preventing resource leaks.
+///
+/// # Invariants
+///
+/// - wide_path must be a null-terminated wide string
+/// - HICON handles must be destroyed after use
 #[cfg(windows)]
 fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
     use std::mem::zeroed;
@@ -148,6 +191,38 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
 }
 
 /// Convert HICON to RGBA bytes (32x32 pixels, 4 bytes per pixel)
+///
+/// # Safety
+///
+/// This function contains unsafe code that is sound because:
+///
+/// 1. **zeroed() for Windows Structures**: Safe for ICONINFO, BITMAP, and BITMAPINFO
+///    because these are C-compatible structs where all-zeros is a valid initial state.
+///
+/// 2. **GetIconInfo**: Called with a valid HICON handle and mutable pointer to ICONINFO.
+///    Returns bitmap handles that must be cleaned up with DeleteObject.
+///
+/// 3. **GetObjectW**: Called with:
+///    - Valid bitmap handle from GetIconInfo
+///    - Correct structure size
+///    - Valid mutable pointer to BITMAP structure
+///
+/// 4. **CreateCompatibleDC**: Creates a device context that must be cleaned up with DeleteDC.
+///
+/// 5. **SelectObject/GetDIBits**: Called with valid handles and properly initialized structures:
+///    - BITMAPINFO is initialized with correct size, dimensions, and format
+///    - Buffer is pre-allocated with exact size (width * height * 4 bytes)
+///    - Negative height in BITMAPINFO creates top-down DIB for correct orientation
+///
+/// 6. **Resource Cleanup**: All handles (bitmaps, DC) are properly cleaned up via
+///    DeleteObject/DeleteDC to prevent resource leaks, even on error paths.
+///
+/// # Invariants
+///
+/// - hicon must be a valid HICON handle
+/// - All bitmap and DC handles must be cleaned up before returning
+/// - Buffer size must match width * height * 4 bytes
+/// - BITMAPINFO structure must have correct size and format fields
 #[cfg(windows)]
 fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
     use std::mem::zeroed;

@@ -3,6 +3,7 @@ name = "easyhdr"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+resolver = "2"
 authors = ["EasyHDR Contributors"]
 description = "Automatic HDR management for Windows"
 license = "AGPL-3.0"
@@ -62,6 +63,10 @@ slint-build = "1.13"
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
+[dev-dependencies]
+proptest = "1.5"
+tempfile = "3.14"
+
 [profile.release]
 opt-level = "z"     # Optimize for size
 lto = true          # Link-time optimization
@@ -71,3 +76,22 @@ panic = "abort"     # Smaller binary
 
 [profile.dev]
 opt-level = 1       # Some optimization for dev builds
+
+[profile.profiling]
+inherits = "release"
+debug = true        # Keep debug info for profiling
+strip = false       # Don't strip symbols for profiling tools
+# Build with: RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling
+
+[lints.rust]
+unsafe_code = "warn"
+missing_docs = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+# Allow specific pedantic lints that are too noisy or not applicable
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
