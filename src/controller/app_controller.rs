@@ -10,7 +10,7 @@ use crate::monitor::{HdrStateEvent, ProcessEvent};
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::Instant;
 use uuid::Uuid;
 

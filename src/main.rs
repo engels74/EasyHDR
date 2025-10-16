@@ -19,7 +19,7 @@ use easyhdr::{
 };
 use gui::GuiController;
 use parking_lot::Mutex;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 use tracing::{error, info, warn};
 
@@ -216,9 +216,9 @@ fn verify_windows_version() -> Result<()> {
 #[cfg(windows)]
 fn get_windows_build_number() -> Result<u32> {
     use std::mem::{size_of, transmute};
-    use windows::core::HSTRING;
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
     use windows::Win32::System::SystemInformation::OSVERSIONINFOEXW;
+    use windows::core::HSTRING;
 
     unsafe {
         // Load ntdll.dll

@@ -37,14 +37,14 @@
 use easyhdr::{
     config::{AppConfig, ConfigManager, MonitoredApp},
     controller::AppController,
-    error::{get_user_friendly_error, EasyHdrError},
+    error::{EasyHdrError, get_user_friendly_error},
     hdr::HdrController,
     monitor::{ProcessEvent, ProcessMonitor},
 };
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;

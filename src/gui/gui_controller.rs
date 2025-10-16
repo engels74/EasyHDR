@@ -17,7 +17,7 @@ use slint::{ComponentHandle, Timer, TimerMode};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::TryRecvError;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 #[cfg(windows)]

@@ -23,13 +23,13 @@
 
 use parking_lot::Mutex;
 use std::collections::HashSet;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 #[cfg(windows)]
 use windows::Win32::System::Diagnostics::ToolHelp::{
-    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+    CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 
 #[cfg(windows)]
@@ -100,11 +100,13 @@ impl ProcessMonitor {
 
     /// Start the monitoring thread
     pub fn start(mut self) -> JoinHandle<()> {
-        thread::spawn(move || loop {
-            if let Err(e) = self.poll_processes() {
-                tracing::error!("Error polling processes: {}", e);
+        thread::spawn(move || {
+            loop {
+                if let Err(e) = self.poll_processes() {
+                    tracing::error!("Error polling processes: {}", e);
+                }
+                thread::sleep(self.interval);
             }
-            thread::sleep(self.interval);
         })
     }
 

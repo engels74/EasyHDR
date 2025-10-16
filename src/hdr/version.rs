@@ -6,11 +6,11 @@
 #[cfg(windows)]
 use std::mem::size_of;
 #[cfg(windows)]
-use windows::core::HSTRING;
-#[cfg(windows)]
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 #[cfg(windows)]
 use windows::Win32::System::SystemInformation::{GetVersionExW, OSVERSIONINFOEXW};
+#[cfg(windows)]
+use windows::core::HSTRING;
 
 /// Windows version enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

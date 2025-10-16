@@ -13,8 +13,8 @@ use tracing::error;
 
 #[cfg(windows)]
 use tray_icon::{
-    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
     Icon, TrayIconBuilder,
+    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
 
 /// System tray icon with context menu showing HDR state.
@@ -179,7 +179,10 @@ impl TrayIcon {
                 })
             }
             Err(e) => {
-                warn!("Failed to decode icon from embedded assets: {}, falling back to generated icon", e);
+                warn!(
+                    "Failed to decode icon from embedded assets: {}, falling back to generated icon",
+                    e
+                );
                 Self::create_fallback_icon(hdr_enabled)
             }
         }

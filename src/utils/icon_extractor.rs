@@ -13,22 +13,22 @@ use crate::error::EasyHdrError;
 use tracing::warn;
 
 #[cfg(windows)]
-use windows::core::PCWSTR;
-#[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, SelectObject, BITMAP,
-    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC,
+    DeleteObject, GetDIBits, GetObjectW, SelectObject,
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
-    ExtractIconExW, SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON,
+    ExtractIconExW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGetFileInfoW,
 };
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::HICON;
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
+#[cfg(windows)]
+use windows::core::PCWSTR;
 
 /// Default icon size for extraction (32x32 pixels)
 #[cfg(windows)]

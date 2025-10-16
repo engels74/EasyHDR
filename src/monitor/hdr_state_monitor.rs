@@ -72,8 +72,8 @@
 use crate::error::Result;
 use crate::hdr::HdrController;
 use parking_lot::Mutex;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 use tracing::{debug, info, warn};
 
 #[cfg(windows)]
@@ -83,9 +83,9 @@ use tracing::error;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, PostQuitMessage,
-    RegisterClassW, SetTimer, UnregisterClassW, MSG, WINDOW_EX_STYLE, WM_DESTROY, WM_DISPLAYCHANGE,
-    WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW, WS_OVERLAPPEDWINDOW,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, MSG,
+    PostQuitMessage, RegisterClassW, SetTimer, UnregisterClassW, WINDOW_EX_STYLE, WM_DESTROY,
+    WM_DISPLAYCHANGE, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 // Timing constants for HDR state recheck strategy

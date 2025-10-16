@@ -10,9 +10,9 @@ use crate::error::EasyHdrError;
 #[cfg(windows)]
 use tracing::{error, info};
 #[cfg(windows)]
-use winreg::enums::*;
-#[cfg(windows)]
 use winreg::RegKey;
+#[cfg(windows)]
+use winreg::enums::*;
 
 /// Registry key path for Windows auto-start applications
 #[cfg(windows)]

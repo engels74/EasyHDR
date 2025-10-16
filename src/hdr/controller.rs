@@ -4,17 +4,17 @@
 //! for Windows displays.
 
 use crate::error::Result;
-use crate::hdr::windows_api::LUID;
 use crate::hdr::WindowsVersion;
+use crate::hdr::windows_api::LUID;
 use tracing::{debug, info, warn};
 
 #[cfg(windows)]
 use crate::hdr::windows_api::{
-    DisplayConfigGetDeviceInfo, DisplayConfigSetDeviceInfo, GetDisplayConfigBufferSizes,
-    QueryDisplayConfig, DISPLAYCONFIG_ADVANCED_COLOR_MODE, DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    DISPLAYCONFIG_ADVANCED_COLOR_MODE, DISPLAYCONFIG_DEVICE_INFO_HEADER,
     DISPLAYCONFIG_DEVICE_INFO_TYPE, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO,
     DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2, DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO,
-    QDC_ONLY_ACTIVE_PATHS,
+    DisplayConfigGetDeviceInfo, DisplayConfigSetDeviceInfo, GetDisplayConfigBufferSizes,
+    QDC_ONLY_ACTIVE_PATHS, QueryDisplayConfig,
 };
 
 #[cfg(windows)]
@@ -111,10 +111,7 @@ impl HdrController {
                 Err(e) => {
                     warn!(
                         "Failed to check HDR state for display (adapter={:#x}:{:#x}, target={}): {}",
-                        disp.adapter_id.LowPart,
-                        disp.adapter_id.HighPart,
-                        disp.target_id,
-                        e
+                        disp.adapter_id.LowPart, disp.adapter_id.HighPart, disp.target_id, e
                     );
                 }
             }
@@ -275,9 +272,7 @@ impl HdrController {
                 WindowsVersion::Windows11_24H2 => {
                     debug!(
                         "Using Windows 11 24H2+ API (DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2) for adapter={:#x}:{:#x}, target={}",
-                        target.adapter_id.LowPart,
-                        target.adapter_id.HighPart,
-                        target.target_id
+                        target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id
                     );
 
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
@@ -364,9 +359,7 @@ impl HdrController {
                     // Windows 10/11 (before 24H2): Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
                     debug!(
                         "Using legacy API (DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO) for adapter={:#x}:{:#x}, target={}",
-                        target.adapter_id.LowPart,
-                        target.adapter_id.HighPart,
-                        target.target_id
+                        target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id
                     );
                     self.is_hdr_supported_legacy(target)
                 }

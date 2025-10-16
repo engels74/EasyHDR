@@ -6,7 +6,7 @@
 use crate::error::Result;
 use std::path::PathBuf;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Maximum log file size in bytes (5MB)
 const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024;
