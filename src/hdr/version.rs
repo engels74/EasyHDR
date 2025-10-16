@@ -26,8 +26,8 @@ pub enum WindowsVersion {
 impl WindowsVersion {
     /// Detect the current Windows version
     ///
-    /// Uses RtlGetVersion from ntdll.dll to get accurate version information.
-    /// Falls back to GetVersionExW if RtlGetVersion is unavailable.
+    /// Uses `RtlGetVersion` from ntdll.dll to get accurate version information.
+    /// Falls back to `GetVersionExW` if `RtlGetVersion` is unavailable.
     ///
     /// # Returns
     ///
@@ -70,8 +70,8 @@ impl WindowsVersion {
 
     /// Get the current Windows build number
     ///
-    /// Uses RtlGetVersion from ntdll.dll to get accurate build number.
-    /// Falls back to GetVersionExW if RtlGetVersion is unavailable.
+    /// Uses `RtlGetVersion` from ntdll.dll to get accurate build number.
+    /// Falls back to `GetVersionExW` if `RtlGetVersion` is unavailable.
     ///
     /// # Returns
     ///
@@ -204,7 +204,7 @@ impl WindowsVersion {
     ///
     /// # Returns
     ///
-    /// The corresponding WindowsVersion enum variant
+    /// The corresponding `WindowsVersion` enum variant
     ///
     /// # Examples
     ///
@@ -249,7 +249,7 @@ mod tests {
 
         // Log the detected version for debugging
         if let Ok(v) = version {
-            println!("Detected Windows version: {:?}", v);
+            println!("Detected Windows version: {v:?}");
         }
     }
 
@@ -447,9 +447,9 @@ mod tests {
         let v2 = WindowsVersion::Windows11;
         let v3 = WindowsVersion::Windows11_24H2;
 
-        assert_eq!(format!("{:?}", v1), "Windows10");
-        assert_eq!(format!("{:?}", v2), "Windows11");
-        assert_eq!(format!("{:?}", v3), "Windows11_24H2");
+        assert_eq!(format!("{v1:?}"), "Windows10");
+        assert_eq!(format!("{v2:?}"), "Windows11");
+        assert_eq!(format!("{v3:?}"), "Windows11_24H2");
     }
 
     #[test]

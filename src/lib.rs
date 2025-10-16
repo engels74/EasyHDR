@@ -1,8 +1,3 @@
-#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
-#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
-#![allow(clippy::cast_possible_truncation)] // Allow casts that may truncate (Windows API compatibility)
-#![allow(clippy::match_wildcard_for_single_variants)] // Allow wildcard matches for clarity
-
 //! `EasyHDR` - Automatic HDR management for Windows
 //!
 //! This library provides functionality to automatically enable and disable HDR

@@ -36,7 +36,7 @@ const ICON_SIZE: usize = 32;
 
 /// Extract icon from an executable file
 ///
-/// Uses Windows Shell32 ExtractIconExW to extract the application icon and convert it to
+/// Uses Windows Shell32 `ExtractIconExW` to extract the application icon and convert it to
 /// raw RGBA bytes (32x32 pixels). Returns an empty Vec on extraction failure or non-Windows platforms.
 pub fn extract_icon_from_exe(#[allow(unused_variables)] path: &Path) -> Result<Vec<u8>> {
     #[cfg(windows)]
@@ -381,7 +381,7 @@ fn create_default_icon() -> Vec<u8> {
 
 /// Extract display name from executable metadata
 ///
-/// Queries the FileDescription from the executable's version information resources.
+/// Queries the `FileDescription` from the executable's version information resources.
 /// Falls back to filename without extension if metadata is unavailable.
 pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
     #[cfg(windows)]

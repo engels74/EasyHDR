@@ -1,8 +1,4 @@
-#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
-#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
-#![allow(clippy::float_cmp)] // Allow float comparison in tests
-
-//! Integration tests for EasyHDR
+//! Integration tests for `EasyHDR`
 //!
 //! This test module provides comprehensive integration testing for the entire application,
 //! verifying that all components work together correctly.
@@ -123,7 +119,7 @@ fn test_process_monitor_integration() {
     );
 }
 
-/// Test that AppController correctly manages HDR state based on process events
+/// Test that `AppController` correctly manages HDR state based on process events
 #[test]
 fn test_app_controller_hdr_logic_integration() {
     let (_event_tx, event_rx) = mpsc::channel();

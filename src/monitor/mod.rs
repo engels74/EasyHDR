@@ -7,7 +7,7 @@
 //!
 //! The process monitoring system provides:
 //! - **Background polling** of running processes at configurable intervals
-//! - **Change detection** using efficient HashSet difference operations
+//! - **Change detection** using efficient `HashSet` difference operations
 //! - **Event notification** when monitored processes start or stop
 //! - **Case-insensitive matching** for process names
 //! - **Low CPU usage** (<1%) through optimized polling and change detection
@@ -26,11 +26,11 @@
 //! 2. Iterate through processes using `Process32FirstW` and `Process32NextW`
 //! 3. Extract process executable name (e.g., "Cyberpunk2077.exe")
 //! 4. Convert to lowercase and remove extension (e.g., "cyberpunk2077")
-//! 5. Add to current snapshot HashSet
+//! 5. Add to current snapshot `HashSet`
 //!
 //! # Change Detection Algorithm
 //!
-//! Uses HashSet difference operations for O(n) change detection:
+//! Uses `HashSet` difference operations for O(n) change detection:
 //! - **Started** = `current - previous` (processes in current but not in previous)
 //! - **Stopped** = `previous - current` (processes in previous but not in current)
 //! - Filter by watch list to only send events for monitored processes

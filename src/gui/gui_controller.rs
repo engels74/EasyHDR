@@ -3,10 +3,10 @@
 //! This module implements the bridge between the Slint UI and the
 //! application controller.
 //!
-//! The GuiController acts as the bridge between the Slint-based GUI and the
+//! The `GuiController` acts as the bridge between the Slint-based GUI and the
 //! application logic controller. It:
-//! - Manages the MainWindow Slint component
-//! - Receives state updates from AppController via mpsc channel
+//! - Manages the `MainWindow` Slint component
+//! - Receives state updates from `AppController` via mpsc channel
 //! - Provides callbacks for GUI interactions (add/remove apps, toggle enabled)
 //! - Handles file picker dialogs and error messages
 
@@ -54,7 +54,7 @@ pub struct GuiController {
 impl GuiController {
     /// Create a new GUI controller
     ///
-    /// Creates the MainWindow Slint component and sets up the bridge between
+    /// Creates the `MainWindow` Slint component and sets up the bridge between
     /// the GUI and the application controller.
     pub fn new(
         controller: Arc<Mutex<AppController>>,
@@ -69,7 +69,7 @@ impl GuiController {
         let main_window = MainWindow::new().map_err(|e| {
             use tracing::error;
             error!("Failed to create main window: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to create main window: {}", e))
+            EasyHdrError::ConfigError(format!("Failed to create main window: {e}"))
         })?;
 
         info!("Main window created successfully");
@@ -83,9 +83,13 @@ impl GuiController {
             let config = controller_guard.config.lock();
 
             main_window.set_settings_auto_start(config.preferences.auto_start);
-            main_window.set_settings_monitoring_interval_ms(
-                config.preferences.monitoring_interval_ms as i32,
-            );
+            // Safe cast: monitoring_interval_ms is constrained to 500-2000ms range
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                main_window.set_settings_monitoring_interval_ms(
+                    config.preferences.monitoring_interval_ms as i32,
+                );
+            }
             main_window
                 .set_settings_show_tray_notifications(config.preferences.show_tray_notifications);
 
@@ -133,10 +137,7 @@ impl GuiController {
             // Save window state before exiting
             if let Some(window) = window_for_close.upgrade() {
                 info!("Saving window state before exit");
-                if let Err(e) = Self::save_window_state(&window, &controller_for_close) {
-                    use tracing::warn;
-                    warn!("Failed to save window state on close: {}", e);
-                }
+                Self::save_window_state(&window, &controller_for_close);
             }
 
             // Exit the application immediately
@@ -307,7 +308,7 @@ impl GuiController {
         items
     }
 
-    /// Apply a new AppState to the GUI on the main thread
+    /// Apply a new `AppState` to the GUI on the main thread
     ///
     /// Updates the status indicator, application list, tray icon, and optional
     /// notifications to reflect the latest HDR state.
@@ -317,7 +318,7 @@ impl GuiController {
         tray_icon: &Rc<RefCell<TrayIcon>>,
         window_visibility: &Cell<bool>,
         previous_hdr_state: &Cell<Option<bool>>,
-        state: AppState,
+        state: &AppState,
     ) {
         use tracing::{debug, info, warn};
 
@@ -628,7 +629,7 @@ impl GuiController {
     /// Stub implementation for non-Windows platforms
     #[cfg(not(windows))]
     pub fn show_error_dialog(message: &str) {
-        eprintln!("Error: {}", message);
+        eprintln!("Error: {message}");
     }
 
     /// Show error dialog with user-friendly error message from EasyHdrError
@@ -727,10 +728,8 @@ impl GuiController {
     ///
     /// Reads the current window position and size from the Slint window
     /// and saves it to the configuration file for restoration on next startup.
-    fn save_window_state(
-        window: &MainWindow,
-        controller: &Arc<Mutex<AppController>>,
-    ) -> Result<()> {
+    /// Logs errors but does not propagate them.
+    fn save_window_state(window: &MainWindow, controller: &Arc<Mutex<AppController>>) {
         use easyhdr::config::ConfigManager;
         use tracing::{error as log_error, info};
 
@@ -769,8 +768,6 @@ impl GuiController {
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Reload GUI resources when window is shown
@@ -808,9 +805,9 @@ impl GuiController {
 
     /// Run the GUI event loop with state synchronization
     ///
-    /// Starts a background thread to receive AppState updates from the controller
+    /// Starts a background thread to receive `AppState` updates from the controller
     /// and update the GUI accordingly. The state synchronization thread receives
-    /// updates via the state_receiver channel and uses window.as_weak() for
+    /// updates via the `state_receiver` channel and uses `window.as_weak()` for
     /// thread-safe GUI updates.
     pub fn run(self) -> Result<()> {
         use easyhdr::error::EasyHdrError;
@@ -854,7 +851,7 @@ impl GuiController {
                                 &tray_icon,
                                 &window_visibility,
                                 &previous_hdr_state,
-                                state,
+                                &state,
                             );
                         }
                         Err(TryRecvError::Empty) => break,
@@ -893,7 +890,7 @@ impl GuiController {
         self.main_window.run().map_err(|e| {
             use tracing::error;
             error!("Failed to run GUI event loop: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {}", e))
+            EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {e}"))
         })?;
 
         info!("GUI event loop stopped");
@@ -902,7 +899,7 @@ impl GuiController {
         // Note: Window state is also saved in the close request handler when user clicks X button.
         // This is a fallback in case the event loop exits for other reasons.
         info!("Saving window state before exit (fallback)");
-        Self::save_window_state(&self.main_window, &self.controller_handle)?;
+        Self::save_window_state(&self.main_window, &self.controller_handle);
 
         Ok(())
     }
@@ -922,13 +919,11 @@ mod tests {
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("display doesn't support HDR"),
-            "Expected HDR not supported message, got: {}",
-            message
+            "Expected HDR not supported message, got: {message}"
         );
         assert!(
             message.contains("hardware specifications"),
-            "Expected troubleshooting hint about hardware, got: {}",
-            message
+            "Expected troubleshooting hint about hardware, got: {message}"
         );
 
         // Test HDR control failed error
@@ -936,13 +931,11 @@ mod tests {
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("Unable to control HDR"),
-            "Expected HDR control error message, got: {}",
-            message
+            "Expected HDR control error message, got: {message}"
         );
         assert!(
             message.contains("display drivers"),
-            "Expected troubleshooting hint about drivers, got: {}",
-            message
+            "Expected troubleshooting hint about drivers, got: {message}"
         );
 
         // Test driver error
@@ -950,13 +943,11 @@ mod tests {
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("Unable to control HDR"),
-            "Expected driver error message, got: {}",
-            message
+            "Expected driver error message, got: {message}"
         );
         assert!(
             message.contains("display drivers"),
-            "Expected troubleshooting hint about drivers, got: {}",
-            message
+            "Expected troubleshooting hint about drivers, got: {message}"
         );
 
         // Test configuration error
@@ -964,13 +955,11 @@ mod tests {
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("configuration"),
-            "Expected configuration error message, got: {}",
-            message
+            "Expected configuration error message, got: {message}"
         );
         assert!(
             message.contains("settings may not persist"),
-            "Expected troubleshooting hint about persistence, got: {}",
-            message
+            "Expected troubleshooting hint about persistence, got: {message}"
         );
 
         // Test process monitor error
@@ -978,13 +967,11 @@ mod tests {
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("monitor processes"),
-            "Expected process monitor error message, got: {}",
-            message
+            "Expected process monitor error message, got: {message}"
         );
         assert!(
             message.contains("may not function correctly"),
-            "Expected troubleshooting hint about functionality, got: {}",
-            message
+            "Expected troubleshooting hint about functionality, got: {message}"
         );
     }
 
@@ -999,8 +986,7 @@ mod tests {
         assert!(
             message.to_lowercase().contains("hardware")
                 || message.to_lowercase().contains("specifications"),
-            "Expected hardware troubleshooting hint, got: {}",
-            message
+            "Expected hardware troubleshooting hint, got: {message}"
         );
 
         // Driver errors should mention updating drivers
@@ -1008,8 +994,7 @@ mod tests {
         let message = get_user_friendly_error(&error);
         assert!(
             message.to_lowercase().contains("driver"),
-            "Expected driver troubleshooting hint, got: {}",
-            message
+            "Expected driver troubleshooting hint, got: {message}"
         );
 
         // Config errors should mention settings persistence
@@ -1018,8 +1003,7 @@ mod tests {
         assert!(
             message.to_lowercase().contains("settings")
                 || message.to_lowercase().contains("persist"),
-            "Expected settings troubleshooting hint, got: {}",
-            message
+            "Expected settings troubleshooting hint, got: {message}"
         );
     }
 
@@ -1043,15 +1027,14 @@ mod tests {
             assert!(!message.is_empty(), "Error message should not be empty");
 
             // Message should be reasonably long (at least 20 characters)
-            assert!(message.len() >= 20, "Error message too short: {}", message);
+            assert!(message.len() >= 20, "Error message too short: {message}");
 
             // Message should not contain raw error details (like "Error: ")
             // unless it's a fallback message
             if !message.starts_with("An unexpected error occurred") {
                 assert!(
                     !message.contains("Error: "),
-                    "User-friendly message should not contain 'Error: ' prefix: {}",
-                    message
+                    "User-friendly message should not contain 'Error: ' prefix: {message}"
                 );
             }
         }
@@ -1105,8 +1088,7 @@ mod tests {
         assert!(
             message.contains("display doesn't support HDR")
                 || message.contains("display does not support HDR"),
-            "Expected 'display doesn't support HDR' message, got: {}",
-            message
+            "Expected 'display doesn't support HDR' message, got: {message}"
         );
 
         // Driver error message
@@ -1114,13 +1096,11 @@ mod tests {
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("Unable to control HDR"),
-            "Expected 'Unable to control HDR' message, got: {}",
-            message
+            "Expected 'Unable to control HDR' message, got: {message}"
         );
         assert!(
             message.to_lowercase().contains("driver"),
-            "Expected message to mention drivers, got: {}",
-            message
+            "Expected message to mention drivers, got: {message}"
         );
     }
 }

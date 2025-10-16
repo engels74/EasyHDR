@@ -133,7 +133,7 @@ mod tests {
     use uuid::Uuid;
 
     /// Helper function to create a temporary test directory using tempfile
-    /// Returns a TempDir that automatically cleans up when dropped
+    /// Returns a `TempDir` that automatically cleans up when dropped
     fn create_test_dir() -> TempDir {
         tempfile::tempdir().expect("Failed to create temp directory")
     }
@@ -156,7 +156,7 @@ mod tests {
     ///
     /// **Why this is safe in our test context:**
     /// - These tests are designed to run in isolation (single-threaded)
-    /// - The ConfigManager being tested is not spawning threads
+    /// - The `ConfigManager` being tested is not spawning threads
     /// - The guard ensures cleanup even on panic via Drop
     /// - The modification is scoped to the test function's lifetime
     ///
@@ -210,7 +210,7 @@ mod tests {
         }
     }
 
-    /// Helper function to clean up test directory (deprecated - use TempDir instead)
+    /// Helper function to clean up test directory (deprecated - use `TempDir` instead)
     #[allow(dead_code)]
     fn cleanup_test_dir(dir: &PathBuf) {
         if dir.exists() {
@@ -383,16 +383,14 @@ mod tests {
             let result = ConfigManager::load();
             assert!(
                 result.is_ok(),
-                "Test case {} failed: Load should succeed with malformed JSON",
-                i
+                "Test case {i} failed: Load should succeed with malformed JSON"
             );
 
             let config = result.unwrap();
             assert_eq!(
                 config.monitored_apps.len(),
                 0,
-                "Test case {} failed: Should return default config",
-                i
+                "Test case {i} failed: Should return default config"
             );
         }
 
@@ -598,7 +596,7 @@ mod tests {
         use std::path::PathBuf;
         use uuid::Uuid;
 
-        /// Strategy for generating valid UserPreferences
+        /// Strategy for generating valid `UserPreferences`
         fn user_preferences_strategy() -> impl Strategy<Value = UserPreferences> {
             (any::<bool>(), 500u64..=2000u64, any::<bool>()).prop_map(
                 |(auto_start, monitoring_interval_ms, show_tray_notifications)| UserPreferences {
@@ -609,7 +607,7 @@ mod tests {
             )
         }
 
-        /// Strategy for generating valid WindowState
+        /// Strategy for generating valid `WindowState`
         fn window_state_strategy() -> impl Strategy<Value = WindowState> {
             (
                 0i32..=2000i32,
@@ -625,13 +623,13 @@ mod tests {
                 })
         }
 
-        /// Strategy for generating valid MonitoredApp
+        /// Strategy for generating valid `MonitoredApp`
         fn monitored_app_strategy() -> impl Strategy<Value = MonitoredApp> {
             ("[a-zA-Z0-9_-]{1,20}", "[a-zA-Z0-9_-]{1,20}", any::<bool>()).prop_map(
                 |(display_name, process_name, enabled)| MonitoredApp {
                     id: Uuid::new_v4(),
                     display_name,
-                    exe_path: PathBuf::from(format!("C:\\Program Files\\{}.exe", process_name)),
+                    exe_path: PathBuf::from(format!("C:\\Program Files\\{process_name}.exe")),
                     process_name,
                     enabled,
                     icon_data: None,
@@ -639,7 +637,7 @@ mod tests {
             )
         }
 
-        /// Strategy for generating valid AppConfig
+        /// Strategy for generating valid `AppConfig`
         fn app_config_strategy() -> impl Strategy<Value = AppConfig> {
             (
                 prop::collection::vec(monitored_app_strategy(), 0..5),

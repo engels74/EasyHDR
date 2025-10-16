@@ -1,6 +1,3 @@
-#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
-#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
-
 //! Integration tests for Windows version detection
 //!
 //! These tests verify the version detection logic with various scenarios
@@ -22,8 +19,7 @@ fn test_version_detection_returns_valid_result() {
             version,
             WindowsVersion::Windows10 | WindowsVersion::Windows11 | WindowsVersion::Windows11_24H2
         ),
-        "Version should be one of the valid Windows versions, got {:?}",
-        version
+        "Version should be one of the valid Windows versions, got {version:?}"
     );
 }
 
@@ -47,9 +43,9 @@ fn test_version_enum_traits() {
     let v3 = WindowsVersion::Windows11_24H2;
 
     // Test Debug
-    assert_eq!(format!("{:?}", v1), "Windows10");
-    assert_eq!(format!("{:?}", v2), "Windows11");
-    assert_eq!(format!("{:?}", v3), "Windows11_24H2");
+    assert_eq!(format!("{v1:?}"), "Windows10");
+    assert_eq!(format!("{v2:?}"), "Windows11");
+    assert_eq!(format!("{v3:?}"), "Windows11_24H2");
 
     // Test Clone (Copy trait is used automatically for types that implement Copy)
     let v1_clone = v1;
@@ -95,8 +91,7 @@ fn test_all_windows10_versions() {
         assert_eq!(
             version,
             WindowsVersion::Windows10,
-            "Build {} should be classified as Windows 10",
-            build
+            "Build {build} should be classified as Windows 10"
         );
     }
 }
@@ -116,8 +111,7 @@ fn test_all_windows11_versions() {
         assert_eq!(
             version,
             WindowsVersion::Windows11,
-            "Build {} should be classified as Windows 11",
-            build
+            "Build {build} should be classified as Windows 11"
         );
     }
 }
@@ -138,8 +132,7 @@ fn test_all_windows11_24h2_versions() {
         assert_eq!(
             version,
             WindowsVersion::Windows11_24H2,
-            "Build {} should be classified as Windows 11 24H2",
-            build
+            "Build {build} should be classified as Windows 11 24H2"
         );
     }
 }
@@ -237,7 +230,7 @@ fn test_version_detection_deterministic() {
 
     // All results should be Ok
     for (i, result) in results.iter().enumerate() {
-        assert!(result.is_ok(), "Detection {} should succeed", i);
+        assert!(result.is_ok(), "Detection {i} should succeed");
     }
 
     // All results should be the same
@@ -246,8 +239,7 @@ fn test_version_detection_deterministic() {
         assert_eq!(
             result.as_ref().unwrap(),
             first,
-            "Detection {} should match first detection",
-            i
+            "Detection {i} should match first detection"
         );
     }
 }
@@ -270,7 +262,7 @@ fn test_version_comparisons() {
     assert_ne!(v10, v11_24h2);
 }
 
-/// Test that parse_build_number is consistent with known version mappings
+/// Test that `parse_build_number` is consistent with known version mappings
 #[test]
 fn test_parse_build_number_consistency() {
     // Define expected mappings
@@ -292,8 +284,7 @@ fn test_parse_build_number_consistency() {
         let actual = WindowsVersion::parse_build_number(build);
         assert_eq!(
             actual, expected,
-            "Build {} should map to {:?}, got {:?}",
-            build, expected, actual
+            "Build {build} should map to {expected:?}, got {actual:?}"
         );
     }
 }

@@ -119,9 +119,9 @@ impl ProcessMonitor {
     ///
     /// This function contains unsafe code that is sound because:
     ///
-    /// 1. **CreateToolhelp32Snapshot**: Called with valid flags (TH32CS_SNAPPROCESS) and
+    /// 1. **`CreateToolhelp32Snapshot`**: Called with valid flags (`TH32CS_SNAPPROCESS`) and
     ///    process ID (0 for all processes). Returns a handle that must be closed, which
-    ///    is guaranteed by the SnapshotGuard RAII wrapper.
+    ///    is guaranteed by the `SnapshotGuard` RAII wrapper.
     ///
     /// 2. **PROCESSENTRY32W Initialization**: The structure is properly initialized with
     ///    the correct size in `dwSize`, which is required by the Windows API to prevent
@@ -139,10 +139,10 @@ impl ProcessMonitor {
     ///
     /// # Invariants
     ///
-    /// - The snapshot handle must be valid (checked via Result from CreateToolhelp32Snapshot)
+    /// - The snapshot handle must be valid (checked via Result from `CreateToolhelp32Snapshot`)
     /// - PROCESSENTRY32W.dwSize must be set to the structure size before API calls
-    /// - The snapshot handle must be closed when done (enforced by SnapshotGuard)
-    /// - Process32FirstW must be called before Process32NextW
+    /// - The snapshot handle must be closed when done (enforced by `SnapshotGuard`)
+    /// - `Process32FirstW` must be called before `Process32NextW`
     ///
     /// # Potential Issues
     ///
@@ -428,7 +428,7 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Started(name) => assert_eq!(name, "notepad"),
-            _ => panic!("Expected Started event"),
+            ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
         }
 
         // Should not receive event for explorer (not monitored)
@@ -459,7 +459,7 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Stopped(name) => assert_eq!(name, "notepad"),
-            _ => panic!("Expected Stopped event"),
+            ProcessEvent::Started(_) => panic!("Expected Stopped event, got Started"),
         }
     }
 
@@ -484,7 +484,7 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Started(name) => assert_eq!(name, "notepad"),
-            _ => panic!("Expected Started event"),
+            ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
         }
     }
 
@@ -519,7 +519,7 @@ mod tests {
                 ProcessEvent::Started(name) => {
                     received.insert(name);
                 }
-                _ => panic!("Expected Started event"),
+                ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
             }
         }
 
@@ -625,7 +625,9 @@ mod tests {
             ProcessEvent::Started(name) => {
                 assert_eq!(name, "game");
             }
-            _ => panic!("Expected Started event for state transition"),
+            ProcessEvent::Stopped(_) => {
+                panic!("Expected Started event for state transition, got Stopped")
+            }
         }
     }
 
@@ -652,7 +654,9 @@ mod tests {
             ProcessEvent::Stopped(name) => {
                 assert_eq!(name, "game");
             }
-            _ => panic!("Expected Stopped event for state transition"),
+            ProcessEvent::Started(_) => {
+                panic!("Expected Stopped event for state transition, got Started")
+            }
         }
     }
 
@@ -740,7 +744,7 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Started(name) => assert_eq!(name, "game"),
-            _ => panic!("Expected Started event for game"),
+            ProcessEvent::Stopped(_) => panic!("Expected Started event for game, got Stopped"),
         }
 
         // No more events should be received
@@ -828,7 +832,7 @@ mod tests {
             #[test]
             #[allow(clippy::case_sensitive_file_extension_comparisons)] // Test specifically checks .exe extension
             fn normalization_removes_exe_extension(name in "[a-zA-Z0-9_-]+") {
-                let input = format!("{}.exe", name);
+                let input = format!("{name}.exe");
                 let normalized = extract_filename_without_extension(&input);
                 prop_assert!(!normalized.ends_with(".exe"));
                 prop_assert_eq!(normalized, name.to_lowercase());

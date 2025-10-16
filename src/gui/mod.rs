@@ -1,12 +1,3 @@
-#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
-#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
-#![allow(clippy::cast_possible_truncation)] // Allow casts that may truncate (Windows API compatibility)
-#![allow(clippy::match_wildcard_for_single_variants)] // Allow wildcard matches for clarity
-#![allow(clippy::unused_self)] // Allow unused self for consistency
-#![allow(clippy::unnecessary_wraps)] // Allow unnecessary wraps for API consistency
-#![allow(clippy::too_many_lines)] // Allow long functions for complex GUI logic
-#![allow(clippy::float_cmp)] // Allow float comparison in tests
-
 //! GUI module
 //!
 //! This module provides the Slint-based graphical user interface
@@ -25,7 +16,7 @@
 //!
 //! - `GuiController`: Bridge between Slint UI and application logic
 //! - `TrayIcon`: System tray icon with context menu
-//! - **MainWindow**: Slint component defined in ui/main.slint
+//! - **`MainWindow`**: Slint component defined in ui/main.slint
 //! - **Callbacks**: GUI → Controller communication
 //! - **State updates**: Controller → GUI communication via mpsc channel
 //!
@@ -54,7 +45,7 @@
 //!
 //! ## Controller → GUI (State Updates)
 //!
-//! Controller sends AppState updates via mpsc channel:
+//! Controller sends `AppState` updates via mpsc channel:
 //! - HDR state changes → Update status indicator
 //! - Process events → Update active apps list
 //! - Configuration changes → Refresh UI

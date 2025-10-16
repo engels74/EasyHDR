@@ -1,7 +1,7 @@
 //! Auto-start registry management
 //!
 //! Manages Windows auto-start functionality via registry entries in
-//! HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run.
+//! `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`.
 
 use crate::error::Result;
 
@@ -143,7 +143,7 @@ impl AutoStartManager {
         }
     }
 
-    /// Non-Windows stub for is_enabled
+    /// Non-Windows stub for `is_enabled`
     #[cfg(not(windows))]
     pub fn is_enabled() -> Result<bool> {
         Ok(false)

@@ -6,7 +6,7 @@
 //! # Overview
 //!
 //! The application controller is the central coordinator that:
-//! - **Receives process events** from the ProcessMonitor
+//! - **Receives process events** from the `ProcessMonitor`
 //! - **Manages HDR state** based on active monitored processes
 //! - **Implements debouncing** to prevent rapid HDR toggling
 //! - **Sends state updates** to the GUI for display

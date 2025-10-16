@@ -13,7 +13,7 @@ const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Initialize the logging system
 ///
-/// Log level defaults to INFO but can be configured via RUST_LOG environment variable.
+/// Log level defaults to INFO but can be configured via `RUST_LOG` environment variable.
 pub fn init_logging() -> Result<()> {
     let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
     let log_dir = PathBuf::from(appdata).join("EasyHDR");
@@ -34,7 +34,7 @@ pub fn init_logging() -> Result<()> {
         .filename_suffix("log")
         .build(log_dir)
         .map_err(|e| {
-            crate::error::EasyHdrError::ConfigError(format!("Failed to create log appender: {}", e))
+            crate::error::EasyHdrError::ConfigError(format!("Failed to create log appender: {e}"))
         })?;
 
     // Build the subscriber with file output
@@ -128,6 +128,7 @@ mod tests {
     use std::io::Write;
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)] // Test uses known small constant
     fn test_log_rotation() {
         // Create a temporary directory for testing
         let temp_dir = std::env::temp_dir().join("easyhdr_test_logs");
@@ -157,6 +158,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)] // Test uses known small constant
     fn test_log_rotator() {
         let temp_dir = std::env::temp_dir().join("easyhdr_test_rotator");
         fs::create_dir_all(&temp_dir).unwrap();

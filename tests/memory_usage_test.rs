@@ -1,6 +1,3 @@
-#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
-#![allow(clippy::float_cmp)] // Allow float comparison in tests
-
 //! Memory usage tests
 //!
 //! This test module verifies that the application uses less than 50MB RAM during monitoring.
@@ -67,9 +64,9 @@ fn test_config_memory_estimation() {
     for i in 0..20 {
         config.monitored_apps.push(MonitoredApp {
             id: Uuid::new_v4(),
-            display_name: format!("Test App {}", i),
-            exe_path: PathBuf::from(format!("C:\\Apps\\app{}.exe", i)),
-            process_name: format!("app{}", i),
+            display_name: format!("Test App {i}"),
+            exe_path: PathBuf::from(format!("C:\\Apps\\app{i}.exe")),
+            process_name: format!("app{i}"),
             enabled: true,
             icon_data: None, // No icons for this test
         });
@@ -119,8 +116,12 @@ fn test_memory_stats_within_limits() {
     };
 
     assert!(stats.is_within_limits());
-    assert_eq!(stats.total_mb(), 40.0);
-    assert_eq!(stats.icon_cache_mb(), 5.0);
+    // Allow exact float comparison: values are constructed to be exact multiples
+    #[allow(clippy::float_cmp)]
+    {
+        assert_eq!(stats.total_mb(), 40.0);
+        assert_eq!(stats.icon_cache_mb(), 5.0);
+    }
 }
 
 #[test]
@@ -135,7 +136,11 @@ fn test_memory_stats_exceeds_limits() {
     };
 
     assert!(!stats.is_within_limits());
-    assert_eq!(stats.total_mb(), 60.0);
+    // Allow exact float comparison: value is constructed to be exact multiple
+    #[allow(clippy::float_cmp)]
+    {
+        assert_eq!(stats.total_mb(), 60.0);
+    }
 }
 
 #[test]

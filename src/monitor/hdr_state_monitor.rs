@@ -15,7 +15,7 @@
 //!
 //! - `HdrStateMonitor`: Background thread with message-only window
 //! - `HdrStateEvent`: Events sent when HDR state changes
-//! - **Windows Messages**: WM_DISPLAYCHANGE and WM_SETTINGCHANGE triggers
+//! - **Windows Messages**: `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE` triggers
 //! - **Event channel**: mpsc channel for sending events to the application controller
 //!
 //! # How It Works
@@ -23,15 +23,15 @@
 //! 1. Create a hidden window (not visible, but can receive broadcast messages)
 //! 2. Register window class and window procedure
 //! 3. Enter Windows message loop in background thread
-//! 4. On WM_DISPLAYCHANGE or WM_SETTINGCHANGE:
-//!    - Query actual HDR state via HdrController (immediate check)
-//!    - If state changed: Send HdrStateEvent
+//! 4. On `WM_DISPLAYCHANGE` or `WM_SETTINGCHANGE`:
+//!    - Query actual HDR state via `HdrController` (immediate check)
+//!    - If state changed: Send `HdrStateEvent`
 //!    - If state unchanged: Schedule recheck timer (handles race condition)
 //! 5. Recheck timers (adaptive approach):
 //!    - Periodic rechecks at 500ms intervals
 //!    - Up to 10 rechecks (5 seconds total) to handle slow driver updates
 //!    - Stops early if state change is detected
-//! 6. AppController receives event and updates GUI
+//! 6. `AppController` receives event and updates GUI
 //!
 //! # Race Condition Handling
 //!
@@ -42,17 +42,17 @@
 //! - **Periodic rechecks**: Checks every 500ms for up to 5 seconds
 //! - **Early termination**: Stops rechecking once state change is detected
 //!
-//! This approach is based on HDRTray's proven strategy and handles various driver
+//! This approach is based on `HDRTray`'s proven strategy and handles various driver
 //! update latencies reliably.
 //!
 //! # Why Hidden Window (Not Message-Only)?
 //!
 //! Windows provides no native event-driven API for HDR state changes on Win32 desktop apps.
-//! Microsoft documentation recommends using WM_DISPLAYCHANGE as a trigger to check state.
+//! Microsoft documentation recommends using `WM_DISPLAYCHANGE` as a trigger to check state.
 //!
-//! **Critical**: Message-only windows (HWND_MESSAGE) do NOT receive broadcast messages
-//! like WM_DISPLAYCHANGE. We must use a regular hidden window to receive these messages.
-//! The window is created with WS_OVERLAPPEDWINDOW style but is never shown, so it has
+//! **Critical**: Message-only windows (`HWND_MESSAGE`) do NOT receive broadcast messages
+//! like `WM_DISPLAYCHANGE`. We must use a regular hidden window to receive these messages.
+//! The window is created with `WS_OVERLAPPEDWINDOW` style but is never shown, so it has
 //! no visual presence while still receiving broadcast messages.
 //!
 //! # Performance
@@ -116,7 +116,7 @@ pub enum HdrStateEvent {
 /// HDR state monitor
 ///
 /// Monitors Windows display configuration changes and detects HDR state transitions.
-/// Uses a message-only window to receive WM_DISPLAYCHANGE and WM_SETTINGCHANGE messages.
+/// Uses a message-only window to receive `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE` messages.
 #[allow(dead_code)] // Fields are used in Windows-specific code
 pub struct HdrStateMonitor {
     /// Event sender to notify the application controller
@@ -137,7 +137,7 @@ impl HdrStateMonitor {
     ///
     /// # Returns
     ///
-    /// Returns a new HdrStateMonitor instance with initial state detection
+    /// Returns a new `HdrStateMonitor` instance with initial state detection
     pub fn new(
         hdr_controller: HdrController,
         event_sender: mpsc::Sender<HdrStateEvent>,
@@ -163,7 +163,7 @@ impl HdrStateMonitor {
     ///
     /// # Returns
     ///
-    /// Returns a JoinHandle for the background thread
+    /// Returns a `JoinHandle` for the background thread
     pub fn start(self) -> std::thread::JoinHandle<()> {
         std::thread::spawn(move || {
             #[cfg(windows)]

@@ -362,17 +362,20 @@ impl TrayIcon {
 }
 
 /// Stub implementation for non-Windows platforms
+///
+/// These methods maintain API compatibility but do nothing on non-Windows platforms.
+/// The `self` parameter and `Result` return type are intentionally kept to match the Windows implementation signature.
 #[cfg(not(windows))]
 impl TrayIcon {
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::unnecessary_wraps)] // Stub for API compatibility
     pub fn new(_window: &crate::MainWindow) -> easyhdr::error::Result<Self> {
         Ok(Self)
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::unused_self)] // Stub for API compatibility
     pub fn update_icon(&mut self, _hdr_enabled: bool) {}
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::unused_self)] // Stub for API compatibility
     pub fn show_notification(&self, _message: &str) {}
 }
 

@@ -1,11 +1,11 @@
-//! Error types for EasyHDR application
+//! Error types for `EasyHDR` application
 //!
 //! This module defines all error types used throughout the application,
 //! providing clear error messages and proper error propagation.
 
 use thiserror::Error;
 
-/// Main error type for EasyHDR application
+/// Main error type for `EasyHDR` application
 #[derive(Debug, Error)]
 pub enum EasyHdrError {
     /// HDR is not supported on the display
@@ -42,12 +42,12 @@ pub enum EasyHdrError {
     JsonError(#[from] serde_json::Error),
 }
 
-/// Result type alias for EasyHDR operations
+/// Result type alias for `EasyHDR` operations
 pub type Result<T> = std::result::Result<T, EasyHdrError>;
 
 /// Convert an error to a user-friendly message
 ///
-/// This function takes an EasyHdrError and returns a message suitable
+/// This function takes an `EasyHdrError` and returns a message suitable
 /// for displaying to end users in error dialogs.
 ///
 /// The messages include detailed troubleshooting hints to help users
@@ -87,16 +87,14 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
         }
         EasyHdrError::IoError(e) => {
             format!(
-                "A file system error occurred:\n\n{}\n\n\
-                 Please check file permissions and disk space.",
-                e
+                "A file system error occurred:\n\n{e}\n\n\
+                 Please check file permissions and disk space."
             )
         }
         EasyHdrError::JsonError(e) => {
             format!(
-                "Configuration file is corrupted:\n\n{}\n\n\
-                 The application will use default settings.",
-                e
+                "Configuration file is corrupted:\n\n{e}\n\n\
+                 The application will use default settings."
             )
         }
     }

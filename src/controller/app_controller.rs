@@ -43,7 +43,7 @@ pub struct AppController {
     gui_state_sender: mpsc::Sender<AppState>,
     /// Last toggle time for debouncing
     last_toggle_time: Arc<Mutex<Instant>>,
-    /// Reference to ProcessMonitor's watch list for updating
+    /// Reference to `ProcessMonitor`'s watch list for updating
     process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
 }
 
@@ -295,7 +295,7 @@ impl AppController {
     }
 
     /// Handle an HDR state event from external Windows settings changes.
-    /// Updates internal state and GUI without calling toggle_hdr() since the change already occurred.
+    /// Updates internal state and GUI without calling `toggle_hdr()` since the change already occurred.
     fn handle_hdr_state_event(&mut self, event: HdrStateEvent) {
         use tracing::{debug, info};
 
@@ -388,7 +388,7 @@ impl AppController {
         }
     }
 
-    /// Send initial state to GUI and populate ProcessMonitor watch list.
+    /// Send initial state to GUI and populate `ProcessMonitor` watch list.
     /// Call once after initialization to display all configured apps.
     pub fn send_initial_state(&self) {
         use tracing::info;
@@ -403,7 +403,7 @@ impl AppController {
         self.send_state_update();
     }
 
-    /// Add application to config, save to disk, and update ProcessMonitor watch list.
+    /// Add application to config, save to disk, and update `ProcessMonitor` watch list.
     /// Logs warning and continues with in-memory config if save fails.
     pub fn add_application(&mut self, app: MonitoredApp) -> Result<()> {
         use tracing::{info, warn};
@@ -440,7 +440,7 @@ impl AppController {
         Ok(())
     }
 
-    /// Remove application by UUID, save to disk, and update ProcessMonitor watch list.
+    /// Remove application by UUID, save to disk, and update `ProcessMonitor` watch list.
     /// Logs warning and continues with in-memory config if save fails.
     pub fn remove_application(&mut self, id: Uuid) -> Result<()> {
         use tracing::{info, warn};
@@ -474,7 +474,7 @@ impl AppController {
         Ok(())
     }
 
-    /// Toggle application enabled state by UUID, save to disk, and update ProcessMonitor watch list.
+    /// Toggle application enabled state by UUID, save to disk, and update `ProcessMonitor` watch list.
     /// Logs warning and continues with in-memory config if save fails.
     pub fn toggle_app_enabled(&mut self, id: Uuid, enabled: bool) -> Result<()> {
         use tracing::{info, warn};
@@ -553,7 +553,7 @@ impl AppController {
         Ok(())
     }
 
-    /// Update ProcessMonitor watch list with enabled application process names from config
+    /// Update `ProcessMonitor` watch list with enabled application process names from config
     fn update_process_monitor_watch_list(&self) {
         use tracing::debug;
 

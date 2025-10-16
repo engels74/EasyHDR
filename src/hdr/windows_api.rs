@@ -27,10 +27,10 @@ pub struct LUID {
     pub HighPart: i32,
 }
 
-/// DISPLAYCONFIG_DEVICE_INFO_TYPE enumeration values
+/// `DISPLAYCONFIG_DEVICE_INFO_TYPE` enumeration values
 ///
 /// Specifies the type of display device info to configure or obtain through
-/// DisplayConfigSetDeviceInfo or DisplayConfigGetDeviceInfo.
+/// `DisplayConfigSetDeviceInfo` or `DisplayConfigGetDeviceInfo`.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DISPLAYCONFIG_DEVICE_INFO_TYPE {
@@ -70,10 +70,10 @@ pub enum DISPLAYCONFIG_DEVICE_INFO_TYPE {
     DISPLAYCONFIG_DEVICE_INFO_SET_WCG_STATE = 17,
 }
 
-/// DISPLAYCONFIG_DEVICE_INFO_HEADER structure
+/// `DISPLAYCONFIG_DEVICE_INFO_HEADER` structure
 ///
 /// Contains display information about the device. This is the header for all
-/// DisplayConfigGetDeviceInfo and DisplayConfigSetDeviceInfo operations.
+/// `DisplayConfigGetDeviceInfo` and `DisplayConfigSetDeviceInfo` operations.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -87,7 +87,7 @@ pub struct DISPLAYCONFIG_DEVICE_INFO_HEADER {
     pub id: u32,
 }
 
-/// DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO structure (Windows 10/11)
+/// `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` structure (Windows 10/11)
 ///
 /// Used to get advanced color information for a display target.
 /// This is the legacy structure used on Windows 10 and Windows 11 before 24H2.
@@ -98,7 +98,7 @@ pub struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
     pub header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
     /// Anonymous union containing bit fields
     pub value: u32,
-    /// Color encoding (DISPLAYCONFIG_COLOR_ENCODING)
+    /// Color encoding (`DISPLAYCONFIG_COLOR_ENCODING`)
     pub colorEncoding: u32,
     /// Bits per color channel
     pub bitsPerColorChannel: u32,
@@ -126,7 +126,7 @@ impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
     }
 }
 
-/// DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE structure (Windows 10/11)
+/// `DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE` structure (Windows 10/11)
 ///
 /// Used to set advanced color state for a display target.
 /// This is the legacy structure used on Windows 10 and Windows 11 before 24H2.
@@ -141,6 +141,7 @@ pub struct DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
 
 impl DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
     /// Create a new structure to enable or disable advanced color
+    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
     pub fn new(adapter_id: LUID, target_id: u32, enable: bool) -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -154,14 +155,14 @@ impl DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
     }
 }
 
-/// DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 structure (Windows 11 24H2+)
+/// `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2` structure (Windows 11 24H2+)
 ///
 /// Used to query advanced color capabilities for a display target on Windows 11 24H2+.
 ///
 /// # Critical: Field Order Matters!
 ///
 /// This structure MUST match the Windows SDK layout exactly. The field order is:
-/// 1. `header` - DISPLAYCONFIG_DEVICE_INFO_HEADER (20 bytes, offset 0)
+/// 1. `header` - `DISPLAYCONFIG_DEVICE_INFO_HEADER` (20 bytes, offset 0)
 /// 2. `value` - Bit fields for HDR/WCG capabilities (4 bytes, offset 20) ← MUST BE SECOND!
 /// 3. `colorEncoding` - Current color encoding (4 bytes, offset 24)
 /// 4. `bitsPerColorChannel` - Bits per color channel (4 bytes, offset 28)
@@ -200,11 +201,11 @@ pub struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
     pub header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
     /// Anonymous union containing bit fields (CRITICAL: Must be second field!)
     pub value: u32,
-    /// Color encoding (DISPLAYCONFIG_COLOR_ENCODING)
+    /// Color encoding (`DISPLAYCONFIG_COLOR_ENCODING`)
     pub colorEncoding: u32,
     /// Bits per color channel
     pub bitsPerColorChannel: u32,
-    /// Active color mode (DISPLAYCONFIG_ADVANCED_COLOR_MODE)
+    /// Active color mode (`DISPLAYCONFIG_ADVANCED_COLOR_MODE`)
     pub activeColorMode: u32,
 }
 
@@ -245,7 +246,7 @@ impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
     }
 }
 
-/// DISPLAYCONFIG_ADVANCED_COLOR_MODE enumeration
+/// `DISPLAYCONFIG_ADVANCED_COLOR_MODE` enumeration
 ///
 /// Specifies the active color mode for a display.
 #[repr(u32)]
@@ -259,10 +260,10 @@ pub enum DISPLAYCONFIG_ADVANCED_COLOR_MODE {
     DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2,
 }
 
-/// DISPLAYCONFIG_SET_HDR_STATE structure (Windows 11 24H2+)
+/// `DISPLAYCONFIG_SET_HDR_STATE` structure (Windows 11 24H2+)
 ///
 /// Used to set HDR state for a display target on Windows 11 24H2+.
-/// This is the new structure that replaces DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE.
+/// This is the new structure that replaces `DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DISPLAYCONFIG_SET_HDR_STATE {
@@ -274,6 +275,7 @@ pub struct DISPLAYCONFIG_SET_HDR_STATE {
 
 impl DISPLAYCONFIG_SET_HDR_STATE {
     /// Create a new structure to enable or disable HDR
+    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
     pub fn new(adapter_id: LUID, target_id: u32, enable: bool) -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -290,13 +292,13 @@ impl DISPLAYCONFIG_SET_HDR_STATE {
 // DISPLAYCONFIG structures and constants
 // These are not available in windows-rs 0.52, so we define them manually
 
-/// QDC_ONLY_ACTIVE_PATHS flag for QueryDisplayConfig
+/// `QDC_ONLY_ACTIVE_PATHS` flag for `QueryDisplayConfig`
 pub const QDC_ONLY_ACTIVE_PATHS: u32 = 0x0000_0002;
 
-/// DISPLAYCONFIG_PATH_ACTIVE flag
+/// `DISPLAYCONFIG_PATH_ACTIVE` flag
 pub const DISPLAYCONFIG_PATH_ACTIVE: u32 = 0x0000_0001;
 
-/// DISPLAYCONFIG_2DREGION structure
+/// `DISPLAYCONFIG_2DREGION` structure
 ///
 /// Represents a 2D region with width and height.
 #[repr(C)]
@@ -308,7 +310,7 @@ pub struct DISPLAYCONFIG_2DREGION {
     pub cy: u32,
 }
 
-/// DISPLAYCONFIG_RATIONAL structure
+/// `DISPLAYCONFIG_RATIONAL` structure
 ///
 /// Represents a rational number as numerator/denominator.
 #[repr(C)]
@@ -320,7 +322,7 @@ pub struct DISPLAYCONFIG_RATIONAL {
     pub Denominator: u32,
 }
 
-/// DISPLAYCONFIG_VIDEO_SIGNAL_INFO structure
+/// `DISPLAYCONFIG_VIDEO_SIGNAL_INFO` structure
 ///
 /// Contains information about the video signal for a display target.
 #[repr(C)]
@@ -342,7 +344,7 @@ pub struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO {
     pub scanLineOrdering: u32,
 }
 
-/// DISPLAYCONFIG_TARGET_MODE structure
+/// `DISPLAYCONFIG_TARGET_MODE` structure
 ///
 /// Contains information about a display target mode.
 #[repr(C)]
@@ -352,7 +354,7 @@ pub struct DISPLAYCONFIG_TARGET_MODE {
     pub targetVideoSignalInfo: DISPLAYCONFIG_VIDEO_SIGNAL_INFO,
 }
 
-/// DISPLAYCONFIG_SOURCE_MODE structure
+/// `DISPLAYCONFIG_SOURCE_MODE` structure
 ///
 /// Contains information about a display source mode.
 #[repr(C)]
@@ -368,7 +370,7 @@ pub struct DISPLAYCONFIG_SOURCE_MODE {
     pub position: DISPLAYCONFIG_2DREGION,
 }
 
-/// DISPLAYCONFIG_MODE_INFO_TYPE enumeration
+/// `DISPLAYCONFIG_MODE_INFO_TYPE` enumeration
 ///
 /// Specifies whether the mode information is for a source or target.
 #[repr(u32)]
@@ -380,7 +382,7 @@ pub enum DISPLAYCONFIG_MODE_INFO_TYPE {
     DISPLAYCONFIG_MODE_INFO_TYPE_TARGET = 2,
 }
 
-/// DISPLAYCONFIG_MODE_INFO structure (union)
+/// `DISPLAYCONFIG_MODE_INFO` structure (union)
 ///
 /// Contains mode information for either a source or target.
 #[repr(C)]
@@ -396,7 +398,7 @@ pub struct DISPLAYCONFIG_MODE_INFO {
     pub modeInfo: DISPLAYCONFIG_MODE_INFO_UNION,
 }
 
-/// Union for DISPLAYCONFIG_MODE_INFO
+/// Union for `DISPLAYCONFIG_MODE_INFO`
 ///
 /// Contains either target mode or source mode information.
 #[repr(C)]
@@ -432,7 +434,7 @@ impl std::fmt::Debug for DISPLAYCONFIG_MODE_INFO {
     }
 }
 
-/// DISPLAYCONFIG_PATH_SOURCE_INFO structure
+/// `DISPLAYCONFIG_PATH_SOURCE_INFO` structure
 ///
 /// Contains information about a display path source.
 #[repr(C)]
@@ -448,7 +450,7 @@ pub struct DISPLAYCONFIG_PATH_SOURCE_INFO {
     pub statusFlags: u32,
 }
 
-/// DISPLAYCONFIG_PATH_TARGET_INFO structure
+/// `DISPLAYCONFIG_PATH_TARGET_INFO` structure
 ///
 /// Contains information about a display path target.
 #[repr(C)]
@@ -460,7 +462,7 @@ pub struct DISPLAYCONFIG_PATH_TARGET_INFO {
     pub id: u32,
     /// Index into the mode information array
     pub modeInfoIdx: u32,
-    /// Output technology (e.g., HDMI, DisplayPort)
+    /// Output technology (e.g., HDMI, `DisplayPort`)
     pub outputTechnology: u32,
     /// Rotation setting
     pub rotation: u32,
@@ -487,7 +489,7 @@ impl Default for DISPLAYCONFIG_PATH_TARGET_INFO {
     }
 }
 
-/// DISPLAYCONFIG_PATH_INFO structure
+/// `DISPLAYCONFIG_PATH_INFO` structure
 ///
 /// Contains information about a display path (source to target connection).
 #[repr(C)]
@@ -589,8 +591,9 @@ pub unsafe fn DisplayConfigSetDeviceInfo(
     -1 // ERROR_NOT_SUPPORTED
 }
 
-/// Default implementation for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
+/// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
     fn default() -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -606,8 +609,9 @@ impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
     }
 }
 
-/// Default implementation for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
+/// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
     fn default() -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -730,6 +734,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)] // Test uses compile-time constant
     fn test_displayconfig_set_advanced_color_state_new() {
         let luid = LUID {
             LowPart: 0x1234,
@@ -758,6 +763,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)] // Test uses compile-time constant
     fn test_displayconfig_set_hdr_state_new() {
         let luid = LUID {
             LowPart: 0xABCD,

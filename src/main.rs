@@ -1,4 +1,4 @@
-//! EasyHDR - Automatic HDR management for Windows
+//! `EasyHDR` - Automatic HDR management for Windows
 //!
 //! This application automatically enables and disables HDR on Windows displays
 //! based on configured applications. Requires Windows 10 21H2+ (build 19044+).
@@ -6,10 +6,6 @@
 // Set Windows subsystem to hide console window
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(missing_docs)] // Allow missing docs for Slint-generated code
-#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
-#![allow(clippy::needless_pass_by_value)] // Allow pass by value for clarity
-#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
-#![allow(clippy::too_many_lines)] // Allow long functions for complex initialization logic
 
 // GUI module is only in the binary, not the library
 mod gui;
@@ -34,6 +30,12 @@ slint::include_modules!();
 /// Minimum supported Windows build number (Windows 10 21H2)
 const MIN_WINDOWS_BUILD: u32 = 19044;
 
+/// Main entry point for the application
+///
+/// Performs complex initialization including logging, version detection, single-instance
+/// enforcement, HDR capability detection, and multi-threaded component startup.
+/// The length (102 lines) is justified by the sequential initialization requirements.
+#[allow(clippy::too_many_lines)] // Complex initialization sequence
 fn main() -> Result<()> {
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
@@ -71,10 +73,9 @@ fn main() -> Result<()> {
     if let Err(e) = verify_windows_version() {
         error!("Windows version check failed: {}", e);
         show_error_and_exit(&format!(
-            "EasyHDR requires Windows 10 21H2 (build {}) or later.\n\n\
+            "EasyHDR requires Windows 10 21H2 (build {MIN_WINDOWS_BUILD}) or later.\n\n\
              Your Windows version is not supported.\n\n\
-             Please update Windows to continue.",
-            MIN_WINDOWS_BUILD
+             Please update Windows to continue."
         ));
         return Err(e);
     }
@@ -94,7 +95,7 @@ fn main() -> Result<()> {
     // This may fail if run on macOS (development environment)
     #[cfg_attr(not(windows), allow(unused_variables))]
     let (process_monitor, gui_controller, should_show_hdr_warning) =
-        match initialize_components(config) {
+        match initialize_components(&config) {
             Ok(components) => components,
             Err(e) => {
                 error!("Failed to initialize components: {}", e);
@@ -368,9 +369,9 @@ fn log_hdr_startup_summary(_hdr_controller: &HdrController) {
 
 /// Initializes all core components including HDR controller, process monitor,
 /// HDR state monitor, app controller, and GUI. Returns a tuple of
-/// (ProcessMonitor, GuiController, should_show_hdr_warning).
+/// (`ProcessMonitor`, `GuiController`, `should_show_hdr_warning`).
 fn initialize_components(
-    config: easyhdr::config::AppConfig,
+    config: &easyhdr::config::AppConfig,
 ) -> Result<(ProcessMonitor, GuiController, bool)> {
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
@@ -479,7 +480,7 @@ fn show_error_and_exit(message: &str) {
 /// Shows an error dialog and exits the application (non-Windows fallback).
 #[cfg(not(windows))]
 fn show_error_and_exit(message: &str) {
-    eprintln!("ERROR: {}", message);
+    eprintln!("ERROR: {message}");
     std::process::exit(1);
 }
 
