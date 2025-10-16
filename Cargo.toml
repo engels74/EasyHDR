@@ -6,7 +6,7 @@ rust-version = "1.85"
 resolver = "2"
 authors = ["EasyHDR Contributors"]
 description = "Automatic HDR management for Windows"
-license = "AGPL-3.0"
+license = "AGPL-3.0-only"
 
 [lib]
 name = "easyhdr"

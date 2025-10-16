@@ -2,36 +2,50 @@
 # See https://embarkstudios.github.io/cargo-deny/
 
 [advisories]
-# Deny crates with security vulnerabilities
-vulnerability = "deny"
-# Warn about unmaintained crates
-unmaintained = "warn"
-# Warn about crates with unsound code
-unsound = "warn"
+# Use version 2 configuration format
+version = 2
+# Check all dependencies for unmaintained crates
+unmaintained = "all"
 # Ignore specific advisories (add IDs here if needed)
-ignore = []
+ignore = [
+    # GTK3 bindings - unmaintained but only used on Linux (not Windows target)
+    "RUSTSEC-2024-0412", # gdk
+    "RUSTSEC-2024-0413", # atk
+    "RUSTSEC-2024-0415", # gtk
+    "RUSTSEC-2024-0416", # atk-sys
+    "RUSTSEC-2024-0418", # gdk-sys
+    "RUSTSEC-2024-0419", # gtk3-macros
+    "RUSTSEC-2024-0420", # gtk-sys
+    # glib unsoundness - fixed in 0.20.0 but GTK3 deps pin to 0.18.x
+    "RUSTSEC-2024-0429", # glib
+    # paste - unmaintained but widely used, no security issues
+    "RUSTSEC-2024-0436", # paste
+    # proc-macro-error - unmaintained but only used at build time
+    "RUSTSEC-2024-0370", # proc-macro-error
+]
 
 [licenses]
+# Use version 2 configuration format
+version = 2
 # Allow AGPL-3.0 (our project license) and common permissive licenses
 allow = [
-    "AGPL-3.0",
+    "AGPL-3.0-only",
+    "AGPL-3.0-or-later",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "BSL-1.0",
+    "GPL-3.0-only",
     "ISC",
     "MIT",
     "MPL-2.0",
-    "Unicode-DFS-2016",
+    "NCSA",
+    "Unicode-3.0",
     "Zlib",
-]
-# Deny copyleft licenses that conflict with AGPL-3.0
-deny = [
-    "GPL-2.0",
-    "GPL-3.0",
-    "LGPL-2.0",
-    "LGPL-2.1",
-    "LGPL-3.0",
+    # Slint custom licenses
+    "LicenseRef-Slint-Royalty-free-2.0",
+    "LicenseRef-Slint-Software-3.0",
 ]
 # Confidence threshold for license detection
 confidence-threshold = 0.8
