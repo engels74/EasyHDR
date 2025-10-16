@@ -149,7 +149,7 @@ impl DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
                 adapterId: adapter_id,
                 id: target_id,
             },
-            value: if enable { 1 } else { 0 },
+            value: u32::from(enable),
         }
     }
 }
@@ -282,7 +282,7 @@ impl DISPLAYCONFIG_SET_HDR_STATE {
                 adapterId: adapter_id,
                 id: target_id,
             },
-            value: if enable { 1 } else { 0 },
+            value: u32::from(enable),
         }
     }
 }
@@ -291,10 +291,10 @@ impl DISPLAYCONFIG_SET_HDR_STATE {
 // These are not available in windows-rs 0.52, so we define them manually
 
 /// QDC_ONLY_ACTIVE_PATHS flag for QueryDisplayConfig
-pub const QDC_ONLY_ACTIVE_PATHS: u32 = 0x00000002;
+pub const QDC_ONLY_ACTIVE_PATHS: u32 = 0x0000_0002;
 
 /// DISPLAYCONFIG_PATH_ACTIVE flag
-pub const DISPLAYCONFIG_PATH_ACTIVE: u32 = 0x00000001;
+pub const DISPLAYCONFIG_PATH_ACTIVE: u32 = 0x0000_0001;
 
 /// DISPLAYCONFIG_2DREGION structure
 ///
@@ -421,6 +421,7 @@ impl Default for DISPLAYCONFIG_MODE_INFO {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)] // Union field cannot be safely accessed
 impl std::fmt::Debug for DISPLAYCONFIG_MODE_INFO {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DISPLAYCONFIG_MODE_INFO")

@@ -1,3 +1,7 @@
+#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
+#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
+#![allow(clippy::float_cmp)] // Allow float comparison in tests
+
 //! Integration tests for EasyHDR
 //!
 //! This test module provides comprehensive integration testing for the entire application,
@@ -114,7 +118,7 @@ fn test_process_monitor_integration() {
         result.is_err()
             || matches!(
                 result,
-                Ok(ProcessEvent::Started(_)) | Ok(ProcessEvent::Stopped(_))
+                Ok(ProcessEvent::Started(_) | ProcessEvent::Stopped(_))
             )
     );
 }

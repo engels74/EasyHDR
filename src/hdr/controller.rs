@@ -155,6 +155,8 @@ impl HdrController {
     /// - If Windows API contract changes (extremely unlikely for stable APIs)
     /// - If buffer sizes change between GetDisplayConfigBufferSizes and QueryDisplayConfig
     ///   (handled by checking return codes)
+    #[allow(unsafe_code)] // Windows FFI for display enumeration
+    #[allow(clippy::too_many_lines)] // Complex Windows API interaction requires many lines
     pub fn enumerate_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         #[cfg(windows)]
         {
@@ -318,6 +320,7 @@ impl HdrController {
     /// - Structure size and type fields must match the actual structure being used
     /// - The header must be the first field in the structure
     #[cfg_attr(not(windows), allow(unused_variables))]
+    #[allow(unsafe_code)] // Windows FFI for HDR capability detection
     pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
@@ -430,6 +433,7 @@ impl HdrController {
 
     /// Check HDR support using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
+    #[allow(unsafe_code)] // Windows FFI for legacy HDR capability detection
     fn is_hdr_supported_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
@@ -506,6 +510,7 @@ impl HdrController {
     /// same reasons as is_hdr_supported: properly initialized structures with correct size/type
     /// fields, valid adapter/target IDs, and sound pointer casts to the header field.
     #[cfg_attr(not(windows), allow(unused_variables))]
+    #[allow(unsafe_code)] // Windows FFI for HDR state detection
     pub fn is_hdr_enabled(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
@@ -573,6 +578,7 @@ impl HdrController {
 
     /// Check HDR enabled state using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
+    #[allow(unsafe_code)] // Windows FFI for legacy HDR state detection
     fn is_hdr_enabled_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
@@ -652,6 +658,7 @@ impl HdrController {
     /// - Structure size and type fields must match the actual structure being used
     /// - The header must be the first field in the structure
     #[cfg_attr(not(windows), allow(dead_code))]
+    #[allow(unsafe_code)] // Windows FFI for HDR state control
     pub fn set_hdr_state(&self, target: &DisplayTarget, enable: bool) -> Result<()> {
         #[cfg(windows)]
         {
@@ -1195,19 +1202,15 @@ mod tests {
             let _ = target.target_id; // Just verify it exists
 
             // Result should be Ok or Err (both are valid for partial success)
-            match result {
-                Ok(()) => {
-                    // Success case
-                    assert!(
-                        target.supports_hdr,
-                        "Only HDR-capable displays should succeed"
-                    );
-                }
-                Err(_) => {
-                    // Failure case - this is acceptable for partial success
-                    // Just verify the error is logged (we can't check logs in tests)
-                }
+            if let Ok(()) = result {
+                // Success case
+                assert!(
+                    target.supports_hdr,
+                    "Only HDR-capable displays should succeed"
+                );
             }
+            // Failure case - this is acceptable for partial success
+            // Just verify the error is logged (we can't check logs in tests)
         }
     }
 
@@ -1323,10 +1326,10 @@ mod tests {
         // Create a mock display target with invalid IDs
         let invalid_target = DisplayTarget {
             adapter_id: LUID {
-                LowPart: 0xFFFFFFFF,
+                LowPart: 0xFFFF_FFFF,
                 HighPart: -1,
             },
-            target_id: 0xFFFFFFFF,
+            target_id: 0xFFFF_FFFF,
             supports_hdr: false,
         };
 
@@ -1366,10 +1369,10 @@ mod tests {
         // Create a mock display target with invalid IDs
         let invalid_target = DisplayTarget {
             adapter_id: LUID {
-                LowPart: 0xFFFFFFFF,
+                LowPart: 0xFFFF_FFFF,
                 HighPart: -1,
             },
-            target_id: 0xFFFFFFFF,
+            target_id: 0xFFFF_FFFF,
             supports_hdr: true, // Pretend it supports HDR
         };
 

@@ -5,6 +5,11 @@
 
 // Set Windows subsystem to hide console window
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![allow(missing_docs)] // Allow missing docs for Slint-generated code
+#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
+#![allow(clippy::needless_pass_by_value)] // Allow pass by value for clarity
+#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
+#![allow(clippy::too_many_lines)] // Allow long functions for complex initialization logic
 
 // GUI module is only in the binary, not the library
 mod gui;

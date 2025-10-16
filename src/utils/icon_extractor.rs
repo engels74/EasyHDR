@@ -76,6 +76,7 @@ pub fn extract_icon_from_exe(#[allow(unused_variables)] path: &Path) -> Result<V
 /// - HICON handles must be destroyed after use to prevent resource leaks
 /// - Icon handles are only valid until DestroyIcon is called
 #[cfg(windows)]
+#[allow(unsafe_code)] // Windows FFI for icon extraction
 fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
     use std::os::windows::ffi::OsStrExt;
 
@@ -155,6 +156,7 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
 /// - wide_path must be a null-terminated wide string
 /// - HICON handles must be destroyed after use
 #[cfg(windows)]
+#[allow(unsafe_code)] // Windows FFI for icon extraction
 fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
     use std::mem::zeroed;
 
@@ -224,6 +226,7 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
 /// - Buffer size must match width * height * 4 bytes
 /// - BITMAPINFO structure must have correct size and format fields
 #[cfg(windows)]
+#[allow(unsafe_code)] // Windows FFI for icon conversion
 fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
     use std::mem::zeroed;
 
@@ -399,6 +402,7 @@ pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
 
 /// Windows-specific display name extraction
 #[cfg(windows)]
+#[allow(unsafe_code)] // Windows FFI for version info extraction
 fn extract_display_name_windows(path: &Path) -> Result<String> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Storage::FileSystem::{

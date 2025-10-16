@@ -213,7 +213,9 @@ impl HdrStateMonitor {
 
         // Compare with cached state
         let mut cached_state = self.cached_hdr_state.lock();
-        if current_state != *cached_state {
+        if current_state == *cached_state {
+            debug!("HDR state unchanged: {}", current_state);
+        } else {
             info!(
                 "HDR state changed: {} -> {}",
                 if *cached_state { "ON" } else { "OFF" },
@@ -235,8 +237,6 @@ impl HdrStateMonitor {
             } else {
                 debug!("Sent HDR state event: {:?}", event);
             }
-        } else {
-            debug!("HDR state unchanged: {}", current_state);
         }
     }
 
@@ -245,6 +245,7 @@ impl HdrStateMonitor {
     /// Creates a message-only window and processes Windows messages.
     /// This method blocks until the window is destroyed.
     #[cfg(windows)]
+    #[allow(unsafe_code)] // Windows FFI for message loop
     fn run_message_loop(&self) -> Result<()> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
@@ -365,6 +366,7 @@ thread_local! {
 ///
 /// This approach is based on HDRTray's proven strategy and handles various driver update latencies.
 #[cfg(windows)]
+#[allow(unsafe_code)] // Windows FFI callback
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
     msg: u32,
@@ -448,6 +450,7 @@ unsafe extern "system" fn window_proc(
 ///
 /// Initializes the recheck counter and starts a timer for periodic rechecks.
 #[cfg(windows)]
+#[allow(unsafe_code)] // Windows FFI for timer
 fn start_periodic_rechecks(hwnd: HWND) {
     MONITOR_STATE_TLS.with(|cell| {
         if let Some(state) = cell.borrow().as_ref() {
@@ -466,6 +469,7 @@ fn start_periodic_rechecks(hwnd: HWND) {
 ///
 /// Kills the recheck timer and resets the counter.
 #[cfg(windows)]
+#[allow(unsafe_code)] // Windows FFI for timer
 fn stop_periodic_rechecks(hwnd: HWND) {
     MONITOR_STATE_TLS.with(|cell| {
         if let Some(state) = cell.borrow().as_ref() {

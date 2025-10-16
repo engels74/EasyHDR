@@ -117,6 +117,7 @@ impl WindowsVersion {
     ///
     /// This is the most reliable method as it's not subject to compatibility shims.
     #[cfg(windows)]
+    #[allow(unsafe_code)] // Windows FFI for version detection
     fn get_build_number_with_rtl_get_version() -> crate::error::Result<u32> {
         use std::mem::transmute;
 
@@ -172,6 +173,7 @@ impl WindowsVersion {
     ///
     /// This method may be affected by compatibility shims but serves as a fallback.
     #[cfg(windows)]
+    #[allow(unsafe_code)] // Windows FFI for version detection fallback
     fn get_build_number_with_get_version_ex() -> crate::error::Result<u32> {
         unsafe {
             let mut version_info = OSVERSIONINFOEXW {

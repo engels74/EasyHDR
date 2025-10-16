@@ -1,3 +1,6 @@
+#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
+#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
+
 //! Integration tests for Windows version detection
 //!
 //! These tests verify the version detection logic with various scenarios

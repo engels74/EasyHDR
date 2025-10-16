@@ -1,3 +1,6 @@
+#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
+#![allow(clippy::float_cmp)] // Allow float comparison in tests
+
 //! Memory usage tests
 //!
 //! This test module verifies that the application uses less than 50MB RAM during monitoring.

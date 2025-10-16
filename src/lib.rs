@@ -1,11 +1,16 @@
-//! EasyHDR - Automatic HDR management for Windows
+#![allow(clippy::doc_markdown)] // Allow missing backticks in documentation
+#![allow(clippy::uninlined_format_args)] // Allow non-inlined format args for clarity
+#![allow(clippy::cast_possible_truncation)] // Allow casts that may truncate (Windows API compatibility)
+#![allow(clippy::match_wildcard_for_single_variants)] // Allow wildcard matches for clarity
+
+//! `EasyHDR` - Automatic HDR management for Windows
 //!
 //! This library provides functionality to automatically enable and disable HDR
 //! on Windows displays based on configured applications.
 //!
 //! # Overview
 //!
-//! EasyHDR is a Windows utility that automatically toggles HDR (High Dynamic Range)
+//! `EasyHDR` is a Windows utility that automatically toggles HDR (High Dynamic Range)
 //! on your displays when you launch HDR-capable games or applications. It runs in
 //! the background, monitoring for configured applications and enabling HDR when they
 //! start, then disabling HDR when they close.
@@ -43,11 +48,11 @@
 //!
 //! # Key Components
 //!
-//! - **ProcessMonitor**: Polls running processes at configurable intervals (default 1s)
-//! - **AppController**: Coordinates HDR control based on process events
-//! - **HdrController**: Interfaces with Windows Display Configuration API
-//! - **GuiController**: Bridges Slint UI with application logic
-//! - **ConfigManager**: Handles persistent configuration storage
+//! - **`ProcessMonitor`**: Polls running processes at configurable intervals (default 1s)
+//! - **`AppController`**: Coordinates HDR control based on process events
+//! - **`HdrController`**: Interfaces with Windows Display Configuration API
+//! - **`GuiController`**: Bridges Slint UI with application logic
+//! - **`ConfigManager`**: Handles persistent configuration storage
 //!
 //! # Example Usage
 //!

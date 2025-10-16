@@ -21,6 +21,7 @@ pub struct SingleInstanceGuard {
 #[cfg(windows)]
 impl SingleInstanceGuard {
     /// Create a new single instance guard, returning an error if another instance is running
+    #[allow(unsafe_code)] // Windows FFI for mutex
     pub fn new() -> Result<Self> {
         use tracing::{debug, error};
         use windows::core::HSTRING;
@@ -53,6 +54,7 @@ impl SingleInstanceGuard {
 
 #[cfg(windows)]
 impl Drop for SingleInstanceGuard {
+    #[allow(unsafe_code)] // Windows FFI for mutex cleanup
     fn drop(&mut self) {
         use tracing::debug;
 

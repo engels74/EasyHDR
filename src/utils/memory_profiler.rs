@@ -22,11 +22,13 @@ pub struct MemoryStats {
 
 impl MemoryStats {
     /// Get total memory in megabytes
+    #[allow(clippy::cast_precision_loss)] // Acceptable for display purposes
     pub fn total_mb(&self) -> f64 {
         self.total_memory as f64 / 1024.0 / 1024.0
     }
 
     /// Get icon cache memory in megabytes
+    #[allow(clippy::cast_precision_loss)] // Acceptable for display purposes
     pub fn icon_cache_mb(&self) -> f64 {
         self.icon_cache_memory as f64 / 1024.0 / 1024.0
     }
@@ -112,6 +114,7 @@ impl MemoryProfiler {
 
     /// Get process memory usage in bytes (Windows only, returns 0 on other platforms)
     #[cfg(windows)]
+    #[allow(unsafe_code)] // Windows FFI for memory info
     fn get_process_memory() -> usize {
         use windows::Win32::System::ProcessStatus::{
             GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
@@ -191,8 +194,11 @@ mod tests {
             monitor_memory: 2048, // 2 KB
         };
 
-        assert_eq!(stats.total_mb(), 10.0);
-        assert_eq!(stats.icon_cache_mb(), 5.0);
+        #[allow(clippy::float_cmp)] // Exact comparison is acceptable for test
+        {
+            assert_eq!(stats.total_mb(), 10.0);
+            assert_eq!(stats.icon_cache_mb(), 5.0);
+        }
     }
 
     #[test]

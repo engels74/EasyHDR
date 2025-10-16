@@ -342,9 +342,7 @@ impl GuiController {
         }
 
         let previous_state = previous_hdr_state.replace(Some(state.hdr_enabled));
-        let state_changed = previous_state
-            .map(|prev| prev != state.hdr_enabled)
-            .unwrap_or(true);
+        let state_changed = previous_state != Some(state.hdr_enabled);
         let had_previous = previous_state.is_some();
 
         if !state_changed {

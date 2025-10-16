@@ -27,7 +27,7 @@ pub struct MonitoredApp {
 }
 
 impl MonitoredApp {
-    /// Create a MonitoredApp from an executable path
+    /// Create a `MonitoredApp` from an executable path
     ///
     /// Extracts display name from file metadata, icon from resources, and generates
     /// a unique UUID. Process name is derived from filename (lowercase, no extension).
@@ -37,15 +37,15 @@ impl MonitoredApp {
         // Validate that the path exists and is a file
         if !exe_path.exists() {
             return Err(EasyHdrError::ConfigError(format!(
-                "Executable path does not exist: {:?}",
-                exe_path
+                "Executable path does not exist: {}",
+                exe_path.display()
             )));
         }
 
         if !exe_path.is_file() {
             return Err(EasyHdrError::ConfigError(format!(
-                "Path is not a file: {:?}",
-                exe_path
+                "Path is not a file: {}",
+                exe_path.display()
             )));
         }
 
@@ -58,8 +58,8 @@ impl MonitoredApp {
             .and_then(|s| s.to_str())
             .ok_or_else(|| {
                 EasyHdrError::ConfigError(format!(
-                    "Failed to extract filename from path: {:?}",
-                    exe_path
+                    "Failed to extract filename from path: {}",
+                    exe_path.display()
                 ))
             })?
             .to_lowercase();
@@ -125,7 +125,7 @@ impl MonitoredApp {
 
     /// Release icon data to free memory
     ///
-    /// Clears cached icon data to reduce memory usage. Can be reloaded with ensure_icon_loaded().
+    /// Clears cached icon data to reduce memory usage. Can be reloaded with `ensure_icon_loaded()`.
     pub fn release_icon(&mut self) {
         if let Some(_icon_data) = self.icon_data.take() {
             // Record icon removal in memory profiler
@@ -139,7 +139,7 @@ impl MonitoredApp {
     }
 }
 
-/// Implement TryFrom<PathBuf> for MonitoredApp to follow Rust conversion trait conventions
+/// Implement `TryFrom`<PathBuf> for `MonitoredApp` to follow Rust conversion trait conventions
 impl std::convert::TryFrom<PathBuf> for MonitoredApp {
     type Error = crate::error::EasyHdrError;
 
