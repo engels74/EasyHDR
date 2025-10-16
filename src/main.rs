@@ -12,7 +12,7 @@ mod gui;
 use easyhdr::{
     config::ConfigManager,
     controller::{AppController, AppState},
-    error::{get_user_friendly_error, EasyHdrError, Result},
+    error::{EasyHdrError, Result},
     hdr::HdrController,
     monitor::{HdrStateEvent, HdrStateMonitor, ProcessEvent, ProcessMonitor},
     utils,
@@ -107,6 +107,8 @@ fn main() -> Result<()> {
                 // On Windows, show error dialog
                 #[cfg(windows)]
                 {
+                    use easyhdr::error::get_user_friendly_error;
+
                     show_error_and_exit(&format!(
                         "Failed to initialize EasyHDR:\n\n{}\n\n\
                          Please ensure your display drivers are up to date.",
