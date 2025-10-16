@@ -13,12 +13,17 @@
 #[cfg(windows)]
 pub use windows::Win32::Foundation::LUID;
 
-// For non-Windows platforms (testing), define a stub LUID structure
+/// Locally Unique Identifier (LUID) structure for non-Windows platforms
+///
+/// This is a stub implementation for testing on non-Windows platforms.
+/// On Windows, the real LUID from windows-rs is used instead.
 #[cfg(not(windows))]
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LUID {
+    /// Low-order 32 bits
     pub LowPart: u32,
+    /// High-order 32 bits
     pub HighPart: i32,
 }
 
@@ -29,22 +34,39 @@ pub struct LUID {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DISPLAYCONFIG_DEVICE_INFO_TYPE {
+    /// Get the source name
     DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME = 1,
+    /// Get the target name
     DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME = 2,
+    /// Get the target preferred mode
     DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_PREFERRED_MODE = 3,
+    /// Get the adapter name
     DISPLAYCONFIG_DEVICE_INFO_GET_ADAPTER_NAME = 4,
+    /// Set target persistence
     DISPLAYCONFIG_DEVICE_INFO_SET_TARGET_PERSISTENCE = 5,
+    /// Get the target base type
     DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_BASE_TYPE = 6,
+    /// Get support for virtual resolution
     DISPLAYCONFIG_DEVICE_INFO_GET_SUPPORT_VIRTUAL_RESOLUTION = 7,
+    /// Set support for virtual resolution
     DISPLAYCONFIG_DEVICE_INFO_SET_SUPPORT_VIRTUAL_RESOLUTION = 8,
+    /// Get advanced color info (Windows 10/11 legacy)
     DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO = 9,
+    /// Set advanced color state (Windows 10/11 legacy)
     DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE = 10,
+    /// Get SDR white level
     DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL = 11,
+    /// Get monitor specialization
     DISPLAYCONFIG_DEVICE_INFO_GET_MONITOR_SPECIALIZATION = 12,
+    /// Set monitor specialization
     DISPLAYCONFIG_DEVICE_INFO_SET_MONITOR_SPECIALIZATION = 13,
+    /// Reserved for future use
     DISPLAYCONFIG_DEVICE_INFO_SET_RESERVED1 = 14,
+    /// Get advanced color info v2 (Windows 11 24H2+)
     DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 = 15,
+    /// Set HDR state (Windows 11 24H2+)
     DISPLAYCONFIG_DEVICE_INFO_SET_HDR_STATE = 16,
+    /// Set wide color gamut state
     DISPLAYCONFIG_DEVICE_INFO_SET_WCG_STATE = 17,
 }
 
@@ -229,8 +251,11 @@ impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DISPLAYCONFIG_ADVANCED_COLOR_MODE {
+    /// Standard Dynamic Range (SDR) mode
     DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = 0,
+    /// Wide Color Gamut (WCG) mode
     DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG = 1,
+    /// High Dynamic Range (HDR) mode
     DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2,
 }
 
@@ -272,74 +297,114 @@ pub const QDC_ONLY_ACTIVE_PATHS: u32 = 0x00000002;
 pub const DISPLAYCONFIG_PATH_ACTIVE: u32 = 0x00000001;
 
 /// DISPLAYCONFIG_2DREGION structure
+///
+/// Represents a 2D region with width and height.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_2DREGION {
+    /// Width in pixels
     pub cx: u32,
+    /// Height in pixels
     pub cy: u32,
 }
 
 /// DISPLAYCONFIG_RATIONAL structure
+///
+/// Represents a rational number as numerator/denominator.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_RATIONAL {
+    /// Numerator of the rational number
     pub Numerator: u32,
+    /// Denominator of the rational number
     pub Denominator: u32,
 }
 
 /// DISPLAYCONFIG_VIDEO_SIGNAL_INFO structure
+///
+/// Contains information about the video signal for a display target.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO {
+    /// Pixel clock rate in Hz
     pub pixelRate: u64,
+    /// Horizontal sync frequency
     pub hSyncFreq: DISPLAYCONFIG_RATIONAL,
+    /// Vertical sync frequency (refresh rate)
     pub vSyncFreq: DISPLAYCONFIG_RATIONAL,
+    /// Active video region size
     pub activeSize: DISPLAYCONFIG_2DREGION,
+    /// Total video region size (including blanking)
     pub totalSize: DISPLAYCONFIG_2DREGION,
+    /// Video standard (e.g., NTSC, PAL)
     pub videoStandard: u32,
+    /// Scan line ordering (progressive, interlaced)
     pub scanLineOrdering: u32,
 }
 
 /// DISPLAYCONFIG_TARGET_MODE structure
+///
+/// Contains information about a display target mode.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_TARGET_MODE {
+    /// Video signal information for the target
     pub targetVideoSignalInfo: DISPLAYCONFIG_VIDEO_SIGNAL_INFO,
 }
 
 /// DISPLAYCONFIG_SOURCE_MODE structure
+///
+/// Contains information about a display source mode.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_SOURCE_MODE {
+    /// Width in pixels
     pub width: u32,
+    /// Height in pixels
     pub height: u32,
+    /// Pixel format
     pub pixelFormat: u32,
+    /// Position of the source on the desktop
     pub position: DISPLAYCONFIG_2DREGION,
 }
 
 /// DISPLAYCONFIG_MODE_INFO_TYPE enumeration
+///
+/// Specifies whether the mode information is for a source or target.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DISPLAYCONFIG_MODE_INFO_TYPE {
+    /// Source mode information
     DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE = 1,
+    /// Target mode information
     DISPLAYCONFIG_MODE_INFO_TYPE_TARGET = 2,
 }
 
 /// DISPLAYCONFIG_MODE_INFO structure (union)
+///
+/// Contains mode information for either a source or target.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct DISPLAYCONFIG_MODE_INFO {
+    /// Type of mode information (source or target)
     pub infoType: DISPLAYCONFIG_MODE_INFO_TYPE,
+    /// Source or target identifier
     pub id: u32,
+    /// Adapter LUID
     pub adapterId: LUID,
+    /// Union containing either source or target mode info
     pub modeInfo: DISPLAYCONFIG_MODE_INFO_UNION,
 }
 
 /// Union for DISPLAYCONFIG_MODE_INFO
+///
+/// Contains either target mode or source mode information.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub union DISPLAYCONFIG_MODE_INFO_UNION {
+    /// Target mode information
     pub targetMode: DISPLAYCONFIG_TARGET_MODE,
+    /// Source mode information
     pub sourceMode: DISPLAYCONFIG_SOURCE_MODE,
 }
 
@@ -367,43 +432,71 @@ impl std::fmt::Debug for DISPLAYCONFIG_MODE_INFO {
 }
 
 /// DISPLAYCONFIG_PATH_SOURCE_INFO structure
+///
+/// Contains information about a display path source.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_PATH_SOURCE_INFO {
+    /// Adapter LUID
     pub adapterId: LUID,
+    /// Source identifier
     pub id: u32,
+    /// Index into the mode information array
     pub modeInfoIdx: u32,
+    /// Status flags
     pub statusFlags: u32,
 }
 
 /// DISPLAYCONFIG_PATH_TARGET_INFO structure
+///
+/// Contains information about a display path target.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct DISPLAYCONFIG_PATH_TARGET_INFO {
+    /// Adapter LUID
     pub adapterId: LUID,
+    /// Target identifier
     pub id: u32,
+    /// Index into the mode information array
     pub modeInfoIdx: u32,
+    /// Output technology (e.g., HDMI, DisplayPort)
     pub outputTechnology: u32,
+    /// Rotation setting
     pub rotation: u32,
+    /// Scaling setting
     pub scaling: u32,
+    /// Refresh rate
     pub refreshRate: DISPLAYCONFIG_RATIONAL,
+    /// Scan line ordering
     pub scanLineOrdering: u32,
+    /// Whether the target is available
     pub targetAvailable: u32,
+    /// Status flags
     pub statusFlags: u32,
 }
 
 impl Default for DISPLAYCONFIG_PATH_TARGET_INFO {
     fn default() -> Self {
-        unsafe { std::mem::zeroed() }
+        // SAFETY: DISPLAYCONFIG_PATH_TARGET_INFO is a C struct with all primitive fields
+        // that can be safely zero-initialized. This matches Windows API expectations.
+        #[allow(unsafe_code)]
+        unsafe {
+            std::mem::zeroed()
+        }
     }
 }
 
 /// DISPLAYCONFIG_PATH_INFO structure
+///
+/// Contains information about a display path (source to target connection).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DISPLAYCONFIG_PATH_INFO {
+    /// Source information
     pub sourceInfo: DISPLAYCONFIG_PATH_SOURCE_INFO,
+    /// Target information
     pub targetInfo: DISPLAYCONFIG_PATH_TARGET_INFO,
+    /// Path flags
     pub flags: u32,
 }
 
@@ -411,7 +504,8 @@ pub struct DISPLAYCONFIG_PATH_INFO {
 // These functions are not available in windows-rs 0.52, so we declare them manually
 
 #[cfg(windows)]
-extern "system" {
+#[allow(unsafe_code)]
+unsafe extern "system" {
     /// Gets the size of the buffers needed for QueryDisplayConfig
     pub fn GetDisplayConfigBufferSizes(
         flags: u32,
@@ -437,7 +531,10 @@ extern "system" {
 }
 
 // Stub implementations for non-Windows platforms
+// These stubs are necessary for cross-platform compilation and testing.
+// They match the Windows API signatures but always return errors.
 #[cfg(not(windows))]
+#[allow(unsafe_code)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
@@ -451,6 +548,7 @@ pub unsafe fn GetDisplayConfigBufferSizes(
 }
 
 #[cfg(not(windows))]
+#[allow(unsafe_code)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
@@ -467,6 +565,7 @@ pub unsafe fn QueryDisplayConfig(
 }
 
 #[cfg(not(windows))]
+#[allow(unsafe_code)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
@@ -478,6 +577,7 @@ pub unsafe fn DisplayConfigGetDeviceInfo(
 }
 
 #[cfg(not(windows))]
+#[allow(unsafe_code)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
