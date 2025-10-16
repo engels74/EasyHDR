@@ -1,4 +1,4 @@
-//! Build script for EasyHDR
+//! Build script for `EasyHDR`
 //!
 //! This build script performs two main tasks:
 //! 1. Compiles Slint UI files (`ui/main.slint`) into Rust code
