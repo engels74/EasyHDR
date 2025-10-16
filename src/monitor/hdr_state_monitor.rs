@@ -20,41 +20,47 @@
 //!
 //! # How It Works
 //!
-//! 1. Create a message-only window (hidden, no GUI) using HWND_MESSAGE
+//! 1. Create a hidden window (not visible, but can receive broadcast messages)
 //! 2. Register window class and window procedure
 //! 3. Enter Windows message loop in background thread
 //! 4. On WM_DISPLAYCHANGE or WM_SETTINGCHANGE:
 //!    - Query actual HDR state via HdrController (immediate check)
 //!    - If state changed: Send HdrStateEvent
 //!    - If state unchanged: Schedule recheck timer (handles race condition)
-//! 5. Recheck timers (hybrid approach):
-//!    - First recheck at 250ms (catches 90% of delayed state updates)
-//!    - Fallback recheck at 1250ms total (catches edge cases with slow drivers)
+//! 5. Recheck timers (adaptive approach):
+//!    - Periodic rechecks at 500ms intervals
+//!    - Up to 10 rechecks (5 seconds total) to handle slow driver updates
+//!    - Stops early if state change is detected
 //! 6. AppController receives event and updates GUI
 //!
 //! # Race Condition Handling
 //!
 //! Windows can send `WM_DISPLAYCHANGE` before `DisplayConfigGetDeviceInfo` reflects
-//! the actual HDR state change. The hybrid recheck strategy handles this:
+//! the actual HDR state change. The recheck strategy handles this:
 //!
 //! - **Immediate check**: Detects state changes that are already reflected (fast path)
-//! - **250ms recheck**: Catches most delayed updates (balances speed and reliability)
-//! - **1250ms fallback**: Handles edge cases with slow display drivers or systems
+//! - **Periodic rechecks**: Checks every 500ms for up to 5 seconds
+//! - **Early termination**: Stops rechecking once state change is detected
 //!
-//! This approach minimizes latency (250ms for 90% of cases) while ensuring reliability
-//! (1250ms maximum delay for edge cases).
+//! This approach is based on HDRTray's proven strategy and handles various driver
+//! update latencies reliably.
 //!
-//! # Why Message-Only Window?
+//! # Why Hidden Window (Not Message-Only)?
 //!
 //! Windows provides no native event-driven API for HDR state changes on Win32 desktop apps.
 //! Microsoft documentation recommends using WM_DISPLAYCHANGE as a trigger to check state.
-//! A message-only window provides this trigger mechanism without GUI overhead.
+//!
+//! **Critical**: Message-only windows (HWND_MESSAGE) do NOT receive broadcast messages
+//! like WM_DISPLAYCHANGE. We must use a regular hidden window to receive these messages.
+//! The window is created with WS_OVERLAPPEDWINDOW style but is never shown, so it has
+//! no visual presence while still receiving broadcast messages.
 //!
 //! # Performance
 //!
-//! - Message-only window: negligible CPU when idle (~0.01%)
+//! - Hidden window: negligible CPU when idle (~0.01%)
 //! - HDR state polling: only on Windows messages (very infrequent, ~0.05% CPU)
-//! - Total overhead: <0.1% CPU
+//! - Recheck timers: only active for 5 seconds after display change (~0.1% CPU during rechecks)
+//! - Total overhead: <0.1% CPU average
 //!
 //! # Requirements
 //!
@@ -78,23 +84,23 @@ use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, PostQuitMessage,
-    RegisterClassW, SetTimer, UnregisterClassW, HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WM_DESTROY, WM_DISPLAYCHANGE, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW,
+    RegisterClassW, SetTimer, UnregisterClassW, MSG, WINDOW_EX_STYLE, WM_DESTROY, WM_DISPLAYCHANGE,
+    WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 // Timing constants for HDR state recheck strategy
 // These handle the race condition where WM_DISPLAYCHANGE arrives before
 // DisplayConfigGetDeviceInfo reflects the actual state change
+//
+// Based on HDRTray's proven approach: 10 rechecks at 500ms intervals (5 seconds total)
 #[cfg(windows)]
-const INITIAL_DELAY_MS: u32 = 250; // First recheck delay (catches 90% of cases)
+const RECHECK_INTERVAL_MS: u32 = 500; // Interval between rechecks
 #[cfg(windows)]
-const FALLBACK_DELAY_MS: u32 = 1000; // Additional delay for fallback recheck (edge cases)
+const MAX_RECHECK_COUNT: u32 = 10; // Maximum number of rechecks (5 seconds total)
 
-// Timer IDs for HDR state rechecks
+// Timer ID for HDR state rechecks
 #[cfg(windows)]
-const TIMER_ID_HDR_RECHECK_1: usize = 1; // First recheck timer (250ms)
-#[cfg(windows)]
-const TIMER_ID_HDR_RECHECK_2: usize = 2; // Fallback recheck timer (1250ms total)
+const TIMER_ID_HDR_RECHECK: usize = 1; // Periodic recheck timer
 
 /// HDR state change events
 ///
@@ -288,6 +294,7 @@ impl HdrStateMonitor {
             hdr_controller: self.hdr_controller.clone(),
             cached_hdr_state: self.cached_hdr_state.clone(),
             event_sender: self.event_sender.clone(),
+            recheck_count: Arc::new(Mutex::new(0)),
         });
 
         unsafe {
@@ -312,17 +319,18 @@ impl HdrStateMonitor {
                 *cell.borrow_mut() = Some(monitor_state.clone());
             });
 
-            // Create message-only window
+            // Create hidden window (not message-only, so it can receive broadcast messages)
+            // Position off-screen at (-32000, -32000) to ensure it's never visible
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 PCWSTR(class_name_wide.as_ptr()),
                 PCWSTR(window_name_wide.as_ptr()),
-                WINDOW_STYLE(0),
-                0,
-                0,
-                0,
-                0,
-                Some(HWND_MESSAGE), // Message-only window (no GUI)
+                WS_OVERLAPPEDWINDOW, // Regular window style (required for broadcast messages)
+                -32000,              // Off-screen X position
+                -32000,              // Off-screen Y position
+                1,                   // Minimal width
+                1,                   // Minimal height
+                None, // No parent (NOT HWND_MESSAGE - that blocks broadcast messages)
                 None,
                 None,
                 None,
@@ -335,7 +343,7 @@ impl HdrStateMonitor {
                 ));
             }
 
-            info!("Created message-only window for HDR state monitoring");
+            info!("Created hidden window for HDR state monitoring (positioned off-screen)");
 
             // Enter message loop
             let mut msg = MSG::default();
@@ -358,6 +366,7 @@ struct MonitorState {
     hdr_controller: Arc<Mutex<HdrController>>,
     cached_hdr_state: Arc<Mutex<bool>>,
     event_sender: mpsc::Sender<HdrStateEvent>,
+    recheck_count: Arc<Mutex<u32>>, // Counter for remaining rechecks
 }
 
 // Thread-local storage for monitor state
@@ -366,20 +375,21 @@ thread_local! {
     static MONITOR_STATE_TLS: std::cell::RefCell<Option<Arc<MonitorState>>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Window procedure for the message-only window
+/// Window procedure for the hidden window
 ///
 /// Handles WM_DISPLAYCHANGE and WM_SETTINGCHANGE messages to detect display configuration changes.
 ///
 /// # HDR State Detection Strategy
 ///
-/// Uses a hybrid approach with adaptive rechecks to handle the race condition where
+/// Uses a periodic recheck approach to handle the race condition where
 /// `WM_DISPLAYCHANGE` arrives before `DisplayConfigGetDeviceInfo` reflects the actual state:
 ///
 /// 1. **Immediate check**: Try to detect state change immediately
-/// 2. **First recheck (250ms)**: If state unchanged, schedule first recheck (catches 90% of cases)
-/// 3. **Fallback recheck (1250ms total)**: If still unchanged, schedule final recheck for edge cases
+/// 2. **Periodic rechecks**: If state unchanged, schedule periodic rechecks at 500ms intervals
+/// 3. **Maximum duration**: Up to 10 rechecks (5 seconds total) to handle slow drivers
+/// 4. **Early termination**: Stop rechecking once state change is detected
 ///
-/// This balances performance (fast 250ms path) with reliability (1250ms fallback for slow drivers).
+/// This approach is based on HDRTray's proven strategy and handles various driver update latencies.
 #[cfg(windows)]
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
@@ -393,12 +403,15 @@ unsafe extern "system" fn window_proc(
 
             // Try immediate check
             if !check_hdr_state_change() {
-                // State didn't change - schedule first recheck at 250ms
+                // State didn't change - start periodic rechecks
                 debug!(
-                    "HDR state unchanged on WM_DISPLAYCHANGE, scheduling first recheck at {}ms",
-                    INITIAL_DELAY_MS
+                    "HDR state unchanged on WM_DISPLAYCHANGE, starting periodic rechecks ({}ms interval, max {} rechecks)",
+                    RECHECK_INTERVAL_MS, MAX_RECHECK_COUNT
                 );
-                SetTimer(Some(hwnd), TIMER_ID_HDR_RECHECK_1, INITIAL_DELAY_MS, None);
+                start_periodic_rechecks(hwnd);
+            } else {
+                // State changed immediately - cancel any pending rechecks
+                stop_periodic_rechecks(hwnd);
             }
             LRESULT(0)
         }
@@ -407,51 +420,90 @@ unsafe extern "system" fn window_proc(
 
             // Try immediate check
             if !check_hdr_state_change() {
-                // State didn't change - schedule first recheck at 250ms
+                // State didn't change - start periodic rechecks
                 debug!(
-                    "HDR state unchanged on WM_SETTINGCHANGE, scheduling first recheck at {}ms",
-                    INITIAL_DELAY_MS
+                    "HDR state unchanged on WM_SETTINGCHANGE, starting periodic rechecks ({}ms interval, max {} rechecks)",
+                    RECHECK_INTERVAL_MS, MAX_RECHECK_COUNT
                 );
-                SetTimer(Some(hwnd), TIMER_ID_HDR_RECHECK_1, INITIAL_DELAY_MS, None);
+                start_periodic_rechecks(hwnd);
+            } else {
+                // State changed immediately - cancel any pending rechecks
+                stop_periodic_rechecks(hwnd);
             }
             LRESULT(0)
         }
-        WM_TIMER if wparam.0 == TIMER_ID_HDR_RECHECK_1 => {
-            // First recheck at 250ms
-            let _ = KillTimer(Some(hwnd), TIMER_ID_HDR_RECHECK_1);
-
-            if !check_hdr_state_change() {
-                // State still unchanged after 250ms - schedule fallback recheck
-                warn!(
-                    "HDR state not updated after {}ms, scheduling fallback check at +{}ms ({}ms total)",
-                    INITIAL_DELAY_MS,
-                    FALLBACK_DELAY_MS,
-                    INITIAL_DELAY_MS + FALLBACK_DELAY_MS
-                );
-                SetTimer(Some(hwnd), TIMER_ID_HDR_RECHECK_2, FALLBACK_DELAY_MS, None);
-            }
-            LRESULT(0)
-        }
-        WM_TIMER if wparam.0 == TIMER_ID_HDR_RECHECK_2 => {
-            // Fallback recheck at 1250ms total
-            let _ = KillTimer(Some(hwnd), TIMER_ID_HDR_RECHECK_2);
-
-            if !check_hdr_state_change() {
-                // State still unchanged after full delay - this is unexpected
-                error!(
-                    "HDR state still not updated after {}ms total - possible driver issue or false WM_DISPLAYCHANGE",
-                    INITIAL_DELAY_MS + FALLBACK_DELAY_MS
-                );
+        WM_TIMER if wparam.0 == TIMER_ID_HDR_RECHECK => {
+            // Periodic recheck
+            if check_hdr_state_change() {
+                // State changed - stop rechecking
+                debug!("HDR state change detected during periodic recheck");
+                stop_periodic_rechecks(hwnd);
+            } else {
+                // State still unchanged - check if we should continue rechecking
+                MONITOR_STATE_TLS.with(|cell| {
+                    if let Some(state) = cell.borrow().as_ref() {
+                        let mut count = state.recheck_count.lock();
+                        if *count > 0 {
+                            *count -= 1;
+                            debug!("HDR state still unchanged, {} rechecks remaining", *count);
+                        } else {
+                            // Max rechecks reached - stop timer
+                            warn!(
+                                "HDR state not updated after {} rechecks ({}ms total) - possible driver issue or false WM_DISPLAYCHANGE",
+                                MAX_RECHECK_COUNT,
+                                MAX_RECHECK_COUNT * RECHECK_INTERVAL_MS
+                            );
+                            stop_periodic_rechecks(hwnd);
+                        }
+                    }
+                });
             }
             LRESULT(0)
         }
         WM_DESTROY => {
             debug!("Received WM_DESTROY message");
+            stop_periodic_rechecks(hwnd);
             PostQuitMessage(0);
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
+}
+
+/// Start periodic HDR state rechecks
+///
+/// Initializes the recheck counter and starts a timer for periodic rechecks.
+#[cfg(windows)]
+fn start_periodic_rechecks(hwnd: HWND) {
+    MONITOR_STATE_TLS.with(|cell| {
+        if let Some(state) = cell.borrow().as_ref() {
+            // Reset recheck counter
+            *state.recheck_count.lock() = MAX_RECHECK_COUNT;
+
+            // Start timer
+            unsafe {
+                SetTimer(Some(hwnd), TIMER_ID_HDR_RECHECK, RECHECK_INTERVAL_MS, None);
+            }
+        }
+    });
+}
+
+/// Stop periodic HDR state rechecks
+///
+/// Kills the recheck timer and resets the counter.
+#[cfg(windows)]
+fn stop_periodic_rechecks(hwnd: HWND) {
+    MONITOR_STATE_TLS.with(|cell| {
+        if let Some(state) = cell.borrow().as_ref() {
+            // Reset counter
+            *state.recheck_count.lock() = 0;
+
+            // Kill timer
+            unsafe {
+                let _ = KillTimer(Some(hwnd), TIMER_ID_HDR_RECHECK);
+            }
+        }
+    });
 }
 
 /// Check HDR state and send event if changed
