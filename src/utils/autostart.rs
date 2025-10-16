@@ -1,13 +1,7 @@
 //! Auto-start registry management
 //!
-//! This module provides functionality to manage Windows auto-start
-//! via registry entries in HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run.
-//!
-//! # Requirements
-//!
-//! - Requirement 6.6: Create registry entry when auto-start is enabled
-//! - Requirement 6.7: Remove registry entry when auto-start is disabled
-//! - Requirement 6.8: Handle registry access errors gracefully with user-friendly messages
+//! Manages Windows auto-start functionality via registry entries in
+//! HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run.
 
 use crate::error::Result;
 
@@ -29,35 +23,10 @@ const RUN_KEY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const APP_NAME: &str = "EasyHDR";
 
 /// Auto-start manager for Windows registry operations
-///
-/// This struct provides methods to check, enable, and disable auto-start
-/// functionality by managing registry entries in HKCU\Software\Microsoft\Windows\CurrentVersion\Run.
 pub struct AutoStartManager;
 
 impl AutoStartManager {
-    /// Check if auto-start is enabled
-    ///
-    /// Checks if the EasyHDR registry entry exists in the Windows Run key.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(true)` if auto-start is enabled (registry entry exists)
-    /// - `Ok(false)` if auto-start is disabled (registry entry does not exist)
-    /// - `Err` if there was an error accessing the registry
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 6.6: Check HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::AutoStartManager;
-    ///
-    /// let is_enabled = AutoStartManager::is_enabled()?;
-    /// println!("Auto-start is {}", if is_enabled { "enabled" } else { "disabled" });
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Check if auto-start is enabled by checking for the registry entry
     #[cfg(windows)]
     pub fn is_enabled() -> Result<bool> {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -94,31 +63,7 @@ impl AutoStartManager {
         }
     }
 
-    /// Enable auto-start
-    ///
-    /// Creates a registry entry in HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-    /// with the current executable path, causing the application to start automatically
-    /// when the user logs in to Windows.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if auto-start was successfully enabled
-    /// - `Err` if there was an error accessing the registry or getting the executable path
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 6.6: Create registry entry in HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
-    /// - Requirement 6.8: Handle registry access errors gracefully with user-friendly messages
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::AutoStartManager;
-    ///
-    /// AutoStartManager::enable()?;
-    /// println!("Auto-start enabled successfully");
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Enable auto-start by creating a registry entry with the current executable path
     #[cfg(windows)]
     pub fn enable() -> Result<()> {
         // Get the current executable path
@@ -158,30 +103,7 @@ impl AutoStartManager {
         Ok(())
     }
 
-    /// Disable auto-start
-    ///
-    /// Removes the registry entry from HKCU\Software\Microsoft\Windows\CurrentVersion\Run,
-    /// preventing the application from starting automatically when the user logs in to Windows.
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(())` if auto-start was successfully disabled
-    /// - `Err` if there was an error accessing the registry
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 6.7: Remove the registry entry
-    /// - Requirement 6.8: Handle registry access errors gracefully with user-friendly messages
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::AutoStartManager;
-    ///
-    /// AutoStartManager::disable()?;
-    /// println!("Auto-start disabled successfully");
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Disable auto-start by removing the registry entry
     #[cfg(windows)]
     pub fn disable() -> Result<()> {
         // Open the registry key with write permissions

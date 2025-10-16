@@ -20,8 +20,6 @@
 //! access to the process name, not the full executable path, when enumerating running processes.
 //!
 //! **Workaround:** Ensure that the applications you want to monitor have unique executable names.
-//!
-//! **Requirement 2.7:** Document process name collisions as a known limitation
 
 use parking_lot::Mutex;
 use std::collections::HashSet;
@@ -50,19 +48,11 @@ pub enum ProcessEvent {
 
 /// Process monitor that polls for running processes
 ///
-/// # Known Limitations
+/// Monitors running processes at regular intervals and detects state changes
+/// for configured applications. Uses Windows Toolhelp32 API for process enumeration.
 ///
-/// **Process Name Collisions:** The monitor matches processes by executable filename only
-/// (without path or extension). Multiple processes with the same filename will all be
-/// detected as the same application. See module-level documentation for details.
-///
-/// # Performance Optimizations
-///
-/// The monitor is optimized for low CPU usage (< 1% on modern systems):
-/// - Pre-allocates HashSet capacity to avoid rehashing
-/// - Minimizes string allocations by reusing buffers
-/// - Reduces lock contention by cloning watch list
-/// - Uses efficient HashSet operations for change detection
+/// **Known Limitation:** Matches processes by executable filename only (without path or extension).
+/// Multiple processes with the same filename will all be detected as the same application.
 pub struct ProcessMonitor {
     /// List of process names to watch (lowercase)
     watch_list: Arc<Mutex<HashSet<String>>>,
@@ -80,13 +70,7 @@ pub struct ProcessMonitor {
 }
 
 impl ProcessMonitor {
-    /// Create a new process monitor
-    ///
-    /// # Performance
-    ///
-    /// Initializes with a default estimated process count of 200, which is typical
-    /// for modern Windows systems. This helps pre-allocate HashSet capacity to avoid
-    /// rehashing during process enumeration.
+    /// Create a new process monitor with the specified polling interval
     pub fn new(interval: Duration, event_sender: mpsc::Sender<ProcessEvent>) -> Self {
         // Typical Windows system has 150-250 processes
         const DEFAULT_PROCESS_COUNT: usize = 200;
@@ -109,10 +93,7 @@ impl ProcessMonitor {
         }
     }
 
-    /// Get a reference to the watch list
-    ///
-    /// Returns a cloned Arc reference to the watch list, which can be used
-    /// by other components (like AppController) to update the watch list.
+    /// Get a reference to the watch list for external updates
     pub fn get_watch_list_ref(&self) -> Arc<Mutex<HashSet<String>>> {
         Arc::clone(&self.watch_list)
     }
@@ -129,21 +110,8 @@ impl ProcessMonitor {
 
     /// Poll processes and detect changes
     ///
-    /// Uses Windows API snapshot enumeration to retrieve all active process names,
-    /// extracts filenames without extensions, converts to lowercase, and detects
-    /// state changes compared to the previous snapshot.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 2.2: Use Windows API snapshot enumeration
-    /// - Requirement 2.3: Perform case-insensitive process name matching
-    /// - Requirement 2.9: Handle errors gracefully
-    ///
-    /// # Performance Optimizations
-    ///
-    /// - Pre-allocates HashSet capacity based on previous snapshot size
-    /// - Minimizes string allocations
-    /// - Uses efficient HashSet operations
+    /// Enumerates all running processes using Windows Toolhelp32 API, extracts process names
+    /// (lowercase, without extension), and detects state transitions.
     fn poll_processes(&mut self) -> Result<()> {
         #[cfg(windows)]
         {
@@ -166,7 +134,6 @@ impl ProcessMonitor {
 
             // Build a set of currently running process names
             // Pre-allocate capacity based on previous snapshot size to avoid rehashing
-            // This is a key CPU optimization (Requirement 9.2)
             let capacity = self
                 .running_processes
                 .len()
@@ -232,60 +199,13 @@ impl ProcessMonitor {
 
     /// Detect changes between current and previous snapshots
     ///
-    /// Compares the current process snapshot with the previous snapshot to detect
+    /// Compares the current process snapshot with the previous one to identify
     /// which monitored processes have started or stopped, then sends appropriate events.
-    ///
-    /// # Algorithm
-    ///
-    /// This method uses HashSet difference operations for efficient change detection:
-    ///
-    /// 1. **Started processes** = `current - previous`
-    ///    - Processes in current snapshot but not in previous
-    ///    - Example: If previous = {chrome, notepad} and current = {chrome, notepad, game}
-    ///    - Then started = {game}
-    ///
-    /// 2. **Stopped processes** = `previous - current`
-    ///    - Processes in previous snapshot but not in current
-    ///    - Example: If previous = {chrome, notepad, game} and current = {chrome, notepad}
-    ///    - Then stopped = {game}
-    ///
-    /// 3. **Filter by watch list**
-    ///    - Only processes in the watch list trigger events
-    ///    - Watch list contains lowercase process names from monitored applications
-    ///
-    /// 4. **Send events**
-    ///    - ProcessEvent::Started for each started monitored process
-    ///    - ProcessEvent::Stopped for each stopped monitored process
-    ///
-    /// # Performance Optimizations
-    ///
-    /// - Clones watch list once to minimize lock hold time (Requirement 9.2)
-    /// - Uses HashSet::difference() for O(n) change detection
-    /// - Only sends events for monitored processes
-    /// - Typical complexity: O(n) where n is number of processes (150-250 on Windows)
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 2.4: Detect NOT_RUNNING → RUNNING transitions within 1-2 seconds
-    /// - Requirement 2.5: Detect RUNNING → NOT_RUNNING transitions within 1-2 seconds
-    /// - Requirement 2.6: Fire events to application logic controller
-    ///
-    /// # Example
-    ///
-    /// ```text
-    /// Previous snapshot: {chrome, notepad}
-    /// Current snapshot:  {chrome, notepad, cyberpunk2077}
-    /// Watch list:        {cyberpunk2077, witcher3}
-    ///
-    /// Started: {cyberpunk2077} ∩ {cyberpunk2077, witcher3} = {cyberpunk2077}
-    /// → Send ProcessEvent::Started("cyberpunk2077")
-    /// ```
     #[cfg_attr(not(windows), allow(dead_code))]
     fn detect_changes(&mut self, current: HashSet<String>) {
         use tracing::info;
 
         // Clone watch list to minimize lock hold time
-        // This is a CPU optimization to reduce lock contention (Requirement 9.2)
         let watch_list = {
             let guard = self.watch_list.lock();
             guard.clone()
@@ -363,14 +283,12 @@ fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
 
 /// Extract filename without extension and convert to lowercase
 ///
+/// Normalizes process names for case-insensitive matching.
+///
 /// Examples:
 /// - "C:\\Windows\\System32\\notepad.exe" -> "notepad"
 /// - "game.exe" -> "game"
 /// - "MyApp.EXE" -> "myapp"
-///
-/// # Requirements
-///
-/// - Requirement 2.3: Perform case-insensitive matching (convert to lowercase)
 #[cfg_attr(not(windows), allow(dead_code))]
 fn extract_filename_without_extension(path: &str) -> String {
     // Extract filename from path
@@ -571,10 +489,6 @@ mod tests {
         assert_eq!(received.len(), 2);
     }
 
-    // Additional comprehensive tests for task 5.5
-
-    /// Test process name extraction from various path formats
-    /// Requirement 2.3: Case-insensitive process name matching
     #[test]
     fn test_process_name_extraction_comprehensive() {
         // Test various Windows path formats
@@ -613,8 +527,6 @@ mod tests {
         );
     }
 
-    /// Test case-insensitive matching with various case combinations
-    /// Requirement 2.3: Case-insensitive process name matching
     #[test]
     fn test_case_insensitive_matching_comprehensive() {
         // Test that extraction always produces lowercase
@@ -636,8 +548,6 @@ mod tests {
         );
     }
 
-    /// Test that watch list matching is case-insensitive
-    /// Requirement 2.3: Case-insensitive process name matching
     #[test]
     fn test_watch_list_case_insensitive() {
         let (tx, _rx) = mpsc::channel();
@@ -654,8 +564,6 @@ mod tests {
         assert!(!watch_list.contains("APP"));
     }
 
-    /// Test state transition from NOT_RUNNING to RUNNING
-    /// Requirement 2.4: Detect NOT_RUNNING → RUNNING transition
     #[test]
     fn test_state_transition_not_running_to_running() {
         let (tx, rx) = mpsc::channel();
@@ -682,8 +590,6 @@ mod tests {
         }
     }
 
-    /// Test state transition from RUNNING to NOT_RUNNING
-    /// Requirement 2.5: Detect RUNNING → NOT_RUNNING transition
     #[test]
     fn test_state_transition_running_to_not_running() {
         let (tx, rx) = mpsc::channel();
@@ -711,8 +617,6 @@ mod tests {
         }
     }
 
-    /// Test multiple simultaneous state transitions
-    /// Requirements 2.4, 2.5: Detect state transitions
     #[test]
     fn test_multiple_state_transitions() {
         let (tx, rx) = mpsc::channel();
@@ -755,8 +659,6 @@ mod tests {
         assert!(stopped.contains(&"app1".to_string()));
     }
 
-    /// Test that no events are sent when process state doesn't change
-    /// Requirement 2.6: Fire events only on state transitions
     #[test]
     fn test_no_events_when_no_state_change() {
         let (tx, rx) = mpsc::channel();
@@ -776,8 +678,6 @@ mod tests {
         assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
     }
 
-    /// Test that only monitored processes trigger events
-    /// Requirement 2.7: Match processes by name
     #[test]
     fn test_only_monitored_processes_trigger_events() {
         let (tx, rx) = mpsc::channel();
@@ -808,7 +708,6 @@ mod tests {
         assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
     }
 
-    /// Test edge case: empty watch list
     #[test]
     fn test_empty_watch_list() {
         let (tx, rx) = mpsc::channel();
@@ -830,7 +729,6 @@ mod tests {
         assert!(rx.recv_timeout(Duration::from_millis(100)).is_err());
     }
 
-    /// Test edge case: process name with special characters
     #[test]
     fn test_process_name_with_special_characters() {
         assert_eq!(extract_filename_without_extension("my-app.exe"), "my-app");
@@ -845,15 +743,12 @@ mod tests {
         );
     }
 
-    /// Test edge case: very long path
     #[test]
     fn test_very_long_path() {
         let long_path = "C:\\Very\\Long\\Path\\With\\Many\\Directories\\And\\Subdirectories\\That\\Goes\\On\\And\\On\\application.exe";
         assert_eq!(extract_filename_without_extension(long_path), "application");
     }
 
-    /// Test that process names are correctly normalized
-    /// Requirement 2.3: Case-insensitive matching
     #[test]
     fn test_process_name_normalization() {
         let (tx, _rx) = mpsc::channel();

@@ -9,12 +9,6 @@
 //! - Receives state updates from AppController via mpsc channel
 //! - Provides callbacks for GUI interactions (add/remove apps, toggle enabled)
 //! - Handles file picker dialogs and error messages
-//!
-//! # Requirements
-//!
-//! - Requirement 5.1: Main window displays with title bar, app list, and status indicator
-//! - Requirement 5.5: File picker dialog filtered to .exe files
-//! - Requirement 5.6: Extract metadata, icon, and add to list
 
 use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
@@ -44,21 +38,8 @@ enum UiMessage {
 
 /// GUI controller that bridges Slint UI and application logic
 ///
-/// This struct manages the main window and coordinates between the GUI
-/// and the application controller. It receives state updates from the
-/// controller and updates the UI accordingly.
-///
-/// # Fields
-///
-/// - `main_window`: The Slint MainWindow component
-/// - `controller_handle`: Shared reference to the AppController for callbacks
-/// - `state_receiver`: Channel receiver for AppState updates from controller
-/// - `tray_icon`: System tray icon for notifications and status display
-///
-/// # Requirements
-///
-/// - Requirement 5.1: Main window displays with title bar and controls
-/// - Requirement 6.4: Show tray notifications on HDR changes
+/// Manages the main window and coordinates between the GUI and the application controller.
+/// Receives state updates from the controller and updates the UI accordingly.
 pub struct GuiController {
     /// The Slint main window component
     main_window: MainWindow,
@@ -73,40 +54,8 @@ pub struct GuiController {
 impl GuiController {
     /// Create a new GUI controller
     ///
-    /// This constructor creates the MainWindow Slint component and sets up
-    /// the bridge between the GUI and the application controller.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    /// * `state_receiver` - Channel receiver for AppState updates
-    ///
-    /// # Returns
-    ///
-    /// Returns a new GuiController instance with the main window created
-    /// and ready to display.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the MainWindow cannot be created.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.1: Create main window with title bar and controls
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::{mpsc, Arc};
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let (state_tx, state_rx) = mpsc::channel();
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// let gui = GuiController::new(controller, state_rx)?;
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Creates the MainWindow Slint component and sets up the bridge between
+    /// the GUI and the application controller.
     pub fn new(
         controller: Arc<Mutex<AppController>>,
         state_receiver: mpsc::Receiver<AppState>,
@@ -125,11 +74,10 @@ impl GuiController {
 
         info!("Main window created successfully");
 
-        // Task 10.7: Restore window position and size from config
+        // Restore window position and size from config
         Self::restore_window_state(&main_window, &controller);
 
-        // Task 12.2: Initialize settings properties from config
-        // Load current preferences and set them in the UI
+        // Initialize settings properties from config
         {
             let controller_guard = controller.lock();
             let config = controller_guard.config.lock();
@@ -145,14 +93,12 @@ impl GuiController {
         }
 
         // Set up callbacks
-        // Task 10.2: Implement file picker integration
         let controller_clone = controller.clone();
         let window_weak = main_window.as_weak();
         main_window.on_add_application(move || {
             Self::show_file_picker(&controller_clone, &window_weak);
         });
 
-        // Task 10.3: Implement application management callbacks
         let controller_clone = controller.clone();
         main_window.on_remove_application(move |index| {
             Self::remove_app_at_index(&controller_clone, index);
@@ -163,11 +109,6 @@ impl GuiController {
             Self::toggle_app_enabled(&controller_clone, index, enabled);
         });
 
-        // Task 12.2: Implement settings callbacks
-        // Requirement 6.5: Persist preferences to configuration file
-        // Requirement 6.6: Create registry entry for auto-start
-        // Requirement 6.7: Remove registry entry when auto-start disabled
-        // Requirement 6.8: Handle registry write failures gracefully
         let controller_clone = controller.clone();
         main_window.on_save_settings(
             move |auto_start, monitoring_interval_ms, show_tray_notifications| {
@@ -182,9 +123,6 @@ impl GuiController {
 
         info!("GUI callbacks connected");
 
-        // Task 11.6: Implement window close handler
-        // Requirement 5.9: Handle window close event to exit application properly
-        // Task 16.1: Save window state before exit
         // Set up close request handler to save state and exit the application
         let controller_for_close = controller.clone();
         let window_for_close = main_window.as_weak();
@@ -193,7 +131,6 @@ impl GuiController {
             info!("Window close requested - saving state and exiting application");
 
             // Save window state before exiting
-            // We need to upgrade the weak reference to access the window
             if let Some(window) = window_for_close.upgrade() {
                 info!("Saving window state before exit");
                 if let Err(e) = Self::save_window_state(&window, &controller_for_close) {
@@ -215,7 +152,6 @@ impl GuiController {
 
         info!("Close request handler configured to exit application");
 
-        // Task 11.1: Create TrayIcon
         // Create the system tray icon
         let tray_icon = TrayIcon::new(&main_window)?;
         info!("System tray icon created");
@@ -230,48 +166,10 @@ impl GuiController {
 
     /// Show file picker dialog for adding applications
     ///
-    /// Opens a native file picker dialog filtered to .exe files. Supports selecting
-    /// multiple files at once. When the user selects files, extracts metadata and icon
-    /// for each, then adds them to the application list via the controller.
-    ///
-    /// After adding applications, explicitly triggers a GUI update to ensure the new
-    /// applications appear in the list immediately, even if the state sync thread
-    /// failed to update due to the modal dialog.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    /// * `window` - Weak reference to the main window for triggering GUI updates
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.5: Open file picker dialog filtered to .exe files
-    /// - Requirement 5.6: Extract metadata, icon, and add to list
-    /// - Requirement 5.14: Process multiple dropped files (via multi-select)
-    /// - Requirement 5.14: Add each valid exe to application list
-    /// - Requirement 5.14: Show errors for invalid files
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Opens rfd::FileDialog with .exe filter and multi-select enabled
-    /// 2. For each selected file, calls MonitoredApp::from_exe_path()
-    /// 3. Calls controller.add_application() with each new app
-    /// 4. Shows error dialog if extraction or addition fails for any file
-    /// 5. Reports summary of successful and failed additions
-    /// 6. Triggers manual GUI update to ensure new apps appear immediately
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::Arc;
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// let window = main_window.as_weak();
-    /// GuiController::show_file_picker(&controller, &window);
-    /// ```
+    /// Opens a native file picker dialog filtered to .exe files with multi-select support.
+    /// Extracts metadata and icon for each selected file, then adds them to the application list.
+    /// After adding applications, explicitly triggers a GUI update to ensure the new applications
+    /// appear immediately, even if the state sync thread failed to update due to the modal dialog.
     #[cfg(windows)]
     fn show_file_picker(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
         use tracing::{info, warn};
@@ -279,8 +177,6 @@ impl GuiController {
         info!("Opening file picker dialog with multi-select support");
 
         // Open file picker dialog filtered to .exe files with multi-select enabled
-        // Requirement 5.5: Filter to .exe files only
-        // Requirement 5.14: Support multiple file selection (drag-and-drop alternative)
         let file_paths = rfd::FileDialog::new()
             .add_filter("Executable Files", &["exe"])
             .set_title("Select Application(s)")
@@ -295,18 +191,15 @@ impl GuiController {
             let mut error_messages = Vec::new();
 
             // Process each selected file
-            // Requirement 5.14: Process multiple files
             for path in paths {
                 info!("Processing file: {:?}", path);
 
                 // Extract metadata and create MonitoredApp
-                // Requirement 5.6: Extract metadata, icon, and add to list
                 match MonitoredApp::from_exe_path(path.clone()) {
                     Ok(app) => {
                         info!("Successfully extracted metadata for: {}", app.display_name);
 
                         // Add application to controller
-                        // Requirement 5.14: Add each valid exe to application list
                         let mut controller_guard = controller.lock();
                         match controller_guard.add_application(app) {
                             Ok(()) => {
@@ -337,7 +230,6 @@ impl GuiController {
             }
 
             // Show summary if there were any errors
-            // Requirement 5.14: Show errors for invalid files
             if error_count > 0 {
                 let summary = if success_count > 0 {
                     format!(
@@ -362,9 +254,6 @@ impl GuiController {
             // Manually trigger GUI update after file picker closes
             // This ensures the new applications appear immediately, even if the state sync
             // thread's update was skipped due to the modal dialog.
-            // Since show_file_picker is called from the GUI thread and the file picker
-            // dialog is blocking, we're already on the GUI thread when we reach here,
-            // so we can directly call the update function.
             if success_count > 0 {
                 info!("Triggering manual GUI update after file picker operation");
                 Self::update_app_list_ui(controller, window);
@@ -509,21 +398,9 @@ impl GuiController {
     /// Update the application list in the UI
     ///
     /// This helper method reads the current application list from the controller
-    /// and updates the GUI display. It's used to manually refresh the UI after
+    /// and updates the GUI display. Used to manually refresh the UI after
     /// operations that might be missed by the state sync thread (like after
     /// modal dialogs close).
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    /// * `window` - Weak reference to the main window
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Upgrades the weak window reference
-    /// 2. Reads the monitored apps from the config
-    /// 3. Converts them to Slint AppListItem format
-    /// 4. Updates the UI's app_list property
     #[cfg(windows)]
     fn update_app_list_ui(
         controller: &Arc<Mutex<AppController>>,
@@ -554,34 +431,6 @@ impl GuiController {
     ///
     /// Gets the application UUID from the config at the specified index,
     /// then calls controller.remove_application() to remove it.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    /// * `index` - Index of the application in the app list
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.7: Remove application from list when user clicks "Remove Selected"
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Lock the controller to access the config
-    /// 2. Get the app UUID at the specified index
-    /// 3. Call controller.remove_application() with the UUID
-    /// 4. Show error dialog if removal fails
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::Arc;
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// GuiController::remove_app_at_index(&controller, 0);
-    /// ```
     #[cfg(windows)]
     fn remove_app_at_index(controller: &Arc<Mutex<AppController>>, index: i32) {
         use tracing::{info, warn};
@@ -612,7 +461,6 @@ impl GuiController {
             Err(e) => {
                 warn!("Failed to remove application: {}", e);
                 drop(controller_guard);
-                // Requirement 7.1, 7.4: Show user-friendly error dialog
                 Self::show_error_dialog_from_error(&e);
             }
         }
@@ -628,35 +476,6 @@ impl GuiController {
     ///
     /// Gets the application UUID from the config at the specified index,
     /// then calls controller.toggle_app_enabled() to update the enabled state.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    /// * `index` - Index of the application in the app list
-    /// * `enabled` - New enabled state
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.7: Toggle application enabled state when user changes checkbox
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Lock the controller to access the config
-    /// 2. Get the app UUID at the specified index
-    /// 3. Call controller.toggle_app_enabled() with the UUID and new state
-    /// 4. Show error dialog if toggle fails
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::Arc;
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// GuiController::toggle_app_enabled(&controller, 0, true);
-    /// ```
     #[cfg(windows)]
     fn toggle_app_enabled(controller: &Arc<Mutex<AppController>>, index: i32, enabled: bool) {
         use tracing::{info, warn};
@@ -690,7 +509,6 @@ impl GuiController {
             Err(e) => {
                 warn!("Failed to toggle application enabled state: {}", e);
                 drop(controller_guard);
-                // Requirement 7.1, 7.4: Show user-friendly error dialog
                 Self::show_error_dialog_from_error(&e);
             }
         }
@@ -705,41 +523,7 @@ impl GuiController {
     /// Save user preferences settings
     ///
     /// Updates user preferences in the configuration and handles auto-start registry
-    /// management. This method is called when the user clicks "Save" in the settings dialog.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    /// * `auto_start` - Whether to auto-start on Windows login
-    /// * `monitoring_interval_ms` - Process monitoring interval in milliseconds (500-2000)
-    /// * `show_tray_notifications` - Whether to show tray notifications on HDR changes
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 6.5: Persist preferences to configuration file
-    /// - Requirement 6.6: Create registry entry for auto-start when enabled
-    /// - Requirement 6.7: Remove registry entry when auto-start disabled
-    /// - Requirement 6.8: Handle registry write failures gracefully
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Creates UserPreferences struct with new values
-    /// 2. Calls controller.update_preferences() to save to config
-    /// 3. Calls AutoStartManager::enable() or disable() based on auto_start flag
-    /// 4. Shows error dialog if registry write fails
-    /// 5. Shows success message if all operations succeed
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::Arc;
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// GuiController::save_settings(&controller, true, 1000, true);
-    /// ```
+    /// management. Called when the user clicks "Save" in the settings dialog.
     #[cfg(windows)]
     fn save_settings(
         controller: &Arc<Mutex<AppController>>,
@@ -764,7 +548,6 @@ impl GuiController {
         };
 
         // Update preferences in controller (this saves to config file)
-        // Requirement 6.5: Persist preferences to configuration file
         let mut controller_guard = controller.lock();
         match controller_guard.update_preferences(prefs) {
             Ok(()) => {
@@ -773,7 +556,6 @@ impl GuiController {
             Err(e) => {
                 warn!("Failed to update preferences: {}", e);
                 drop(controller_guard);
-                // Requirement 6.8: Handle failures gracefully and show error message
                 Self::show_error_dialog_from_error(&e);
                 return;
             }
@@ -781,8 +563,6 @@ impl GuiController {
         drop(controller_guard);
 
         // Handle auto-start registry management
-        // Requirement 6.6: Create registry entry when auto-start enabled
-        // Requirement 6.7: Remove registry entry when auto-start disabled
         if auto_start {
             info!("Enabling auto-start");
             match AutoStartManager::enable() {
@@ -791,7 +571,6 @@ impl GuiController {
                 }
                 Err(e) => {
                     warn!("Failed to enable auto-start: {}", e);
-                    // Requirement 6.8: Handle registry write failures gracefully
                     Self::show_error_dialog(&format!(
                         "Settings saved, but failed to enable auto-start:\n\n{}",
                         e
@@ -807,7 +586,6 @@ impl GuiController {
                 }
                 Err(e) => {
                     warn!("Failed to disable auto-start: {}", e);
-                    // Requirement 6.8: Handle registry write failures gracefully
                     Self::show_error_dialog(&format!(
                         "Settings saved, but failed to disable auto-start:\n\n{}",
                         e
@@ -833,26 +611,9 @@ impl GuiController {
         Self::show_error_dialog("Settings management is only supported on Windows");
     }
 
-    /// Show error dialog to the user with a string message
+    /// Show error dialog to the user
     ///
     /// Displays a modal error dialog with the provided message.
-    ///
-    /// # Arguments
-    ///
-    /// * `message` - Error message to display
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.1: Show modal dialog with user-friendly error message
-    /// - Requirement 7.6: Include OK button to dismiss
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// GuiController::show_error_dialog("Failed to add application");
-    /// ```
     #[cfg(windows)]
     pub fn show_error_dialog(message: &str) {
         use tracing::info;
@@ -875,31 +636,7 @@ impl GuiController {
     /// Show error dialog with user-friendly error message from EasyHdrError
     ///
     /// Displays a modal error dialog with a user-friendly message generated
-    /// from the EasyHdrError. This function uses get_user_friendly_error()
-    /// to convert technical errors into messages suitable for end users.
-    ///
-    /// # Arguments
-    ///
-    /// * `error` - The EasyHdrError to display
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.1: Show modal dialog with user-friendly error message
-    /// - Requirement 7.2: Show "Your display doesn't support HDR" for HdrNotSupported
-    /// - Requirement 7.3: Show "Unable to control HDR - check display drivers" for driver issues
-    /// - Requirement 7.4: Show error dialog with context for config errors
-    /// - Requirement 7.5: Provide troubleshooting hints in error messages
-    /// - Requirement 7.6: Include OK button to dismiss
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::gui::GuiController;
-    /// use easyhdr::error::EasyHdrError;
-    ///
-    /// let error = EasyHdrError::HdrNotSupported;
-    /// GuiController::show_error_dialog_from_error(&error);
-    /// ```
+    /// from the EasyHdrError using get_user_friendly_error().
     #[cfg(windows)]
     fn show_error_dialog_from_error(error: &easyhdr::error::EasyHdrError) {
         use easyhdr::error::get_user_friendly_error;
@@ -934,39 +671,8 @@ impl GuiController {
 
     /// Restore window position and size from config
     ///
-    /// This method reads the window state from the configuration and applies it
-    /// to the main window. It handles cases where the saved position might be
-    /// off-screen by validating the position before applying it.
-    ///
-    /// # Arguments
-    ///
-    /// * `window` - The Slint MainWindow to restore state to
-    /// * `controller` - Shared reference to the AppController containing config
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.15: Restore window position and size from config on startup
-    /// - Task 10.7: Handle cases where saved position is off-screen
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Reads window state from config (x, y, width, height)
-    /// 2. Validates that the position is reasonable (not too far off-screen)
-    /// 3. Applies the size first, then the position
-    /// 4. Logs the restoration for debugging
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::Arc;
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// let window = MainWindow::new().unwrap();
-    /// GuiController::restore_window_state(&window, &controller);
-    /// ```
+    /// Reads the window state from the configuration and applies it to the main window.
+    /// Validates the position to handle cases where the saved position might be off-screen.
     fn restore_window_state(window: &MainWindow, controller: &Arc<Mutex<AppController>>) {
         use slint::{PhysicalPosition, PhysicalSize};
         use tracing::{info, warn};
@@ -1021,43 +727,8 @@ impl GuiController {
 
     /// Save window position and size to config
     ///
-    /// This method reads the current window position and size from the Slint window
+    /// Reads the current window position and size from the Slint window
     /// and saves it to the configuration file for restoration on next startup.
-    ///
-    /// # Arguments
-    ///
-    /// * `window` - The Slint MainWindow to save state from
-    /// * `controller` - Shared reference to the AppController containing config
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.15: Save window position and size to config on close
-    /// - Task 10.7: Save window position and size to config on close
-    ///
-    /// # Implementation Details
-    ///
-    /// 1. Reads current window position and size from Slint window
-    /// 2. Updates the window_state in the config
-    /// 3. Saves the config to disk
-    /// 4. Logs the save operation for debugging
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the config save operation fails.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::Arc;
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// let window = MainWindow::new().unwrap();
-    /// GuiController::save_window_state(&window, &controller)?;
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
     fn save_window_state(
         window: &MainWindow,
         controller: &Arc<Mutex<AppController>>,
@@ -1106,20 +777,8 @@ impl GuiController {
 
     /// Reload GUI resources when window is shown
     ///
-    /// This method reloads icon data that was released when the window was
-    /// minimized to the tray. This ensures icons are available for display.
-    ///
-    /// # Arguments
-    ///
-    /// * `controller` - Shared reference to the AppController
-    ///
-    /// # Requirements
-    ///
-    /// - Task 16.1: Optimize memory usage with lazy loading
-    ///
-    /// # Implementation Details
-    ///
-    /// Lazily loads icon data for all monitored applications when needed.
+    /// Reloads icon data that was released when the window was minimized to the tray.
+    /// This ensures icons are available for display.
     fn reload_gui_resources(controller: &Arc<Mutex<AppController>>) {
         use tracing::info;
 
@@ -1151,45 +810,10 @@ impl GuiController {
 
     /// Run the GUI event loop with state synchronization
     ///
-    /// This method starts a background thread to receive AppState updates from
-    /// the controller and update the GUI accordingly. It then runs the Slint
-    /// event loop on the main thread.
-    ///
-    /// The state synchronization thread:
-    /// 1. Receives AppState updates from state_receiver channel
-    /// 2. Updates HDR enabled state in the UI
-    /// 3. Updates the application list in the UI
-    /// 4. Uses window.as_weak() for thread-safe GUI updates
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.8: Show status indicator with current HDR state
-    ///
-    /// # Implementation Details
-    ///
-    /// The state update thread runs in the background and uses `window.as_weak()`
-    /// to safely update the GUI from a different thread. The weak reference is
-    /// upgraded to a strong reference when needed, and updates are performed
-    /// using Slint's thread-safe update mechanism.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the Slint event loop fails to run.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::{mpsc, Arc};
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::gui::GuiController;
-    ///
-    /// let (state_tx, state_rx) = mpsc::channel();
-    /// let controller = Arc::new(Mutex::new(/* AppController instance */));
-    /// let gui = GuiController::new(controller, state_rx)?;
-    /// gui.run()?;
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Starts a background thread to receive AppState updates from the controller
+    /// and update the GUI accordingly. The state synchronization thread receives
+    /// updates via the state_receiver channel and uses window.as_weak() for
+    /// thread-safe GUI updates.
     pub fn run(self) -> Result<()> {
         use easyhdr::error::EasyHdrError;
         use tracing::{debug, info, warn};
@@ -1276,8 +900,7 @@ impl GuiController {
 
         info!("GUI event loop stopped");
 
-        // Task 10.7: Save window state before exiting (fallback)
-        // Requirement 5.15: Save window position and size to config on close
+        // Save window state before exiting (fallback)
         // Note: Window state is also saved in the close request handler when user clicks X button.
         // This is a fallback in case the event loop exits for other reasons.
         info!("Saving window state before exit (fallback)");
@@ -1292,16 +915,6 @@ mod tests {
     use easyhdr::error::EasyHdrError;
 
     /// Test that error messages are properly formatted for different error types
-    ///
-    /// This test verifies that the get_user_friendly_error function returns
-    /// appropriate user-friendly messages for each error type.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.2: Show "Your display doesn't support HDR" for HdrNotSupported
-    /// - Requirement 7.3: Show "Unable to control HDR - check display drivers" for driver issues
-    /// - Requirement 7.4: Show error dialog with context for config errors
-    /// - Requirement 7.5: Provide troubleshooting hints in error messages
     #[test]
     fn test_user_friendly_error_messages() {
         use easyhdr::error::get_user_friendly_error;
@@ -1378,13 +991,6 @@ mod tests {
     }
 
     /// Test that error messages contain appropriate troubleshooting hints
-    ///
-    /// This test verifies that error messages include helpful guidance
-    /// for users to resolve common issues.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.5: Provide troubleshooting hints in error messages
     #[test]
     fn test_error_messages_contain_troubleshooting_hints() {
         use easyhdr::error::get_user_friendly_error;
@@ -1420,13 +1026,6 @@ mod tests {
     }
 
     /// Test that error messages are user-friendly and not overly technical
-    ///
-    /// This test verifies that error messages avoid technical jargon
-    /// and are suitable for end users.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.1: Show modal dialog with user-friendly error message
     #[test]
     fn test_error_messages_are_user_friendly() {
         use easyhdr::error::get_user_friendly_error;
@@ -1461,13 +1060,6 @@ mod tests {
     }
 
     /// Test window state validation and clamping
-    ///
-    /// This test verifies that window state values are properly validated
-    /// and clamped to reasonable bounds to prevent off-screen windows.
-    ///
-    /// # Requirements
-    ///
-    /// - Task 10.7: Handle cases where saved position is off-screen
     #[test]
     fn test_window_state_validation() {
         // Test size clamping
@@ -1505,18 +1097,11 @@ mod tests {
     }
 
     /// Test that specific error types produce specific messages
-    ///
-    /// This test verifies the exact requirements for specific error messages.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.2: Show "Your display doesn't support HDR" for HdrNotSupported
-    /// - Requirement 7.3: Show "Unable to control HDR - check display drivers" for driver issues
     #[test]
     fn test_specific_error_messages() {
         use easyhdr::error::get_user_friendly_error;
 
-        // Requirement 7.2: HDR not supported message
+        // HDR not supported message
         let error = EasyHdrError::HdrNotSupported;
         let message = get_user_friendly_error(&error);
         assert!(
@@ -1526,7 +1111,7 @@ mod tests {
             message
         );
 
-        // Requirement 7.3: Driver error message
+        // Driver error message
         let error = EasyHdrError::DriverError("test".to_string());
         let message = get_user_friendly_error(&error);
         assert!(

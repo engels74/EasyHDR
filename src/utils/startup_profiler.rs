@@ -1,14 +1,6 @@
 //! Startup time profiling utilities
 //!
-//! This module provides utilities for profiling and measuring startup time
-//! from application launch to GUI display. It helps track initialization
-//! performance and identify optimization opportunities.
-//!
-//! # Requirements
-//!
-//! - Requirement 9.3: System SHALL display the GUI within 200ms
-//! - Requirement 9.7: Load configuration and start monitoring in parallel where possible
-//! - Task 16.3: Profile startup time and optimize if needed
+//! Tracks startup time from application launch to GUI display to ensure the 200ms target is met.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -95,14 +87,7 @@ impl StartupProfiler {
         }
     }
 
-    /// Record the start of a phase
-    ///
-    /// This method records the time when a startup phase begins and calculates
-    /// the duration since the last phase ended.
-    ///
-    /// # Arguments
-    ///
-    /// * `phase` - The startup phase being recorded
+    /// Record the start of a phase, calculating duration since the last phase ended
     pub fn record_phase(&self, phase: StartupPhase) {
         if !self.enabled.load(Ordering::Relaxed) {
             return;

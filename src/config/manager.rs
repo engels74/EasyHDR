@@ -162,7 +162,7 @@ mod tests {
     // - Individually: `cargo test test_load_missing_config`
     // - Single-threaded: `cargo test -- --test-threads=1`
     //
-    // This is a test isolation issue, not a code defect. Will be fixed in Task 17.3.
+    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_load_missing_config() {
         // This should return default config without error

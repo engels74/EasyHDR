@@ -1,11 +1,6 @@
 //! Icon extraction from executables
 //!
-//! This module provides functionality to extract icons from Windows executables
-//! using the Windows Shell32 API.
-//!
-//! # Requirements
-//!
-//! - Requirement 1.3: Extract and cache application icons when adding applications
+//! Extracts icons and display names from Windows executables using the Shell32 API.
 
 use crate::error::Result;
 use std::path::Path;
@@ -41,31 +36,8 @@ const ICON_SIZE: usize = 32;
 
 /// Extract icon from an executable file
 ///
-/// This function uses Windows Shell32 ExtractIconExW to extract the application icon
-/// from an executable file and converts it to raw RGBA bytes.
-///
-/// # Arguments
-///
-/// * `path` - Path to the executable file
-///
-/// # Returns
-///
-/// Returns a Vec<u8> containing RGBA pixel data (32x32 pixels = 4096 bytes)
-/// Returns an empty Vec if extraction fails (graceful fallback)
-///
-/// # Requirements
-///
-/// - Requirement 1.3: Extract and cache application icons
-///
-/// # Implementation Notes
-///
-/// On Windows:
-/// - Uses ExtractIconExW to get HICON handle
-/// - Converts HICON to raw RGBA bitmap data
-/// - Handles extraction failures gracefully with default icon fallback
-///
-/// On non-Windows platforms:
-/// - Returns empty Vec (stub implementation for testing)
+/// Uses Windows Shell32 ExtractIconExW to extract the application icon and convert it to
+/// raw RGBA bytes (32x32 pixels). Returns an empty Vec on extraction failure or non-Windows platforms.
 pub fn extract_icon_from_exe(#[allow(unused_variables)] path: &Path) -> Result<Vec<u8>> {
     #[cfg(windows)]
     {
@@ -175,10 +147,7 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
     }
 }
 
-/// Convert HICON to RGBA bytes
-///
-/// This function converts a Windows HICON handle to raw RGBA bitmap data.
-/// The output is a 32x32 pixel image with 4 bytes per pixel (RGBA).
+/// Convert HICON to RGBA bytes (32x32 pixels, 4 bytes per pixel)
 #[cfg(windows)]
 fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
     use std::mem::zeroed;
@@ -276,10 +245,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
     }
 }
 
-/// Simple nearest-neighbor image resize
-///
-/// This is a basic resize implementation for icon data.
-/// For production use, consider using a proper image library.
+/// Simple nearest-neighbor image resize for icon data
 #[cfg(windows)]
 fn resize_icon_simple(
     src: &[u8],
@@ -305,10 +271,7 @@ fn resize_icon_simple(
     dst
 }
 
-/// Create a default icon (simple colored square)
-///
-/// This is used as a fallback when icon extraction fails.
-/// Returns a 32x32 RGBA image with a simple pattern.
+/// Create a default icon as a fallback when extraction fails (32x32 gray square)
 #[cfg(windows)]
 fn create_default_icon() -> Vec<u8> {
     let size = ICON_SIZE * ICON_SIZE * 4;
@@ -340,31 +303,8 @@ fn create_default_icon() -> Vec<u8> {
 
 /// Extract display name from executable metadata
 ///
-/// This function queries the FileDescription property from the executable's
-/// version information resources. If the metadata is unavailable, it falls
-/// back to using the filename without extension.
-///
-/// # Arguments
-///
-/// * `path` - Path to the executable file
-///
-/// # Returns
-///
-/// Returns the display name extracted from file metadata or filename
-///
-/// # Requirements
-///
-/// - Requirement 1.2: Extract display name from file metadata with fallback to filename
-///
-/// # Implementation Notes
-///
-/// On Windows:
-/// - Uses GetFileVersionInfoW and VerQueryValueW to read version info
-/// - Queries FileDescription from version resources
-/// - Falls back to filename if metadata unavailable
-///
-/// On non-Windows platforms:
-/// - Returns filename without extension (stub implementation)
+/// Queries the FileDescription from the executable's version information resources.
+/// Falls back to filename without extension if metadata is unavailable.
 pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
     #[cfg(windows)]
     {

@@ -75,18 +75,6 @@
 //! gui.run()?;
 //! # Ok::<(), easyhdr::error::EasyHdrError>(())
 //! ```
-//!
-//! # Requirements
-//!
-//! - Requirement 5.1: Main window with title bar, app list, and status indicator
-//! - Requirement 5.2: Display list of monitored applications
-//! - Requirement 5.3: Show HDR status (ON/OFF) with visual indicator
-//! - Requirement 5.4: Provide "Add Application" button
-//! - Requirement 5.5: File picker filtered to .exe files
-//! - Requirement 5.6: Extract metadata and icon when adding apps
-//! - Requirement 5.10: System tray icon showing HDR state
-//! - Requirement 5.11: Tray context menu with Open, Status, and Exit
-//! - Requirement 5.12: Left-click tray icon to restore window
 
 pub mod gui_controller;
 pub mod tray;

@@ -1,10 +1,8 @@
 //! CPU usage profiling test for process monitoring thread
 //!
 //! This test measures the CPU usage of the process monitoring thread to ensure
-//! it stays below 1% on modern systems (Requirement 9.2).
-//!
-//! The test runs the monitoring thread for a period of time and measures CPU usage
-//! using platform-specific APIs.
+//! it stays below 1% on modern systems. The test runs the monitoring thread
+//! for a period of time and measures CPU usage using platform-specific APIs.
 
 #[cfg(windows)]
 use std::sync::mpsc;
@@ -18,9 +16,7 @@ use windows::Win32::Foundation::FILETIME;
 #[cfg(windows)]
 use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
 
-/// Measure CPU usage of the process monitoring thread
-///
-/// This test verifies Requirement 9.2: Process monitoring thread < 1% CPU
+/// Measures CPU usage of the process monitoring thread (target: < 1% CPU).
 #[test]
 #[cfg(windows)]
 fn test_process_monitor_cpu_usage() {
@@ -28,7 +24,7 @@ fn test_process_monitor_cpu_usage() {
 
     println!("\n=== CPU Usage Profiling Test ===");
     println!("Testing process monitoring thread CPU usage");
-    println!("Target: < 1% CPU on modern systems (Requirement 9.2)\n");
+    println!("Target: < 1% CPU on modern systems\n");
 
     // Create a process monitor with 1000ms interval (default)
     let (tx, rx) = mpsc::channel();

@@ -29,49 +29,8 @@ pub struct MonitoredApp {
 impl MonitoredApp {
     /// Create a MonitoredApp from an executable path
     ///
-    /// This factory method extracts all metadata from the executable:
-    /// - Display name from file metadata (FileDescription) or filename
-    /// - Icon from executable resources
-    /// - Process name from filename (lowercase, without extension)
-    ///
-    /// # Arguments
-    ///
-    /// * `exe_path` - Path to the executable file
-    ///
-    /// # Returns
-    ///
-    /// Returns a fully populated MonitoredApp instance with:
-    /// - A new UUID
-    /// - Display name extracted from metadata
-    /// - Icon data cached in memory
-    /// - Process name extracted from filename
-    /// - Enabled state set to true by default
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The path does not exist
-    /// - The path is not a file
-    /// - The filename cannot be extracted
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.1: Store display name, executable path, process name, UUID, and enabled state
-    /// - Requirement 1.2: Extract display name from file metadata with fallback to filename
-    /// - Requirement 1.3: Extract and cache application icon
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::path::PathBuf;
-    /// use easyhdr::config::models::MonitoredApp;
-    ///
-    /// let path = PathBuf::from("C:\\Games\\MyGame\\game.exe");
-    /// let app = MonitoredApp::from_exe_path(path)?;
-    /// assert_eq!(app.process_name, "game");
-    /// assert!(app.enabled);
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Extracts display name from file metadata, icon from resources, and generates
+    /// a unique UUID. Process name is derived from filename (lowercase, no extension).
     pub fn from_exe_path(exe_path: PathBuf) -> Result<Self> {
         use crate::error::EasyHdrError;
 
@@ -106,7 +65,6 @@ impl MonitoredApp {
             .to_lowercase();
 
         // Extract icon from executable (gracefully handles failures)
-        // Task 16.1: Optimize icon caching - track memory usage
         let icon_data = match extract_icon_from_exe(&exe_path) {
             Ok(data) if !data.is_empty() => {
                 // Record icon in memory profiler
@@ -137,16 +95,7 @@ impl MonitoredApp {
 
     /// Load icon data lazily if not already loaded
     ///
-    /// This method loads the icon from the executable if it hasn't been loaded yet.
-    /// This supports lazy loading to reduce memory usage when icons aren't needed.
-    ///
-    /// # Returns
-    ///
-    /// Returns a reference to the icon data if available, None otherwise.
-    ///
-    /// # Requirements
-    ///
-    /// - Task 16.1: Optimize icon caching strategy with lazy loading
+    /// Loads icon from the executable on first access to reduce memory usage.
     pub fn ensure_icon_loaded(&mut self) -> Option<&Vec<u8>> {
         if self.icon_data.is_none() {
             // Try to load icon
@@ -176,13 +125,7 @@ impl MonitoredApp {
 
     /// Release icon data to free memory
     ///
-    /// This method releases the cached icon data to reduce memory usage.
-    /// The icon can be reloaded later using ensure_icon_loaded().
-    ///
-    /// # Requirements
-    ///
-    /// - Task 16.1: Optimize icon caching strategy
-    /// - Requirement 9.6: Release GUI resources when minimized to tray
+    /// Clears cached icon data to reduce memory usage. Can be reloaded with ensure_icon_loaded().
     pub fn release_icon(&mut self) {
         if let Some(_icon_data) = self.icon_data.take() {
             // Record icon removal in memory profiler

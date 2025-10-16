@@ -1,24 +1,8 @@
 //! System tray integration
 //!
-//! This module implements system tray icon and menu functionality.
-//!
-//! # Requirements
-//!
-//! - Requirement 5.10: Display an icon showing HDR state in the system tray
-//! - Requirement 5.11: Show context menu with "Open", "Current HDR State: ON/OFF", and "Exit"
-//! - Requirement 5.12: Left-click to restore main window
-//!
-//! # Implementation Notes
-//!
-//! This module uses the `tray-icon` crate to create a system tray icon with a context menu.
-//! The tray icon displays the current HDR state and provides quick access to the main window.
-//!
-//! ## Task 11.1: Create TrayIcon struct
-//!
-//! The TrayIcon struct contains:
-//! - `tray`: The actual tray icon from the tray-icon crate
-//! - `menu`: The context menu for the tray icon
-//! - `window_handle`: A weak reference to the MainWindow for showing/hiding
+//! This module implements system tray icon and menu functionality using the `tray-icon` crate.
+//! The tray icon displays the current HDR state and provides quick access to the main window
+//! via a context menu with "Open", "Current HDR State", and "Exit" items.
 
 #[cfg(windows)]
 use easyhdr::error::{EasyHdrError, Result};
@@ -33,25 +17,7 @@ use tray_icon::{
     Icon, TrayIconBuilder,
 };
 
-/// System tray icon with context menu
-///
-/// This struct manages the system tray icon and its associated context menu.
-/// It provides methods to create the tray icon, update its state, and handle
-/// menu events.
-///
-/// # Fields
-///
-/// - `tray`: The tray icon instance from the tray-icon crate
-/// - `menu`: The context menu attached to the tray icon
-/// - `window_handle`: Weak reference to the MainWindow for restoration
-/// - `open_item_id`: ID of the "Open" menu item for event handling
-/// - `exit_item_id`: ID of the "Exit" menu item for event handling
-///
-/// # Requirements
-///
-/// - Requirement 5.10: Display tray icon showing HDR state
-/// - Requirement 5.11: Context menu with Open, Status, and Exit items
-/// - Requirement 5.12: Left-click to restore main window
+/// System tray icon with context menu showing HDR state.
 #[cfg(windows)]
 pub struct TrayIcon {
     /// The actual tray icon
@@ -80,38 +46,7 @@ pub struct TrayIcon;
 
 #[cfg(windows)]
 impl TrayIcon {
-    /// Create a new tray icon with context menu
-    ///
-    /// This constructor creates a system tray icon with a context menu containing:
-    /// - "Open" - Restores the main window
-    /// - "Current HDR State: OFF" - Displays current HDR status (disabled/info only)
-    /// - Separator
-    /// - "Exit" - Exits the application
-    ///
-    /// # Arguments
-    ///
-    /// * `window` - Reference to the MainWindow for restoration
-    ///
-    /// # Returns
-    ///
-    /// Returns a Result containing the TrayIcon or an error if creation fails.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.10: Create tray icon with HDR state indicator
-    /// - Requirement 5.11: Create context menu with required items
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::gui::TrayIcon;
-    /// # use slint::include_modules;
-    /// # slint::include_modules!();
-    ///
-    /// let main_window = MainWindow::new().unwrap();
-    /// let tray_icon = TrayIcon::new(&main_window)?;
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Creates a new tray icon with a context menu containing "Open", HDR status, and "Exit" items.
     pub fn new(window: &crate::MainWindow) -> Result<Self> {
         use tracing::{debug, info};
 
@@ -157,7 +92,6 @@ impl TrayIcon {
         debug!("Tray menu created with 4 items");
 
         // Load the initial tray icon (HDR OFF state)
-        // Task 15.1: Load icon from embedded assets
         let icon = Self::load_tray_icon(false)?;
 
         // Build the tray icon
@@ -187,39 +121,14 @@ impl TrayIcon {
             status_item,
         };
 
-        // Task 11.3: Set up MenuEvent handler for menu item clicks
-        // Use window.as_weak() for thread-safe window access
+        // Set up MenuEvent handler for menu item clicks
         tray_icon.setup_menu_event_handler();
 
         Ok(tray_icon)
     }
 
-    /// Load tray icon from embedded assets
-    ///
-    /// This method loads the appropriate tray icon based on HDR state:
-    /// - icon_hdr_on.ico when HDR is enabled (green brightness indicator)
-    /// - icon_hdr_off.ico when HDR is disabled (gray with red slash)
-    ///
-    /// # Arguments
-    ///
-    /// * `hdr_enabled` - Whether HDR is currently enabled
-    ///
-    /// # Returns
-    ///
-    /// Returns a Result containing the Icon or an error if loading fails.
-    ///
-    /// # Implementation Notes
-    ///
-    /// The icon files are embedded in the binary at compile time via include_bytes!.
-    /// This ensures the icons are always available without requiring external files.
-    /// The ICO files are decoded using the `image` crate and converted to RGBA format
-    /// for use with the tray-icon crate. Falls back to programmatically generated icons
-    /// if loading fails.
-    ///
-    /// # Requirements
-    ///
-    /// - Task 15.1: Load icon_hdr_on.ico when HDR enabled
-    /// - Task 15.1: Load icon_hdr_off.ico when HDR disabled
+    /// Loads the tray icon from embedded assets. Uses icon_hdr_on.ico when HDR is enabled,
+    /// icon_hdr_off.ico when disabled. Falls back to a generated icon if loading fails.
     fn load_tray_icon(hdr_enabled: bool) -> Result<Icon> {
         use tracing::{debug, warn};
 
@@ -276,20 +185,7 @@ impl TrayIcon {
         }
     }
 
-    /// Create a fallback tray icon if asset loading fails
-    ///
-    /// This creates a simple 32x32 RGBA icon as a fallback.
-    /// The icon is a colored square:
-    /// - Green when HDR is enabled
-    /// - Red when HDR is disabled
-    ///
-    /// # Arguments
-    ///
-    /// * `hdr_enabled` - Whether HDR is currently enabled
-    ///
-    /// # Returns
-    ///
-    /// Returns a Result containing the Icon or an error if creation fails.
+    /// Creates a simple 32x32 fallback icon (green for HDR ON, red for HDR OFF).
     fn create_fallback_icon(hdr_enabled: bool) -> Result<Icon> {
         use tracing::debug;
 
@@ -336,37 +232,8 @@ impl TrayIcon {
         })
     }
 
-    /// Set up menu event handler for tray icon menu
-    ///
-    /// This method sets up the MenuEvent handler to process menu item clicks.
-    /// It handles:
-    /// - "Open" click: Restores and shows the main window
-    /// - "Exit" click: Saves configuration and exits the application
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.11: Handle "Open" and "Exit" menu item clicks
-    /// - Requirement 5.12: Restore main window on "Open" click
-    /// - Task 11.3: Use window.as_weak() for thread-safe window access
-    ///
-    /// # Implementation Notes
-    ///
-    /// The event handler runs in a separate thread managed by the tray-icon crate.
-    /// We use a weak reference to the window to avoid keeping it alive unnecessarily
-    /// and to safely handle the case where the window might have been destroyed.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::gui::TrayIcon;
-    /// # use slint::include_modules;
-    /// # slint::include_modules!();
-    ///
-    /// let main_window = MainWindow::new().unwrap();
-    /// let tray_icon = TrayIcon::new(&main_window)?;
-    /// // Event handler is automatically set up
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Sets up the menu event handler to process "Open" and "Exit" clicks.
+    /// Uses a weak reference to avoid keeping the window alive unnecessarily.
     fn setup_menu_event_handler(&self) {
         use tracing::{info, warn};
 
@@ -388,8 +255,6 @@ impl TrayIcon {
             if event.id == open_item_id {
                 info!("Open menu item clicked - restoring main window");
 
-                // Task 11.3: Handle "Open" click - restore and show main window
-                // Use window.as_weak() for thread-safe window access
                 if let Some(window) = window_weak.upgrade() {
                     // Show and bring the window to front
                     window.show().unwrap_or_else(|e| {
@@ -408,18 +273,9 @@ impl TrayIcon {
             else if event.id == exit_item_id {
                 info!("Exit menu item clicked - exiting application");
 
-                // Task 11.3: Handle "Exit" click - exit application
-                // Note: Configuration is automatically saved by AppController when changes occur.
-                // Window state is saved by the window close handler when the user clicks the X button.
-                // For tray exit, we don't need to save window state since the window is already closed
-                // or minimized to tray.
-
-                // Exit the application immediately
-                // We use std::process::exit(0) because:
-                // 1. Background threads (ProcessMonitor, AppController) run infinite loops with no shutdown signal
-                // 2. slint::quit_event_loop() only stops the GUI event loop but doesn't terminate background threads
-                // 3. The OS will clean up all resources (memory, handles, threads) on process exit
-                // 4. Configuration is automatically saved by AppController, so no data loss occurs
+                // Exit immediately using std::process::exit because background threads
+                // run infinite loops with no shutdown signal. Configuration is automatically
+                // saved by AppController, so no data loss occurs.
                 info!("Exiting application");
                 std::process::exit(0);
             }
@@ -428,49 +284,7 @@ impl TrayIcon {
         info!("Menu event handler set up successfully");
     }
 
-    /// Update the tray icon based on HDR state
-    ///
-    /// This method changes the tray icon to reflect the current HDR state:
-    /// - Green icon when HDR is enabled
-    /// - Red icon when HDR is disabled
-    ///
-    /// It also updates the "Current HDR State" menu item text to show the current state.
-    ///
-    /// # Arguments
-    ///
-    /// * `hdr_enabled` - Whether HDR is currently enabled
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 5.10: Display an icon showing HDR state in the system tray
-    /// - Task 11.4: Write update_icon() to change tray icon based on HDR state
-    /// - Task 11.4: Load icon_hdr_on.ico when HDR enabled
-    /// - Task 11.4: Load icon_hdr_off.ico when HDR disabled
-    /// - Task 11.4: Update "Current HDR State" menu item text
-    ///
-    /// # Implementation Notes
-    ///
-    /// Uses icon assets embedded in the binary at compile time:
-    /// - icon_hdr_on.ico: Green brightness indicator (HDR enabled)
-    /// - icon_hdr_off.ico: Gray with red slash (HDR disabled)
-    ///   Falls back to programmatically generated icons if asset loading fails.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::gui::TrayIcon;
-    /// # use slint::include_modules;
-    /// # slint::include_modules!();
-    ///
-    /// let main_window = MainWindow::new().unwrap();
-    /// let mut tray_icon = TrayIcon::new(&main_window)?;
-    ///
-    /// // Update icon when HDR state changes
-    /// tray_icon.update_icon(true);  // HDR enabled
-    /// tray_icon.update_icon(false); // HDR disabled
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
-    // TODO: Connect to HDR state changes
+    /// Updates the tray icon and menu item text to reflect the current HDR state.
     #[allow(dead_code)]
     pub fn update_icon(&mut self, hdr_enabled: bool) {
         use tracing::{info, warn};
@@ -480,8 +294,6 @@ impl TrayIcon {
             if hdr_enabled { "ON" } else { "OFF" }
         );
 
-        // Task 15.1: Load icon_hdr_on.ico when HDR enabled, icon_hdr_off.ico when HDR disabled
-        // Icons are embedded in the binary at compile time
         match Self::load_tray_icon(hdr_enabled) {
             Ok(icon) => {
                 // Update the tray icon
@@ -496,7 +308,6 @@ impl TrayIcon {
             }
         }
 
-        // Task 11.4: Update "Current HDR State" menu item text
         let status_text = if hdr_enabled {
             "Current HDR State: ON"
         } else {
@@ -507,48 +318,7 @@ impl TrayIcon {
         info!("Status menu item updated to: {}", status_text);
     }
 
-    /// Show a tray notification
-    ///
-    /// This method displays a Windows toast notification when the HDR state changes.
-    /// The notification will only be shown if the `show_tray_notifications` preference
-    /// is enabled in the user configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `message` - The message to display in the notification
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 6.4: Show option to enable/disable tray notifications on HDR changes
-    /// - Task 11.5: Write show_notification() using tray icon notification API
-    /// - Task 11.5: Show notification when HDR state changes (if enabled in preferences)
-    /// - Task 11.5: Include HDR state (ON/OFF) in notification message
-    ///
-    /// # Implementation Notes
-    ///
-    /// This method uses the `tauri-winrt-notification` crate to display Windows toast notifications.
-    /// The notification includes:
-    /// - Title: "EasyHDR"
-    /// - Message: The provided message (e.g., "HDR Enabled" or "HDR Disabled")
-    /// - Duration: Short (5 seconds)
-    /// - Sound: Default notification sound
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::gui::TrayIcon;
-    /// # use slint::include_modules;
-    /// # slint::include_modules!();
-    ///
-    /// let main_window = MainWindow::new().unwrap();
-    /// let tray_icon = TrayIcon::new(&main_window)?;
-    ///
-    /// // Show notification when HDR state changes
-    /// tray_icon.show_notification("HDR Enabled");
-    /// tray_icon.show_notification("HDR Disabled");
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
-    // TODO: Connect to process events
+    /// Displays a Windows toast notification (respects user's notification preference).
     #[allow(dead_code)]
     pub fn show_notification(&self, message: &str) {
         use tracing::{debug, info, warn};
@@ -562,8 +332,6 @@ impl TrayIcon {
             use tauri_winrt_notification::{Duration, Sound, Toast};
 
             // Create and show the toast notification
-            // Use POWERSHELL_APP_ID as a fallback since we don't have a registered AppUserModelID yet
-            // TODO: Register a proper AppUserModelID for the application
             let result = Toast::new(Toast::POWERSHELL_APP_ID)
                 .title("EasyHDR")
                 .text1(message)
@@ -593,32 +361,16 @@ impl TrayIcon {
 /// Stub implementation for non-Windows platforms
 #[cfg(not(windows))]
 impl TrayIcon {
-    /// Create a new tray icon (stub for non-Windows)
-    ///
-    /// This is a stub implementation for non-Windows platforms.
-    /// The actual tray icon functionality is only available on Windows.
     #[allow(dead_code)]
     pub fn new(_window: &crate::MainWindow) -> easyhdr::error::Result<Self> {
         Ok(Self)
     }
 
-    /// Update the tray icon (stub for non-Windows)
-    ///
-    /// This is a stub implementation for non-Windows platforms.
-    /// The actual tray icon functionality is only available on Windows.
     #[allow(dead_code)]
-    pub fn update_icon(&mut self, _hdr_enabled: bool) {
-        // No-op on non-Windows platforms
-    }
+    pub fn update_icon(&mut self, _hdr_enabled: bool) {}
 
-    /// Show a tray notification (stub for non-Windows)
-    ///
-    /// This is a stub implementation for non-Windows platforms.
-    /// The actual notification functionality is only available on Windows.
     #[allow(dead_code)]
-    pub fn show_notification(&self, _message: &str) {
-        // No-op on non-Windows platforms
-    }
+    pub fn show_notification(&self, _message: &str) {}
 }
 
 #[cfg(test)]

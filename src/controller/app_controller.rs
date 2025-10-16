@@ -48,15 +48,7 @@ pub struct AppController {
 }
 
 impl AppController {
-    /// Create a new application controller
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - Application configuration
-    /// * `event_receiver` - Channel receiver for process events from ProcessMonitor
-    /// * `hdr_state_receiver` - Channel receiver for HDR state events from HdrStateMonitor
-    /// * `gui_state_sender` - Channel sender for state updates to GUI
-    /// * `process_monitor_watch_list` - Shared reference to ProcessMonitor's watch list
+    /// Create a new application controller and detect initial HDR state
     pub fn new(
         config: AppConfig,
         event_receiver: mpsc::Receiver<ProcessEvent>,
@@ -86,57 +78,26 @@ impl AppController {
         })
     }
 
-    /// Detect the current HDR state from the system
-    ///
-    /// Checks all HDR-capable displays and returns true if any of them have HDR enabled.
-    ///
-    /// # Arguments
-    ///
-    /// * `hdr_controller` - Reference to the HDR controller
-    ///
-    /// # Returns
-    ///
-    /// Returns true if HDR is enabled on any HDR-capable display, false otherwise.
+    /// Detect the current HDR state from the system by checking all HDR-capable displays
     fn detect_current_hdr_state(hdr_controller: &HdrController) -> bool {
         // Delegate to the shared implementation in HdrController
         hdr_controller.detect_current_hdr_state()
     }
 
-    /// Take ownership of the event receiver if it hasn't been taken yet
-    ///
-    /// The receiver is stored as an Option so it can be moved out exactly once.
-    /// Subsequent attempts to take it return None and should be treated as
-    /// a no-op by callers.
+    /// Take ownership of the event receiver if it hasn't been taken yet.
+    /// Returns None if already taken. Caller should treat None as a no-op.
     fn take_event_receiver(&mut self) -> Option<mpsc::Receiver<ProcessEvent>> {
         self.event_receiver.take()
     }
 
-    /// Take ownership of the HDR state receiver if it hasn't been taken yet
-    ///
-    /// The receiver is stored as an Option so it can be moved out exactly once.
-    /// Subsequent attempts to take it return None and should be treated as
-    /// a no-op by callers.
+    /// Take ownership of the HDR state receiver if it hasn't been taken yet.
+    /// Returns None if already taken. Caller should treat None as a no-op.
     fn take_hdr_state_receiver(&mut self) -> Option<mpsc::Receiver<HdrStateEvent>> {
         self.hdr_state_receiver.take()
     }
 
-    /// Run the main event loop
-    ///
-    /// This method implements the main event loop that receives process events from the
-    /// ProcessMonitor and HDR state events from the HdrStateMonitor.
-    ///
-    /// # Behavior
-    ///
-    /// 1. Enters main event loop, receiving events from both channels
-    /// 2. Calls handle_process_event() for ProcessEvent or handle_hdr_state_event() for HdrStateEvent
-    /// 3. Handles channel disconnection gracefully by exiting the loop
-    /// 4. Logs all significant events and errors
-    ///
-    /// # Implementation Details
-    ///
-    /// The event loop uses `recv_timeout` with a 100ms timeout to check for process events,
-    /// which allows it to periodically check the HDR state channel even when no process
-    /// events are arriving. This ensures HDR state changes are processed promptly.
+    /// Run the main event loop to receive process and HDR state events.
+    /// Uses 100ms timeout to ensure prompt HDR state change detection.
     pub fn run(&mut self) {
         use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
         use std::time::Duration;
@@ -188,13 +149,8 @@ impl AppController {
         info!("Main event loop exited");
     }
 
-    /// Spawn the event loop in a background thread for a shared controller instance
-    ///
-    /// This helper is used by the GUI setup to start processing process monitor events
-    /// and HDR state events without holding the controller mutex for the entire lifetime
-    /// of the thread. The background thread takes ownership of both event receivers and
-    /// only locks the controller while handling individual events, preventing GUI callbacks
-    /// from being blocked when they need short-lived access to the controller.
+    /// Spawn the event loop in a background thread. Only locks controller while handling individual events,
+    /// preventing GUI callbacks from being blocked.
     pub fn spawn_event_loop(controller: Arc<Mutex<AppController>>) -> std::thread::JoinHandle<()> {
         let (event_receiver, hdr_state_receiver) = {
             let mut controller_guard = controller.lock();
@@ -250,22 +206,9 @@ impl AppController {
         })
     }
 
-    /// Handle a process event
-    ///
-    /// Processes ProcessEvent::Started and ProcessEvent::Stopped events from the process monitor.
-    /// Implements the core logic for automatic HDR toggling based on monitored applications.
-    ///
-    /// # Arguments
-    ///
-    /// * `event` - The process event to handle (Started or Stopped)
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.1: Enable HDR when any monitored and enabled application transitions to RUNNING
-    /// - Requirement 4.2: Disable HDR when the last monitored application transitions to NOT_RUNNING
-    /// - Requirement 4.3: Maintain a counter of active monitored processes
-    /// - Requirement 4.4: Prevent redundant toggle operations when HDR is already in desired state
-    /// - Requirement 4.8: Debounce rapid state changes by waiting 500ms before toggling back
+    /// Handle a process event to automatically toggle HDR.
+    /// Enables HDR when first monitored app starts, disables when last one stops.
+    /// Uses 500ms debouncing to prevent rapid toggling during app restarts.
     fn handle_process_event(&mut self, event: ProcessEvent) {
         use tracing::{debug, error, info};
 
@@ -351,20 +294,8 @@ impl AppController {
         }
     }
 
-    /// Handle an HDR state event
-    ///
-    /// Processes HdrStateEvent::Enabled and HdrStateEvent::Disabled events from the HDR state monitor.
-    /// These events are sent when HDR is manually toggled via Windows settings, allowing the application
-    /// to update its internal state and GUI to reflect the external change.
-    ///
-    /// # Arguments
-    ///
-    /// * `event` - The HDR state event to handle (Enabled or Disabled)
-    ///
-    /// # Note
-    ///
-    /// This method does NOT call toggle_hdr() because the HDR state has already been changed externally.
-    /// It only updates the application's cached state and sends a GUI update to reflect the new state.
+    /// Handle an HDR state event from external Windows settings changes.
+    /// Updates internal state and GUI without calling toggle_hdr() since the change already occurred.
     fn handle_hdr_state_event(&mut self, event: HdrStateEvent) {
         use tracing::{debug, info};
 
@@ -386,23 +317,7 @@ impl AppController {
         self.send_state_update();
     }
 
-    /// Toggle HDR state
-    ///
-    /// Calls the HDR controller to enable or disable HDR globally on all displays.
-    /// Updates the current HDR state and last toggle time for debouncing.
-    ///
-    /// # Arguments
-    ///
-    /// * `enable` - True to enable HDR, false to disable
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(()) on success, or an error if HDR control fails.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.5: Log HDR state change with timestamp
-    /// - Requirement 4.6: Handle errors gracefully and continue monitoring
+    /// Toggle HDR state globally on all displays and update debouncing timestamp
     fn toggle_hdr(&mut self, enable: bool) -> Result<()> {
         use tracing::{info, warn};
 
@@ -441,13 +356,7 @@ impl AppController {
         Ok(())
     }
 
-    /// Send state update to GUI
-    ///
-    /// Sends the current application state to the GUI via the state sender channel.
-    /// This includes HDR enabled state, active applications, and last event.
-    ///
-    /// This is an internal method called automatically when state changes.
-    /// For sending the initial state after startup, use `send_initial_state()` instead.
+    /// Send current state update to GUI (HDR state, active apps, process count)
     fn send_state_update(&self) {
         use tracing::{debug, warn};
 
@@ -479,43 +388,8 @@ impl AppController {
         }
     }
 
-    /// Send initial state update to GUI
-    ///
-    /// Sends the current application state to the GUI to populate it with the
-    /// initial configuration. This should be called once after the GUI and
-    /// controller are fully initialized to ensure the GUI displays all apps
-    /// from the configuration file.
-    ///
-    /// This method also populates the ProcessMonitor watch list with enabled
-    /// applications from the loaded configuration, ensuring process detection
-    /// works immediately after startup.
-    ///
-    /// # Requirements
-    ///
-    /// - GUI should display all monitored applications from config on startup
-    /// - ProcessMonitor should be initialized with enabled applications
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::sync::{Arc, mpsc};
-    /// use std::collections::HashSet;
-    /// use parking_lot::Mutex;
-    /// use easyhdr::controller::AppController;
-    /// use easyhdr::config::AppConfig;
-    ///
-    /// let config = AppConfig::default();
-    /// let (_event_tx, event_rx) = mpsc::channel();
-    /// let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-    /// let (state_tx, _state_rx) = mpsc::channel();
-    /// let watch_list = Arc::new(Mutex::new(HashSet::new()));
-    ///
-    /// let controller = Arc::new(Mutex::new(
-    ///     AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap()
-    /// ));
-    /// let controller_guard = controller.lock();
-    /// controller_guard.send_initial_state();
-    /// ```
+    /// Send initial state to GUI and populate ProcessMonitor watch list.
+    /// Call once after initialization to display all configured apps.
     pub fn send_initial_state(&self) {
         use tracing::info;
 
@@ -529,29 +403,8 @@ impl AppController {
         self.send_state_update();
     }
 
-    /// Add a new application to the configuration
-    ///
-    /// Adds the provided MonitoredApp to the configuration, saves the config to disk,
-    /// and updates the ProcessMonitor's watch list.
-    ///
-    /// # Arguments
-    ///
-    /// * `app` - The MonitoredApp to add
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(()) on success, or an error if saving the configuration fails.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.4: Update enabled state flag for applications
-    /// - Requirement 1.5: Delete applications from configuration
-    /// - Requirement 1.6: Persist data to config.json using atomic writes
-    ///
-    /// # Edge Cases
-    ///
-    /// - If config file is deleted during runtime, continues with in-memory config
-    /// - Logs warning if save fails but continues operation
+    /// Add application to config, save to disk, and update ProcessMonitor watch list.
+    /// Logs warning and continues with in-memory config if save fails.
     pub fn add_application(&mut self, app: MonitoredApp) -> Result<()> {
         use tracing::{info, warn};
 
@@ -587,28 +440,8 @@ impl AppController {
         Ok(())
     }
 
-    /// Remove an application from the configuration by UUID
-    ///
-    /// Removes the application with the specified UUID from the configuration,
-    /// saves the config to disk, and updates the ProcessMonitor's watch list.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The UUID of the application to remove
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(()) on success, or an error if saving the configuration fails.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.5: Delete applications from configuration
-    /// - Requirement 1.6: Persist data to config.json using atomic writes
-    ///
-    /// # Edge Cases
-    ///
-    /// - If config file is deleted during runtime, continues with in-memory config
-    /// - Logs warning if save fails but continues operation
+    /// Remove application by UUID, save to disk, and update ProcessMonitor watch list.
+    /// Logs warning and continues with in-memory config if save fails.
     pub fn remove_application(&mut self, id: Uuid) -> Result<()> {
         use tracing::{info, warn};
 
@@ -641,29 +474,8 @@ impl AppController {
         Ok(())
     }
 
-    /// Toggle the enabled state of an application by UUID
-    ///
-    /// Updates the enabled flag for the application with the specified UUID,
-    /// saves the config to disk, and updates the ProcessMonitor's watch list.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - The UUID of the application to toggle
-    /// * `enabled` - The new enabled state
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(()) on success, or an error if saving the configuration fails.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.4: Update enabled state flag for applications
-    /// - Requirement 1.6: Persist data to config.json using atomic writes
-    ///
-    /// # Edge Cases
-    ///
-    /// - If config file is deleted during runtime, continues with in-memory config
-    /// - Logs warning if save fails but continues operation
+    /// Toggle application enabled state by UUID, save to disk, and update ProcessMonitor watch list.
+    /// Logs warning and continues with in-memory config if save fails.
     pub fn toggle_app_enabled(&mut self, id: Uuid, enabled: bool) -> Result<()> {
         use tracing::{info, warn};
 
@@ -698,26 +510,8 @@ impl AppController {
         Ok(())
     }
 
-    /// Update user preferences
-    ///
-    /// Updates the user preferences in the configuration and saves to disk.
-    ///
-    /// # Arguments
-    ///
-    /// * `prefs` - The new UserPreferences to apply
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(()) on success, or an error if saving the configuration fails.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.6: Persist data to config.json using atomic writes
-    ///
-    /// # Edge Cases
-    ///
-    /// - If config file is deleted during runtime, continues with in-memory config
-    /// - Logs warning if save fails but continues operation
+    /// Update user preferences and save to disk.
+    /// Logs warning and continues with in-memory config if save fails.
     pub fn update_preferences(&mut self, prefs: UserPreferences) -> Result<()> {
         use tracing::{info, warn};
 
@@ -744,19 +538,8 @@ impl AppController {
         Ok(())
     }
 
-    /// Refresh the display list
-    ///
-    /// Re-enumerates displays and updates the HDR controller's display cache.
-    /// This can be called when display configuration changes (e.g., monitor connected/disconnected).
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(()) on success, or an error if display enumeration fails.
-    ///
-    /// # Edge Cases
-    ///
-    /// - Handles display disconnection during operation by refreshing the display list
-    /// - Logs the number of displays found after refresh
+    /// Re-enumerate displays and update HDR controller's display cache.
+    /// Call when display configuration changes (e.g., monitor connected/disconnected).
     pub fn refresh_displays(&mut self) -> Result<()> {
         use tracing::info;
 
@@ -770,13 +553,7 @@ impl AppController {
         Ok(())
     }
 
-    /// Update the ProcessMonitor's watch list based on current configuration
-    ///
-    /// Extracts all enabled application process names from the configuration
-    /// and updates the ProcessMonitor's watch list.
-    ///
-    /// This is called after any configuration change that affects which applications
-    /// should be monitored.
+    /// Update ProcessMonitor watch list with enabled application process names from config
     fn update_process_monitor_watch_list(&self) {
         use tracing::debug;
 
@@ -1021,7 +798,7 @@ mod tests {
     // - Individually: `cargo test test_add_application`
     // - Single-threaded: `cargo test -- --test-threads=1`
     //
-    // This is a test isolation issue, not a code defect. Will be fixed in Task 17.3.
+    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_add_application() {
         let config = AppConfig::default();
@@ -1068,7 +845,7 @@ mod tests {
     // - Individually: `cargo test test_remove_application`
     // - Single-threaded: `cargo test -- --test-threads=1`
     //
-    // This is a test isolation issue, not a code defect. Will be fixed in Task 17.3.
+    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_remove_application() {
         let mut config = AppConfig::default();
@@ -1114,7 +891,7 @@ mod tests {
     // - Individually: `cargo test test_toggle_app_enabled`
     // - Single-threaded: `cargo test -- --test-threads=1`
     //
-    // This is a test isolation issue, not a code defect. Will be fixed in Task 17.3.
+    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_toggle_app_enabled() {
         let mut config = AppConfig::default();
@@ -1181,7 +958,7 @@ mod tests {
     // - Individually: `cargo test test_update_preferences`
     // - Single-threaded: `cargo test -- --test-threads=1`
     //
-    // This is a test isolation issue, not a code defect. Will be fixed in Task 17.3.
+    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_update_preferences() {
         let config = AppConfig::default();
@@ -1395,15 +1172,8 @@ mod tests {
         handle.join().unwrap();
     }
 
-    /// Test rapid process start/stop with debouncing
-    ///
-    /// This test verifies that the debouncing mechanism works correctly when a process
-    /// stops and starts quickly (within 500ms). The HDR should remain on during rapid
-    /// restarts to avoid unnecessary toggling.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.8: Debounce rapid state changes by waiting 500ms before toggling back
+    /// Test rapid process start/stop with debouncing.
+    /// Verifies 500ms debouncing prevents unnecessary HDR toggling during app restarts.
     #[test]
     fn test_rapid_process_restart_debouncing() {
         // Create a config with one monitored app
@@ -1465,10 +1235,8 @@ mod tests {
         assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
 
-    /// Test that debouncing doesn't prevent HDR from turning on
-    ///
-    /// This test verifies that the debouncing mechanism only affects HDR disable operations,
-    /// not enable operations. HDR should always turn on immediately when a monitored app starts.
+    /// Test that debouncing only affects HDR disable, not enable.
+    /// HDR should always turn on immediately when a monitored app starts.
     #[test]
     fn test_debouncing_does_not_affect_hdr_enable() {
         // Create a config with one monitored app

@@ -1,7 +1,7 @@
 //! Logging system initialization
 //!
-//! This module sets up the tracing-based logging system with file output
-//! and log rotation.
+//! Sets up tracing-based logging with file output to %APPDATA%\EasyHDR\app.log
+//! and automatic rotation at 5MB keeping 3 historical files.
 
 use crate::error::Result;
 use std::path::PathBuf;
@@ -13,22 +13,7 @@ const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024;
 
 /// Initialize the logging system
 ///
-/// Sets up logging to %APPDATA%\EasyHDR\app.log with rotation at 5MB
-/// keeping 3 historical files (app.log, app.log.1, app.log.2).
-///
-/// Log format includes:
-/// - Timestamps
-/// - Thread IDs
-/// - File and line numbers
-/// - Target module
-///
 /// Log level defaults to INFO but can be configured via RUST_LOG environment variable.
-///
-/// # Requirements
-/// - Requirement 8.1: Log to %APPDATA%\EasyHDR\app.log
-/// - Requirement 8.2: Rotate logs at 5MB with 3 historical files
-/// - Requirement 8.3: Log application start with version number
-/// - Requirement 8.9: Support log levels ERROR, WARN, INFO, DEBUG
 pub fn init_logging() -> Result<()> {
     let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
     let log_dir = PathBuf::from(appdata).join("EasyHDR");
@@ -75,14 +60,7 @@ pub fn init_logging() -> Result<()> {
 
 /// Check log file size and rotate if necessary
 ///
-/// Rotates logs as follows:
-/// - app.log.2 is deleted (if exists)
-/// - app.log.1 -> app.log.2
-/// - app.log -> app.log.1
-/// - New app.log is created
-///
-/// # Requirements
-/// - Requirement 8.2: Rotate logs at 5MB with 3 historical files
+/// Rotates logs: app.log.2 deleted, app.log.1 -> app.log.2, app.log -> app.log.1
 fn check_and_rotate_log(log_path: &PathBuf) -> Result<()> {
     let metadata = std::fs::metadata(log_path)?;
 
@@ -115,9 +93,7 @@ fn check_and_rotate_log(log_path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// Log rotator for periodic rotation checks
-///
-/// This can be used to periodically check and rotate logs during application runtime.
+/// Log rotator for periodic rotation checks during application runtime
 pub struct LogRotator {
     log_path: PathBuf,
     max_size: u64,
@@ -130,9 +106,6 @@ impl LogRotator {
     }
 
     /// Check if rotation is needed and perform it
-    ///
-    /// # Requirements
-    /// - Requirement 8.2: Rotate logs at 5MB with 3 historical files
     pub fn check_and_rotate(&self) -> Result<()> {
         if !self.log_path.exists() {
             return Ok(());

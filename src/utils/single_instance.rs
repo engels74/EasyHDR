@@ -1,7 +1,6 @@
 //! Single instance enforcement
 //!
-//! This module provides functionality to ensure only one instance of the application
-//! runs at a time using a Windows named mutex.
+//! Ensures only one instance of the application runs at a time using a Windows named mutex.
 
 use crate::error::Result;
 
@@ -13,10 +12,7 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 #[cfg(windows)]
 use windows::Win32::System::Threading::{CreateMutexW, OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE};
 
-/// Single instance guard
-///
-/// This struct holds a Windows named mutex that ensures only one instance
-/// of the application can run at a time. When dropped, the mutex is released.
+/// Single instance guard using a Windows named mutex (released on drop)
 #[cfg(windows)]
 pub struct SingleInstanceGuard {
     mutex_handle: HANDLE,
@@ -24,26 +20,7 @@ pub struct SingleInstanceGuard {
 
 #[cfg(windows)]
 impl SingleInstanceGuard {
-    /// Create a new single instance guard
-    ///
-    /// This function attempts to create a named mutex. If the mutex already exists,
-    /// it means another instance is running and an error is returned.
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(SingleInstanceGuard) if this is the first instance, or an error
-    /// if another instance is already running.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::single_instance::SingleInstanceGuard;
-    ///
-    /// let _guard = SingleInstanceGuard::new()?;
-    /// // Application runs...
-    /// // When _guard is dropped, the mutex is released
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Create a new single instance guard, returning an error if another instance is running
     pub fn new() -> Result<Self> {
         use tracing::{debug, error};
         use windows::core::HSTRING;
@@ -93,10 +70,7 @@ pub struct SingleInstanceGuard;
 
 #[cfg(not(windows))]
 impl SingleInstanceGuard {
-    /// Create a new single instance guard (stub for non-Windows)
-    ///
-    /// On non-Windows platforms, this always succeeds as single-instance
-    /// enforcement is only needed on Windows.
+    /// Create a new single instance guard (stub for non-Windows, always succeeds)
     pub fn new() -> Result<Self> {
         Ok(Self)
     }

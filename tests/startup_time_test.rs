@@ -1,12 +1,7 @@
 //! Startup time tests
 //!
-//! This test module verifies that the application meets startup time requirements.
-//!
-//! # Requirements
-//!
-//! - Requirement 9.3: System SHALL display the GUI within 200ms
-//! - Requirement 9.7: Load configuration and start monitoring in parallel where possible
-//! - Task 16.3: Verify startup < 200ms
+//! This test module verifies that the application displays the GUI within 200ms
+//! and loads configuration efficiently.
 
 use easyhdr::utils::startup_profiler::{self, StartupPhase};
 use std::time::Duration;

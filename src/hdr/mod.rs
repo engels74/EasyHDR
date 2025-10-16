@@ -62,16 +62,6 @@
 //! println!("HDR disabled on all displays");
 //! # Ok::<(), easyhdr::error::EasyHdrError>(())
 //! ```
-//!
-//! # Requirements
-//!
-//! - Requirement 3.1: Enumerate displays using QueryDisplayConfig
-//! - Requirement 3.2: Cache display enumeration results
-//! - Requirement 3.3: Detect Windows version to select appropriate APIs
-//! - Requirement 3.4: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 for Windows 11 24H2+
-//! - Requirement 3.5: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO for older Windows
-//! - Requirement 3.8: Use DISPLAYCONFIG_SET_HDR_STATE for Windows 11 24H2+
-//! - Requirement 3.9: Use DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE for older Windows
 
 pub mod controller;
 pub mod version;

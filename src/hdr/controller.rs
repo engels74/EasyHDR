@@ -124,19 +124,9 @@ impl HdrController {
         false
     }
 
-    /// Enumerate displays
+    /// Enumerate all active displays and detect HDR support
     ///
-    /// Uses GetDisplayConfigBufferSizes and QueryDisplayConfig to retrieve
-    /// all active display paths and extract display targets.
-    ///
-    /// # Returns
-    ///
-    /// Returns a vector of DisplayTarget structs representing all active displays.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 3.2: Use GetDisplayConfigBufferSizes with QDC_ONLY_ACTIVE_PATHS
-    /// - Requirement 3.3: Call QueryDisplayConfig to retrieve active display paths
+    /// Uses Windows Display Configuration APIs to retrieve display information.
     pub fn enumerate_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         #[cfg(windows)]
         {
@@ -269,65 +259,12 @@ impl HdrController {
         }
     }
 
-    /// Check if HDR is supported on a display
+    /// Check if a display supports HDR
     ///
-    /// Uses DisplayConfigGetDeviceInfo with version-specific structures to detect
-    /// whether a display supports HDR.
-    ///
-    /// # Algorithm
-    ///
-    /// ## Windows 11 24H2+ (Build 26100+)
-    ///
-    /// Uses `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2`:
-    /// 1. Create structure with header specifying adapter ID and target ID
-    /// 2. Call `DisplayConfigGetDeviceInfo` to populate the structure
-    /// 3. Check `highDynamicRangeSupported` bit field
-    /// 4. Return true if bit is set, false otherwise
-    /// 5. If the API fails, fall back to the older DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO API
-    ///
-    /// ## Windows 10/11 (Before 24H2)
-    ///
-    /// Uses `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO`:
-    /// 1. Create structure with header specifying adapter ID and target ID
-    /// 2. Call `DisplayConfigGetDeviceInfo` to populate the structure
-    /// 3. Check two conditions:
-    ///    - `advancedColorSupported` == TRUE (display hardware supports HDR)
-    ///    - `wideColorEnforced` == FALSE (not in forced wide color mode)
-    /// 4. Return true only if both conditions are met
-    ///
-    /// **Why check wideColorEnforced?** On older Windows versions, `wideColorEnforced`
-    /// being TRUE indicates the display is in a forced wide color gamut mode that's
-    /// incompatible with HDR. This is a legacy compatibility mode that should be avoided.
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - The display target to check
-    ///
-    /// # Returns
-    ///
-    /// Returns true if the display supports HDR, false otherwise.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 3.4: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 for Windows 11 24H2+
-    /// - Requirement 3.5: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO for older Windows
-    /// - Requirement 3.6: Check advancedColorSupported && !wideColorEnforced for older Windows
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::hdr::HdrController;
-    ///
-    /// let controller = HdrController::new()?;
-    /// let displays = controller.get_display_cache();
-    ///
-    /// for display in displays {
-    ///     if controller.is_hdr_supported(display)? {
-    ///         println!("Display supports HDR");
-    ///     }
-    /// }
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Uses Windows Display Configuration APIs to detect HDR capability. Windows 11 24H2+
+    /// uses `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2` (checks `highDynamicRangeSupported` bit),
+    /// while older Windows versions use `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` (checks
+    /// `advancedColorSupported && !wideColorEnforced`).
     #[cfg_attr(not(windows), allow(unused_variables))]
     pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
@@ -443,19 +380,7 @@ impl HdrController {
         }
     }
 
-    /// Check if HDR is supported using the legacy API
-    ///
-    /// This method uses DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO which works on
-    /// Windows 10, Windows 11, and as a fallback for Windows 11 24H2+ if the
-    /// newer API fails.
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - The display target to check
-    ///
-    /// # Returns
-    ///
-    /// Returns true if the display supports HDR, false otherwise.
+    /// Check HDR support using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
     fn is_hdr_supported_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
@@ -523,24 +448,9 @@ impl HdrController {
         Ok(supported)
     }
 
-    /// Check if HDR is enabled on a display
+    /// Check if HDR is currently enabled on a display
     ///
-    /// Uses DisplayConfigGetDeviceInfo with version-specific structures to detect
-    /// whether HDR is currently enabled on a display.
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - The display target to check
-    ///
-    /// # Returns
-    ///
-    /// Returns true if HDR is currently enabled, false otherwise.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 3.4: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 for Windows 11 24H2+
-    /// - Requirement 3.5: Use DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO for older Windows
-    /// - Requirement 3.7: Check advancedColorSupported && advancedColorEnabled && !wideColorEnforced for older Windows
+    /// Uses version-specific Windows APIs to detect current HDR state.
     #[cfg_attr(not(windows), allow(unused_variables))]
     pub fn is_hdr_enabled(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
@@ -607,19 +517,7 @@ impl HdrController {
         }
     }
 
-    /// Check if HDR is enabled using the legacy API
-    ///
-    /// This method uses DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO which works on
-    /// Windows 10, Windows 11, and as a fallback for Windows 11 24H2+ if the
-    /// newer API fails.
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - The display target to check
-    ///
-    /// # Returns
-    ///
-    /// Returns true if HDR is currently enabled, false otherwise.
+    /// Check HDR enabled state using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
     fn is_hdr_enabled_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
@@ -668,25 +566,9 @@ impl HdrController {
         Ok(enabled)
     }
 
-    /// Set HDR state for a single display
+    /// Enable or disable HDR on a single display
     ///
-    /// Uses DisplayConfigSetDeviceInfo with version-specific structures to enable
-    /// or disable HDR on a single display.
-    ///
-    /// # Arguments
-    ///
-    /// * `target` - The display target to control
-    /// * `enable` - True to enable HDR, false to disable
-    ///
-    /// # Returns
-    ///
-    /// Returns Ok(()) if the operation succeeded, or an error if it failed.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 3.8: Use DISPLAYCONFIG_SET_HDR_STATE for Windows 11 24H2+
-    /// - Requirement 3.9: Use DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE for older Windows
-    /// - Requirement 3.11: Add 100ms delay after DisplayConfigSetDeviceInfo call
+    /// Uses version-specific Windows APIs and includes a 100ms delay for state propagation.
     #[cfg_attr(not(windows), allow(dead_code))]
     pub fn set_hdr_state(&self, target: &DisplayTarget, enable: bool) -> Result<()> {
         #[cfg(windows)]
@@ -801,18 +683,9 @@ impl HdrController {
         }
     }
 
-    /// Refresh the display cache
+    /// Refresh the display cache by re-enumerating all displays
     ///
-    /// Re-enumerates displays and updates the internal display cache.
-    /// This method can be called when display configuration changes (e.g., monitor connected/disconnected).
-    ///
-    /// # Returns
-    ///
-    /// Returns a vector of DisplayTarget structs representing all active displays after refresh.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 3.14: Add refresh_displays() method for future use
+    /// Useful when display configuration changes (monitor connected/disconnected).
     pub fn refresh_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         use tracing::info;
 
@@ -820,31 +693,10 @@ impl HdrController {
         self.enumerate_displays()
     }
 
-    /// Set HDR state globally for all displays
+    /// Enable or disable HDR globally across all HDR-capable displays
     ///
-    /// Iterates through all display targets and calls set_hdr_state() on each.
-    /// Returns a vector of results for each display, allowing partial success scenarios.
-    ///
-    /// # Arguments
-    ///
-    /// * `enable` - True to enable HDR, false to disable
-    ///
-    /// # Returns
-    ///
-    /// Returns a vector of tuples containing (DisplayTarget, Result<()>) for each display.
-    /// This allows tracking which displays succeeded and which failed.
-    ///
-    /// # Requirements
-    ///
-    /// - Requirement 3.10: Iterate through all display targets and call DisplayConfigSetDeviceInfo on each
-    /// - Requirement 3.11: Add 100ms delays between changes (handled by set_hdr_state)
-    /// - Requirement 3.13: Handle partial success scenarios gracefully
-    ///
-    /// # Edge Cases
-    ///
-    /// - Handles display disconnection during operation by continuing with remaining displays
-    /// - Logs warnings for failed displays but continues operation
-    /// - Returns partial results even if some displays fail
+    /// Returns results for each display, allowing partial success. Continues with remaining
+    /// displays if some fail (e.g., due to disconnection).
     pub fn set_hdr_global(&self, enable: bool) -> Result<Vec<(DisplayTarget, Result<()>)>> {
         use tracing::{debug, info, warn};
 
@@ -1550,8 +1402,7 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_hdr_state_toggle_timing() {
-        // This test verifies that HDR toggle completes within acceptable time
-        // Requirement 3.12: WHEN HDR toggle completes THEN the system SHALL complete within 100-300ms
+        // This test verifies that HDR toggle completes within acceptable time (100-300ms target)
         let controller = HdrController::new().expect("Failed to create controller");
 
         // Find an HDR-capable display

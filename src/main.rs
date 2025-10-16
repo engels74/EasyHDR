@@ -1,12 +1,7 @@
 //! EasyHDR - Automatic HDR management for Windows
 //!
 //! This application automatically enables and disables HDR on Windows displays
-//! based on configured applications.
-//!
-//! # Requirements
-//!
-//! - Requirement 10.1: Compile as Windows GUI subsystem application (no console window)
-//! - Requirement 10.6: Function correctly on Windows 10 21H2+ (build 19044+)
+//! based on configured applications. Requires Windows 10 21H2+ (build 19044+).
 
 // Set Windows subsystem to hide console window
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -35,7 +30,6 @@ slint::include_modules!();
 const MIN_WINDOWS_BUILD: u32 = 19044;
 
 fn main() -> Result<()> {
-    // Task 16.3: Start startup profiling
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
     profiler.record_phase(StartupPhase::AppStart);
@@ -69,7 +63,6 @@ fn main() -> Result<()> {
     info!("Single instance check passed");
 
     // Detect Windows version and verify compatibility
-    // Requirement 10.6: Function correctly on Windows 10 21H2+
     if let Err(e) = verify_windows_version() {
         error!("Windows version check failed: {}", e);
         show_error_and_exit(&format!(
@@ -126,10 +119,8 @@ fn main() -> Result<()> {
 
     info!("Core components initialized successfully");
 
-    // Task 16.3: Record GUI ready phase
     profiler.record_phase(StartupPhase::GuiDisplay);
 
-    // Task 16.1: Log initial memory usage
     #[cfg(windows)]
     {
         use easyhdr::utils::memory_profiler;
@@ -144,7 +135,6 @@ fn main() -> Result<()> {
     // Note: AppController thread is started inside initialize_components
     // after GUI initialization to prevent deadlock during window state restoration
 
-    // Task 16.3: Log startup performance summary
     profiler.record_phase(StartupPhase::AppReady);
     profiler.log_summary();
 
@@ -172,7 +162,6 @@ fn main() -> Result<()> {
     info!("Starting GUI event loop");
     gui_controller.run()?;
 
-    // Task 16.1: Log final memory usage before shutdown
     #[cfg(windows)]
     {
         use easyhdr::utils::memory_profiler;
@@ -185,11 +174,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Verify that the Windows version is compatible
-///
-/// # Requirements
-///
-/// - Requirement 10.6: Function correctly on Windows 10 21H2+ (build 19044+)
+/// Verifies that the Windows version is compatible (Windows 10 21H2+ / build 19044+).
 fn verify_windows_version() -> Result<()> {
     #[cfg(windows)]
     {
@@ -225,9 +210,7 @@ fn verify_windows_version() -> Result<()> {
     }
 }
 
-/// Get the Windows build number
-///
-/// Uses the same method as WindowsVersion::detect() but returns the raw build number
+/// Gets the Windows build number using RtlGetVersion.
 #[cfg(windows)]
 fn get_windows_build_number() -> Result<u32> {
     use std::mem::{size_of, transmute};
@@ -274,15 +257,8 @@ fn get_windows_build_number() -> Result<u32> {
     }
 }
 
-/// Log comprehensive HDR startup summary for diagnostics
-///
-/// This function logs detailed information about all detected displays,
-/// their HDR capabilities, current HDR state, and the Windows version.
-/// This information is crucial for diagnosing HDR detection issues.
-///
-/// # Arguments
-///
-/// * `hdr_controller` - Reference to the HdrController with enumerated displays
+/// Logs comprehensive HDR startup summary for diagnostics, including Windows version,
+/// detected displays, HDR capabilities, and current HDR state.
 #[cfg(windows)]
 fn log_hdr_startup_summary(hdr_controller: &HdrController) {
     use easyhdr::hdr::version::WindowsVersion;
@@ -347,21 +323,12 @@ fn log_hdr_startup_summary(_hdr_controller: &HdrController) {
     // No-op on non-Windows platforms
 }
 
-/// Initialize all core components
-///
-/// # Requirements
-///
-/// - Requirement 3.1: Detect Windows version
-/// - Requirement 3.2: Enumerate displays
-/// - Requirement 2.1: Create process monitor with configured interval
-///
-/// # Returns
-///
-/// Returns a tuple of (ProcessMonitor, GuiController, should_show_hdr_warning)
+/// Initializes all core components including HDR controller, process monitor,
+/// HDR state monitor, app controller, and GUI. Returns a tuple of
+/// (ProcessMonitor, GuiController, should_show_hdr_warning).
 fn initialize_components(
     config: easyhdr::config::AppConfig,
 ) -> Result<(ProcessMonitor, GuiController, bool)> {
-    // Task 16.3: Get profiler for tracking initialization phases
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
 
@@ -375,7 +342,6 @@ fn initialize_components(
     log_hdr_startup_summary(&temp_hdr_controller);
 
     // Check if any displays support HDR and warn if none found
-    // Requirement 10.9: Show clear messaging about hardware compatibility
     let hdr_capable_count = temp_hdr_controller
         .get_display_cache()
         .iter()
@@ -452,12 +418,7 @@ fn initialize_components(
     Ok((process_monitor, gui_controller, should_show_hdr_warning))
 }
 
-/// Show an error dialog and exit the application
-///
-/// # Requirements
-///
-/// - Requirement 7.1: Show modal dialog with user-friendly error message
-/// - Requirement 7.6: Include OK button to dismiss
+/// Shows an error dialog and exits the application.
 #[cfg(windows)]
 fn show_error_and_exit(message: &str) {
     use rfd::MessageDialog;
@@ -472,18 +433,14 @@ fn show_error_and_exit(message: &str) {
     std::process::exit(1);
 }
 
-/// Show an error dialog and exit the application (non-Windows fallback)
+/// Shows an error dialog and exits the application (non-Windows fallback).
 #[cfg(not(windows))]
 fn show_error_and_exit(message: &str) {
     eprintln!("ERROR: {}", message);
     std::process::exit(1);
 }
 
-/// Show a warning dialog (non-blocking)
-///
-/// # Requirements
-///
-/// - Requirement 10.9: Show clear messaging about hardware compatibility
+/// Shows a warning dialog (non-blocking).
 #[cfg(windows)]
 fn show_warning_dialog(message: &str) {
     use rfd::MessageDialog;

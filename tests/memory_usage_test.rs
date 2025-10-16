@@ -1,11 +1,6 @@
 //! Memory usage tests
 //!
-//! This test module verifies that the application meets memory usage requirements.
-//!
-//! # Requirements
-//!
-//! - Requirement 9.1: System SHALL use less than 50MB RAM during monitoring
-//! - Task 16.1: Verify total usage < 50MB
+//! This test module verifies that the application uses less than 50MB RAM during monitoring.
 
 use easyhdr::config::models::{AppConfig, MonitoredApp};
 use easyhdr::utils::memory_profiler;

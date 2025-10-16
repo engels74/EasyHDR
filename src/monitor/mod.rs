@@ -75,19 +75,9 @@
 //! # Known Limitations
 //!
 //! - **Process name collisions**: Multiple applications with the same executable name
-//!   (e.g., "game.exe") cannot be distinguished. See Requirement 2.7.
+//!   (e.g., "game.exe") cannot be distinguished.
 //! - **UWP applications**: Universal Windows Platform apps may not be detected reliably
 //!   as they use different process models.
-//!
-//! # Requirements
-//!
-//! - Requirement 2.1: Poll running processes at configurable interval (default 1000ms)
-//! - Requirement 2.2: Maintain list of process names to watch
-//! - Requirement 2.3: Perform case-insensitive matching
-//! - Requirement 2.4: Detect NOT_RUNNING → RUNNING transitions within 1-2 seconds
-//! - Requirement 2.5: Detect RUNNING → NOT_RUNNING transitions within 1-2 seconds
-//! - Requirement 2.6: Fire events to application logic controller
-//! - Requirement 2.7: Document process name collision limitation
 
 pub mod hdr_state_monitor;
 pub mod process_monitor;

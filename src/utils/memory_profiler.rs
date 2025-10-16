@@ -1,14 +1,6 @@
 //! Memory profiling utilities
 //!
-//! This module provides utilities for profiling and measuring memory usage
-//! during application operation. It helps track memory consumption and
-//! identify optimization opportunities.
-//!
-//! # Requirements
-//!
-//! - Requirement 9.1: System SHALL use less than 50MB RAM during monitoring
-//! - Requirement 9.6: Use efficient data structures for lookups
-//! - Task 16.1: Profile memory usage and optimize if needed
+//! Tracks memory usage during application operation to ensure the 50MB RAM target is met.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{debug, info};
@@ -94,16 +86,7 @@ impl MemoryProfiler {
         );
     }
 
-    /// Get current memory statistics
-    ///
-    /// This method collects memory statistics from various sources:
-    /// - Process memory usage (Windows-specific)
-    /// - Icon cache size (tracked internally)
-    /// - Estimated config and monitor memory
-    ///
-    /// # Returns
-    ///
-    /// Returns MemoryStats with current memory usage information
+    /// Get current memory statistics from process memory, icon cache, and estimated config/monitor usage
     pub fn get_stats(&self) -> MemoryStats {
         let icon_cache_memory = self.icon_cache_size.load(Ordering::Relaxed);
         let cached_icon_count = self.icon_count.load(Ordering::Relaxed);
@@ -127,10 +110,7 @@ impl MemoryProfiler {
         }
     }
 
-    /// Get process memory usage in bytes
-    ///
-    /// On Windows, uses GetProcessMemoryInfo to get working set size.
-    /// On other platforms, returns 0 (stub for testing).
+    /// Get process memory usage in bytes (Windows only, returns 0 on other platforms)
     #[cfg(windows)]
     fn get_process_memory() -> usize {
         use windows::Win32::System::ProcessStatus::{

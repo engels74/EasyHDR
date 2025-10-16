@@ -48,47 +48,12 @@
 //! - Waits 500ms before toggling HDR back to previous state
 //! - Prevents flickering and improves user experience
 //!
-//! # Example Usage
+//! # HDR Toggle Behavior
 //!
-//! ```no_run
-//! use easyhdr::controller::AppController;
-//! use easyhdr::config::ConfigManager;
-//! use std::sync::{mpsc, Arc};
-//! use std::collections::HashSet;
-//! use parking_lot::Mutex;
-//!
-//! // Load configuration
-//! let config = ConfigManager::load()?;
-//!
-//! // Create channels
-//! let (event_tx, event_rx) = mpsc::channel();
-//! let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-//! let (state_tx, state_rx) = mpsc::channel();
-//!
-//! // Create shared watch list
-//! let watch_list = Arc::new(Mutex::new(HashSet::new()));
-//!
-//! // Create controller
-//! let mut controller = AppController::new(
-//!     config,
-//!     event_rx,
-//!     hdr_state_rx,
-//!     state_tx,
-//!     watch_list,
-//! )?;
-//!
-//! // Run event loop (blocks until channel closes)
-//! controller.run();
-//! # Ok::<(), easyhdr::error::EasyHdrError>(())
-//! ```
-//!
-//! # Requirements
-//!
-//! - Requirement 4.1: Enable HDR when any monitored application transitions to RUNNING
-//! - Requirement 4.2: Disable HDR when last monitored application transitions to NOT_RUNNING
-//! - Requirement 4.3: Maintain counter of active monitored processes
-//! - Requirement 4.4: Prevent redundant toggle operations
-//! - Requirement 4.8: Debounce rapid state changes (500ms)
+//! The controller enables HDR when any monitored application starts and disables HDR
+//! when the last monitored application stops. It maintains a counter of active processes
+//! and prevents redundant toggle operations. A 500ms debounce prevents rapid toggling
+//! during app restarts.
 
 pub mod app_controller;
 
