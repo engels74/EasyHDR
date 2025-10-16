@@ -238,7 +238,8 @@ mod tests {
         let test_dir = create_test_dir();
 
         // Override APPDATA for this test
-        std::env::set_var("APPDATA", test_dir.to_str().unwrap());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
 
         // Create config directory
         let config_dir = test_dir.join("EasyHDR");
@@ -268,7 +269,8 @@ mod tests {
         let test_dir = create_test_dir();
 
         // Override APPDATA for this test
-        std::env::set_var("APPDATA", test_dir.to_str().unwrap());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
 
         // Create config directory
         let config_dir = test_dir.join("EasyHDR");
@@ -296,7 +298,8 @@ mod tests {
         let test_dir = create_test_dir();
 
         // Override APPDATA for this test
-        std::env::set_var("APPDATA", test_dir.to_str().unwrap());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
 
         // Create config directory
         let config_dir = test_dir.join("EasyHDR");
@@ -340,7 +343,8 @@ mod tests {
         let test_dir = create_test_dir();
 
         // Override APPDATA for this test
-        std::env::set_var("APPDATA", test_dir.to_str().unwrap());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
 
         let config = AppConfig::default();
 
@@ -368,7 +372,8 @@ mod tests {
         let test_dir = create_test_dir();
 
         // Override APPDATA for this test
-        std::env::set_var("APPDATA", test_dir.to_str().unwrap());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
 
         // Ensure directory doesn't exist
         let config_dir = test_dir.join("EasyHDR");
@@ -398,7 +403,8 @@ mod tests {
         let test_dir = create_test_dir();
 
         // Override APPDATA for this test
-        std::env::set_var("APPDATA", test_dir.to_str().unwrap());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
 
         // Call ensure_config_dir
         let result = ConfigManager::ensure_config_dir();
@@ -516,7 +522,8 @@ mod tests {
         let test_dir = create_test_dir();
 
         // Override APPDATA for this test
-        std::env::set_var("APPDATA", test_dir.to_str().unwrap());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("APPDATA", test_dir.to_str().unwrap()) };
 
         let config = AppConfig::default();
         ConfigManager::save(&config).unwrap();
