@@ -194,34 +194,8 @@ impl HdrStateMonitor {
     ///
     /// Returns true if HDR is enabled on any HDR-capable display, false otherwise.
     fn detect_current_hdr_state_internal(hdr_controller: &HdrController) -> bool {
-        let displays = hdr_controller.get_display_cache();
-
-        // Check each HDR-capable display
-        for disp in displays.iter().filter(|d| d.supports_hdr) {
-            match hdr_controller.is_hdr_enabled(disp) {
-                Ok(enabled) => {
-                    if enabled {
-                        debug!(
-                            "Display (adapter={:#x}:{:#x}, target={}) has HDR enabled",
-                            disp.adapter_id.LowPart, disp.adapter_id.HighPart, disp.target_id
-                        );
-                        return true;
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to check HDR state for display (adapter={:#x}:{:#x}, target={}): {}",
-                        disp.adapter_id.LowPart,
-                        disp.adapter_id.HighPart,
-                        disp.target_id,
-                        e
-                    );
-                }
-            }
-        }
-
-        // No displays have HDR enabled
-        false
+        // Delegate to the shared implementation in HdrController
+        hdr_controller.detect_current_hdr_state()
     }
 
     /// Check if HDR state has changed and send event if it has

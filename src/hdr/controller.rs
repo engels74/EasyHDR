@@ -72,6 +72,58 @@ impl HdrController {
         self.windows_version
     }
 
+    /// Detect the current HDR state from the system
+    ///
+    /// Checks all HDR-capable displays and returns true if any of them have HDR enabled.
+    /// This is a convenience method that combines display enumeration with HDR state checking.
+    ///
+    /// # Returns
+    ///
+    /// Returns true if HDR is enabled on any HDR-capable display, false otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use easyhdr::hdr::HdrController;
+    ///
+    /// let controller = HdrController::new()?;
+    /// let hdr_is_on = controller.detect_current_hdr_state();
+    /// println!("HDR is currently: {}", if hdr_is_on { "ON" } else { "OFF" });
+    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
+    /// ```
+    pub fn detect_current_hdr_state(&self) -> bool {
+        use tracing::{debug, warn};
+
+        let displays = self.get_display_cache();
+
+        // Check each HDR-capable display
+        for disp in displays.iter().filter(|d| d.supports_hdr) {
+            match self.is_hdr_enabled(disp) {
+                Ok(enabled) => {
+                    if enabled {
+                        debug!(
+                            "Display (adapter={:#x}:{:#x}, target={}) has HDR enabled",
+                            disp.adapter_id.LowPart, disp.adapter_id.HighPart, disp.target_id
+                        );
+                        return true;
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to check HDR state for display (adapter={:#x}:{:#x}, target={}): {}",
+                        disp.adapter_id.LowPart,
+                        disp.adapter_id.HighPart,
+                        disp.target_id,
+                        e
+                    );
+                }
+            }
+        }
+
+        // No displays have HDR enabled
+        false
+    }
+
     /// Enumerate displays
     ///
     /// Uses GetDisplayConfigBufferSizes and QueryDisplayConfig to retrieve
