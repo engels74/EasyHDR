@@ -608,6 +608,7 @@ mod tests {
             hdr_controller: Arc::new(Mutex::new(hdr_controller)),
             cached_hdr_state: Arc::new(Mutex::new(false)),
             event_sender: tx,
+            recheck_count: Arc::new(Mutex::new(0)),
         };
 
         // Verify state structure
