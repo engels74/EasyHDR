@@ -159,8 +159,15 @@ impl AppController {
     /// 2. Calls handle_process_event() for ProcessEvent or handle_hdr_state_event() for HdrStateEvent
     /// 3. Handles channel disconnection gracefully by exiting the loop
     /// 4. Logs all significant events and errors
+    ///
+    /// # Implementation Details
+    ///
+    /// The event loop uses `recv_timeout` with a 100ms timeout to check for process events,
+    /// which allows it to periodically check the HDR state channel even when no process
+    /// events are arriving. This ensures HDR state changes are processed promptly.
     pub fn run(&mut self) {
-        use std::sync::mpsc::TryRecvError;
+        use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
+        use std::time::Duration;
         use tracing::{info, warn};
 
         let Some(event_receiver) = self.take_event_receiver() else {
@@ -176,12 +183,15 @@ impl AppController {
         // Main event loop
         info!("Entering main event loop (process events + HDR state events)");
         loop {
-            // Check for process events (blocking)
-            match event_receiver.recv() {
+            // Check for process events with timeout to allow periodic HDR state checks
+            match event_receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => {
                     self.handle_process_event(event);
                 }
-                Err(_) => {
+                Err(RecvTimeoutError::Timeout) => {
+                    // Timeout is normal - just continue to check HDR state events
+                }
+                Err(RecvTimeoutError::Disconnected) => {
                     warn!("Process event receiver channel disconnected. Exiting event loop.");
                     break;
                 }
@@ -214,8 +224,6 @@ impl AppController {
     /// only locks the controller while handling individual events, preventing GUI callbacks
     /// from being blocked when they need short-lived access to the controller.
     pub fn spawn_event_loop(controller: Arc<Mutex<AppController>>) -> std::thread::JoinHandle<()> {
-        use std::sync::mpsc::TryRecvError;
-
         let (event_receiver, hdr_state_receiver) = {
             let mut controller_guard = controller.lock();
             (
@@ -229,17 +237,22 @@ impl AppController {
         };
 
         std::thread::spawn(move || {
+            use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
+            use std::time::Duration;
             use tracing::{info, warn};
 
             info!("Entering main event loop (process events + HDR state events)");
             loop {
-                // Check for process events (blocking)
-                match event_receiver.recv() {
+                // Check for process events with timeout to allow periodic HDR state checks
+                match event_receiver.recv_timeout(Duration::from_millis(100)) {
                     Ok(event) => {
                         let mut controller_guard = controller.lock();
                         controller_guard.handle_process_event(event);
                     }
-                    Err(_) => {
+                    Err(RecvTimeoutError::Timeout) => {
+                        // Timeout is normal - just continue to check HDR state events
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
                         warn!("Process event receiver channel disconnected. Exiting event loop.");
                         break;
                     }
@@ -381,20 +394,23 @@ impl AppController {
     /// This method does NOT call toggle_hdr() because the HDR state has already been changed externally.
     /// It only updates the application's cached state and sends a GUI update to reflect the new state.
     fn handle_hdr_state_event(&mut self, event: HdrStateEvent) {
-        use tracing::info;
+        use tracing::{debug, info};
 
         match event {
             HdrStateEvent::Enabled => {
                 info!("HDR was enabled externally (via Windows settings)");
                 self.current_hdr_state.store(true, Ordering::SeqCst);
+                debug!("Updated internal HDR state to: true");
             }
             HdrStateEvent::Disabled => {
                 info!("HDR was disabled externally (via Windows settings)");
                 self.current_hdr_state.store(false, Ordering::SeqCst);
+                debug!("Updated internal HDR state to: false");
             }
         }
 
         // Send state update to GUI to reflect the external change
+        debug!("Sending state update to GUI after external HDR state change");
         self.send_state_update();
     }
 
@@ -461,7 +477,7 @@ impl AppController {
     /// This is an internal method called automatically when state changes.
     /// For sending the initial state after startup, use `send_initial_state()` instead.
     fn send_state_update(&self) {
-        use tracing::warn;
+        use tracing::{debug, warn};
 
         let config = self.config.lock();
         let active_apps: Vec<String> = config
@@ -472,8 +488,9 @@ impl AppController {
             .collect();
         drop(config);
 
+        let hdr_enabled = self.current_hdr_state.load(Ordering::SeqCst);
         let state = AppState {
-            hdr_enabled: self.current_hdr_state.load(Ordering::SeqCst),
+            hdr_enabled,
             active_apps,
             last_event: format!(
                 "Active processes: {}",
@@ -481,8 +498,12 @@ impl AppController {
             ),
         };
 
+        debug!("Sending state update to GUI: HDR enabled = {}", hdr_enabled);
+
         if let Err(e) = self.gui_state_sender.send(state) {
             warn!("Failed to send state update to GUI: {}", e);
+        } else {
+            debug!("State update sent successfully to GUI");
         }
     }
 
