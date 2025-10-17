@@ -1,7 +1,7 @@
 # EasyHDR
 
 <p align="center">
-  <img src="assets/easyhdr-logo.svg" alt="qbittorrent" style="width: 40%;"/>
+  <img src="assets/svg/easyhdr-logo.svg" alt="qbittorrent" style="width: 40%;"/>
 </p>
 
 <p align="center">
