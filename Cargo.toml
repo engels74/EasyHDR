@@ -65,9 +65,9 @@ slint-build = "1.13"
 winres = "0.1"
 
 [dev-dependencies]
-proptest = "1.5"
-tempfile = "3.14"
-criterion = "0.5"
+proptest = "1.8"
+tempfile = "3.23"
+criterion = "0.7"
 
 [[bench]]
 name = "config"
