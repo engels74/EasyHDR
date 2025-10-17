@@ -1006,9 +1006,21 @@ impl GuiController {
             info!("State synchronization thread stopped");
         });
 
+        // Show the window explicitly before starting the event loop
+        // Note: run_event_loop_until_quit() doesn't automatically show the window (unlike run())
+        info!("Showing main window");
+        self.main_window.show().map_err(|e| {
+            use tracing::error;
+            error!("Failed to show main window: {}", e);
+            EasyHdrError::ConfigError(format!("Failed to show main window: {e}"))
+        })?;
+
         // Run the Slint event loop on the main thread
-        info!("Running Slint event loop");
-        self.main_window.run().map_err(|e| {
+        // Use run_event_loop_until_quit() instead of run() to keep the event loop running
+        // even when the window is hidden (minimized to tray). This is the recommended approach
+        // for system tray applications that need to stay alive with no visible windows.
+        info!("Running Slint event loop (will continue until quit_event_loop() is called)");
+        slint::run_event_loop_until_quit().map_err(|e| {
             use tracing::error;
             error!("Failed to run GUI event loop: {}", e);
             EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {e}"))
