@@ -128,12 +128,6 @@ impl GuiController {
             },
         );
 
-        let controller_clone = controller.clone();
-        let window_weak = main_window.as_weak();
-        main_window.on_minimize_to_tray(move || {
-            Self::minimize_to_tray(&controller_clone, &window_weak);
-        });
-
         info!("GUI callbacks connected");
 
         // Set up close request handler to save state and exit the application
@@ -346,12 +340,7 @@ impl GuiController {
 
         let window_opt = window_weak.upgrade();
         if let Some(window) = window_opt {
-            let window_visible = window.window().is_visible();
-            if window_visible && !window_visibility.get() {
-                info!("Window shown, reloading GUI resources");
-                Self::reload_gui_resources(controller);
-            }
-            window_visibility.set(window_visible);
+            window_visibility.set(window.window().is_visible());
 
             window.set_hdr_enabled(state.hdr_enabled);
             debug!("Updated HDR enabled state to: {}", state.hdr_enabled);
@@ -654,67 +643,6 @@ impl GuiController {
         Self::show_error_dialog("Settings management is only supported on Windows");
     }
 
-    /// Minimize the window to tray and release GUI resources
-    ///
-    /// Hides the main window and releases icon data from memory to reduce memory
-    /// footprint while minimized. The window can be restored by clicking the tray icon.
-    /// All background monitoring (`ProcessMonitor`, `HdrStateMonitor`) continues to run.
-    fn minimize_to_tray(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
-        use tracing::{info, warn};
-
-        info!("Minimizing window to tray");
-
-        // Hide the window
-        if let Some(window) = window.upgrade() {
-            window.hide().unwrap_or_else(|e| {
-                warn!("Failed to hide window: {}", e);
-            });
-            info!("Window hidden successfully");
-        } else {
-            warn!("Failed to hide window - window handle is no longer valid");
-            return;
-        }
-
-        // Release GUI resources to reduce memory usage
-        Self::release_gui_resources(controller);
-
-        info!("Window minimized to tray successfully");
-    }
-
-    /// Release GUI resources when window is hidden
-    ///
-    /// Releases icon data from memory to reduce memory footprint when the window
-    /// is minimized to the tray. Icons will be reloaded when the window is shown again.
-    fn release_gui_resources(controller: &Arc<Mutex<AppController>>) {
-        use tracing::info;
-
-        info!("Releasing GUI resources (icon cache)");
-
-        let controller_guard = controller.lock();
-        let mut config = controller_guard.config.lock();
-
-        // Release all icon data
-        let mut released_count = 0;
-        for app in &mut config.monitored_apps {
-            if app.icon_data.is_some() {
-                app.icon_data = None;
-                released_count += 1;
-            }
-        }
-
-        drop(config);
-        drop(controller_guard);
-
-        info!("Released {} icon(s) from cache", released_count);
-
-        // Log memory stats after release
-        #[cfg(windows)]
-        {
-            use crate::utils::memory_profiler;
-            memory_profiler::get_profiler().log_stats();
-        }
-    }
-
     /// Show error dialog to the user
     ///
     /// Displays a modal error dialog with the provided message.
@@ -872,39 +800,6 @@ impl GuiController {
                     // Don't return error - continue operation with in-memory config
                 }
             }
-        }
-    }
-
-    /// Reload GUI resources when window is shown
-    ///
-    /// Reloads icon data that was released when the window was minimized to the tray.
-    /// This ensures icons are available for display.
-    fn reload_gui_resources(controller: &Arc<Mutex<AppController>>) {
-        use tracing::info;
-
-        info!("Reloading GUI resources (icon cache)");
-
-        let controller_guard = controller.lock();
-        let mut config = controller_guard.config.lock();
-
-        // Reload all icon data
-        let mut reloaded_count = 0;
-        for app in &mut config.monitored_apps {
-            if app.ensure_icon_loaded().is_some() {
-                reloaded_count += 1;
-            }
-        }
-
-        drop(config);
-        drop(controller_guard);
-
-        info!("Reloaded {} icon(s) into cache", reloaded_count);
-
-        // Log memory stats after reload
-        #[cfg(windows)]
-        {
-            use crate::utils::memory_profiler;
-            memory_profiler::get_profiler().log_stats();
         }
     }
 

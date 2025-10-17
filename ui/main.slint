@@ -149,7 +149,6 @@ export component MainWindow inherits Window {
     callback add-application();
     callback remove-application(int);
     callback toggle-enabled(int, bool);
-    callback minimize-to-tray();
     callback open-settings();
     callback save-settings(bool, int, bool);
 
@@ -289,14 +288,6 @@ export component MainWindow inherits Window {
             // Spacer to push right-aligned buttons to the right
             Rectangle {
                 horizontal-stretch: 1;
-            }
-
-            // Minimize to Tray button
-            Button {
-                text: "Minimize to Tray";
-                clicked => {
-                    minimize-to-tray();
-                }
             }
 
             // Settings button (Task 12.1)
