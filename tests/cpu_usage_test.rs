@@ -53,14 +53,14 @@ fn test_process_monitor_cpu_usage() {
     println!("\nResults:");
     println!("  Wall time elapsed: {:.2}s", wall_elapsed.as_secs_f64());
     println!("  CPU time used: {:.4}s", cpu_time_used.as_secs_f64());
-    println!("  CPU usage: {:.2}%", cpu_percentage);
+    println!("  CPU usage: {cpu_percentage:.2}%");
 
     // Drain any events that were sent
     let mut event_count = 0;
     while rx.try_recv().is_ok() {
         event_count += 1;
     }
-    println!("  Events received: {}", event_count);
+    println!("  Events received: {event_count}");
 
     // Verify CPU usage is below 1%
     // We use 2.0% as the threshold to account for measurement variance
@@ -78,8 +78,7 @@ fn test_process_monitor_cpu_usage() {
 
     assert!(
         cpu_percentage < 2.0,
-        "CPU usage {:.2}% exceeds 2.0% threshold (target < 1%)",
-        cpu_percentage
+        "CPU usage {cpu_percentage:.2}% exceeds 2.0% threshold (target < 1%)"
     );
 
     println!("\n=== Test Passed ===\n");
@@ -89,6 +88,10 @@ fn test_process_monitor_cpu_usage() {
 ///
 /// Returns the sum of user time and kernel time in nanoseconds
 #[cfg(windows)]
+#[expect(
+    unsafe_code,
+    reason = "Required for Windows FFI to call GetProcessTimes"
+)]
 fn get_process_cpu_time() -> Result<Duration, String> {
     unsafe {
         let process = GetCurrentProcess();
@@ -100,19 +103,19 @@ fn get_process_cpu_time() -> Result<Duration, String> {
 
         GetProcessTimes(
             process,
-            &mut creation_time,
-            &mut exit_time,
-            &mut kernel_time,
-            &mut user_time,
+            &raw mut creation_time,
+            &raw mut exit_time,
+            &raw mut kernel_time,
+            &raw mut user_time,
         )
-        .map_err(|e| format!("GetProcessTimes failed: {}", e))?;
+        .map_err(|e| format!("GetProcessTimes failed: {e}"))?;
 
         // Convert FILETIME to Duration
         // FILETIME is in 100-nanosecond intervals
         let kernel_100ns =
-            ((kernel_time.dwHighDateTime as u64) << 32) | (kernel_time.dwLowDateTime as u64);
+            (u64::from(kernel_time.dwHighDateTime) << 32) | u64::from(kernel_time.dwLowDateTime);
         let user_100ns =
-            ((user_time.dwHighDateTime as u64) << 32) | (user_time.dwLowDateTime as u64);
+            (u64::from(user_time.dwHighDateTime) << 32) | u64::from(user_time.dwLowDateTime);
 
         let total_100ns = kernel_100ns + user_100ns;
         let total_nanos = total_100ns * 100;
@@ -157,14 +160,14 @@ fn test_process_monitor_cpu_usage_different_intervals() {
         let cpu_time_used = cpu_end - cpu_start;
         let cpu_percentage = (cpu_time_used.as_secs_f64() / wall_elapsed.as_secs_f64()) * 100.0;
 
-        println!("  CPU usage: {:.2}%", cpu_percentage);
+        println!("  CPU usage: {cpu_percentage:.2}%");
 
         // Drain events
         let mut event_count = 0;
         while rx.try_recv().is_ok() {
             event_count += 1;
         }
-        println!("  Events: {}", event_count);
+        println!("  Events: {event_count}");
 
         // All intervals should be well below 1%
         // Use 2.0% threshold to account for measurement variance and system load
@@ -184,6 +187,10 @@ fn test_process_monitor_cpu_usage_different_intervals() {
 /// This test measures how long it takes to enumerate all processes
 #[test]
 #[cfg(windows)]
+#[expect(
+    unsafe_code,
+    reason = "Required for Windows FFI to enumerate processes using Toolhelp32 API"
+)]
 fn test_process_enumeration_performance() {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -204,17 +211,21 @@ fn test_process_enumeration_performance() {
             let snapshot =
                 CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).expect("Failed to create snapshot");
 
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "size_of::<PROCESSENTRY32W>() is a small constant that fits in u32"
+            )]
             let mut entry = PROCESSENTRY32W {
                 dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
                 ..Default::default()
             };
 
             let mut count = 0;
-            let mut has_process = Process32FirstW(snapshot, &mut entry).is_ok();
+            let mut has_process = Process32FirstW(snapshot, &raw mut entry).is_ok();
 
             while has_process {
                 count += 1;
-                has_process = Process32NextW(snapshot, &mut entry).is_ok();
+                has_process = Process32NextW(snapshot, &raw mut entry).is_ok();
             }
 
             let _ = CloseHandle(snapshot);
@@ -226,8 +237,8 @@ fn test_process_enumeration_performance() {
 
     let avg_duration = total_duration / iterations;
 
-    println!("  Iterations: {}", iterations);
-    println!("  Processes enumerated: {}", total_processes);
+    println!("  Iterations: {iterations}");
+    println!("  Processes enumerated: {total_processes}");
     println!(
         "  Average time per enumeration: {:.2}ms",
         avg_duration.as_secs_f64() * 1000.0

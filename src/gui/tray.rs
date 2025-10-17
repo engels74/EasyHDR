@@ -71,22 +71,22 @@ impl TrayIcon {
         // Append items to menu
         tray_menu.append(&open_item).map_err(|e| {
             error!("Failed to add Open menu item to tray: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add Open menu item: {}", e))
+            EasyHdrError::ConfigError(format!("Failed to add Open menu item: {e}"))
         })?;
 
         tray_menu.append(&status_item).map_err(|e| {
             error!("Failed to add Status menu item to tray: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add Status menu item: {}", e))
+            EasyHdrError::ConfigError(format!("Failed to add Status menu item: {e}"))
         })?;
 
         tray_menu.append(&separator).map_err(|e| {
             error!("Failed to add separator to tray menu: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add separator: {}", e))
+            EasyHdrError::ConfigError(format!("Failed to add separator: {e}"))
         })?;
 
         tray_menu.append(&exit_item).map_err(|e| {
             error!("Failed to add Exit menu item to tray: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add Exit menu item: {}", e))
+            EasyHdrError::ConfigError(format!("Failed to add Exit menu item: {e}"))
         })?;
 
         debug!("Tray menu created with 4 items");
@@ -102,7 +102,7 @@ impl TrayIcon {
             .build()
             .map_err(|e| {
                 error!("Failed to build tray icon: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to build tray icon: {}", e))
+                EasyHdrError::ConfigError(format!("Failed to build tray icon: {e}"))
             })?;
 
         info!("System tray icon created successfully");
@@ -127,9 +127,11 @@ impl TrayIcon {
         Ok(tray_icon)
     }
 
-    /// Loads the tray icon from embedded assets. Uses icon_hdr_on.ico when HDR is enabled,
-    /// icon_hdr_off.ico when disabled. Falls back to a generated icon if loading fails.
+    /// Loads the tray icon from embedded assets. Uses `icon_hdr_on.ico` when HDR is enabled,
+    /// `icon_hdr_off.ico` when disabled. Falls back to a generated icon if loading fails.
     fn load_tray_icon(hdr_enabled: bool) -> Result<Icon> {
+        use image::ImageReader;
+        use std::io::Cursor;
         use tracing::{debug, warn};
 
         // Embed icon files at compile time
@@ -148,16 +150,13 @@ impl TrayIcon {
         );
 
         // Decode the ICO file using the image crate
-        use image::ImageReader;
-        use std::io::Cursor;
-
         match ImageReader::new(Cursor::new(icon_data))
             .with_guessed_format()
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to guess icon format: {}", e)))
+            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to guess icon format: {e}")))
             .and_then(|reader| {
                 reader
                     .decode()
-                    .map_err(|e| EasyHdrError::ConfigError(format!("Failed to decode icon: {}", e)))
+                    .map_err(|e| EasyHdrError::ConfigError(format!("Failed to decode icon: {e}")))
             }) {
             Ok(img) => {
                 // Convert to RGBA8

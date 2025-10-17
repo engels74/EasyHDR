@@ -258,6 +258,10 @@ fn verify_windows_version() -> Result<()> {
 /// - If the Windows API contract changes (extremely unlikely for this stable API)
 /// - If running on a non-Windows system (prevented by #[cfg(windows)])
 #[cfg(windows)]
+#[expect(
+    unsafe_code,
+    reason = "Required for Windows FFI to call RtlGetVersion from ntdll.dll"
+)]
 fn get_windows_build_number() -> Result<u32> {
     use std::mem::{size_of, transmute};
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};

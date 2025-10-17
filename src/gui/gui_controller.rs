@@ -411,12 +411,9 @@ impl GuiController {
         use tracing::{debug, warn};
 
         // Upgrade weak reference to strong reference
-        let window = match window.upgrade() {
-            Some(w) => w,
-            None => {
-                warn!("Failed to upgrade window reference in update_app_list_ui");
-                return;
-            }
+        let Some(window) = window.upgrade() else {
+            warn!("Failed to upgrade window reference in update_app_list_ui");
+            return;
         };
 
         // Read the application list from config
@@ -432,7 +429,7 @@ impl GuiController {
     /// Remove application at the specified index
     ///
     /// Gets the application UUID from the config at the specified index,
-    /// then calls controller.remove_application() to remove it.
+    /// then calls `controller.remove_application()` to remove it.
     #[cfg(windows)]
     fn remove_app_at_index(controller: &Arc<Mutex<AppController>>, index: i32) {
         use tracing::{info, warn};
@@ -445,14 +442,25 @@ impl GuiController {
         // Access the config to get the app UUID
         let app_id = {
             let config = controller_guard.config.lock();
-            if index < 0 || index as usize >= config.monitored_apps.len() {
+            // Validate index is non-negative and within bounds
+            // We check index < 0 first, then cast is safe
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "index is validated to be non-negative before casting"
+            )]
+            if index < 0 || (index as usize) >= config.monitored_apps.len() {
                 warn!("Invalid index: {}", index);
                 drop(config);
                 drop(controller_guard);
                 Self::show_error_dialog("Invalid application index");
                 return;
             }
-            config.monitored_apps[index as usize].id
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "index is validated to be non-negative"
+            )]
+            let idx = index as usize;
+            config.monitored_apps[idx].id
         };
 
         // Remove the application
@@ -477,7 +485,7 @@ impl GuiController {
     /// Toggle the enabled state of an application at the specified index
     ///
     /// Gets the application UUID from the config at the specified index,
-    /// then calls controller.toggle_app_enabled() to update the enabled state.
+    /// then calls `controller.toggle_app_enabled()` to update the enabled state.
     #[cfg(windows)]
     fn toggle_app_enabled(controller: &Arc<Mutex<AppController>>, index: i32, enabled: bool) {
         use tracing::{info, warn};
@@ -493,14 +501,25 @@ impl GuiController {
         // Access the config to get the app UUID
         let app_id = {
             let config = controller_guard.config.lock();
-            if index < 0 || index as usize >= config.monitored_apps.len() {
+            // Validate index is non-negative and within bounds
+            // We check index < 0 first, then cast is safe
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "index is validated to be non-negative before casting"
+            )]
+            if index < 0 || (index as usize) >= config.monitored_apps.len() {
                 warn!("Invalid index: {}", index);
                 drop(config);
                 drop(controller_guard);
                 Self::show_error_dialog("Invalid application index");
                 return;
             }
-            config.monitored_apps[index as usize].id
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "index is validated to be non-negative"
+            )]
+            let idx = index as usize;
+            config.monitored_apps[idx].id
         };
 
         // Toggle the enabled state
@@ -543,6 +562,11 @@ impl GuiController {
         );
 
         // Create UserPreferences struct with new values
+        // The UI uses i32 for the slider, but we validate it's non-negative before saving
+        #[expect(
+            clippy::cast_sign_loss,
+            reason = "monitoring_interval_ms is validated to be non-negative by UI constraints"
+        )]
         let prefs = UserPreferences {
             auto_start,
             monitoring_interval_ms: monitoring_interval_ms as u64,
@@ -574,8 +598,7 @@ impl GuiController {
                 Err(e) => {
                     warn!("Failed to enable auto-start: {}", e);
                     Self::show_error_dialog(&format!(
-                        "Settings saved, but failed to enable auto-start:\n\n{}",
-                        e
+                        "Settings saved, but failed to enable auto-start:\n\n{e}"
                     ));
                     return;
                 }
@@ -589,8 +612,7 @@ impl GuiController {
                 Err(e) => {
                     warn!("Failed to disable auto-start: {}", e);
                     Self::show_error_dialog(&format!(
-                        "Settings saved, but failed to disable auto-start:\n\n{}",
-                        e
+                        "Settings saved, but failed to disable auto-start:\n\n{e}"
                     ));
                     return;
                 }
@@ -635,10 +657,10 @@ impl GuiController {
         eprintln!("Error: {message}");
     }
 
-    /// Show error dialog with user-friendly error message from EasyHdrError
+    /// Show error dialog with user-friendly error message from `EasyHdrError`
     ///
     /// Displays a modal error dialog with a user-friendly message generated
-    /// from the EasyHdrError using get_user_friendly_error().
+    /// from the `EasyHdrError` using `get_user_friendly_error()`.
     #[cfg(windows)]
     fn show_error_dialog_from_error(error: &easyhdr::error::EasyHdrError) {
         use easyhdr::error::get_user_friendly_error;
