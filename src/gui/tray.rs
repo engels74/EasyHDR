@@ -13,7 +13,7 @@ use tracing::error;
 
 #[cfg(windows)]
 use tray_icon::{
-    Icon, TrayIconBuilder, TrayIconEvent,
+    Icon, MouseButton, TrayIconBuilder, TrayIconEvent,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
 
@@ -305,7 +305,13 @@ impl TrayIcon {
             debug!("Tray icon event received: {:?}", event);
 
             // Handle left-click on the tray icon to restore the window
-            if matches!(event.click_type, tray_icon::ClickType::Left) {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    ..
+                }
+            ) {
                 info!("Tray icon left-clicked - restoring main window");
 
                 if let Some(window) = window_weak.upgrade() {
