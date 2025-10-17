@@ -2,8 +2,9 @@
 
 #![allow(missing_docs)]
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, WindowState};
+use std::hint::black_box;
 use std::path::PathBuf;
 use uuid::Uuid;
 

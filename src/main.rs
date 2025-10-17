@@ -298,7 +298,8 @@ fn get_windows_build_number() -> Result<u32> {
         if rtl_get_version_ptr.is_none() {
             return Err(EasyHdrError::HdrControlFailed(
                 "RtlGetVersion not found in ntdll.dll".to_string(),
-            ));
+            )
+            .into());
         }
 
         let rtl_get_version: RtlGetVersionFn = transmute(rtl_get_version_ptr);
@@ -319,7 +320,8 @@ fn get_windows_build_number() -> Result<u32> {
         if status != 0 {
             return Err(EasyHdrError::HdrControlFailed(format!(
                 "RtlGetVersion failed with status: {status}"
-            )));
+            ))
+            .into());
         }
 
         Ok(version_info.dwBuildNumber)
