@@ -41,7 +41,7 @@ const ICON_SIZE: usize = 32;
 pub fn extract_icon_from_exe(#[allow(unused_variables)] path: &Path) -> Result<Vec<u8>> {
     #[cfg(windows)]
     {
-        extract_icon_from_exe_windows(path)
+        Ok(extract_icon_from_exe_windows(path))
     }
 
     #[cfg(not(windows))]
@@ -59,25 +59,25 @@ pub fn extract_icon_from_exe(#[allow(unused_variables)] path: &Path) -> Result<V
 /// This function contains unsafe code that is sound because:
 ///
 /// 1. **Wide String Conversion**: The path is converted to a null-terminated wide string
-///    using the standard Windows FFI pattern (encode_wide + null terminator).
+///    using the standard Windows FFI pattern (`encode_wide` + null terminator).
 ///
-/// 2. **ExtractIconExW**: Called with:
+/// 2. **`ExtractIconExW`**: Called with:
 ///    - Valid null-terminated wide string pointer
 ///    - Valid mutable pointer to HICON for large icon output
 ///    - None for small icon (we don't need it)
 ///    - Icon index 0 and count 1 (extract first icon only)
 ///
-/// 3. **DestroyIcon**: Called to cleanup the HICON handle returned by ExtractIconExW,
+/// 3. **`DestroyIcon`**: Called to cleanup the HICON handle returned by `ExtractIconExW`,
 ///    preventing resource leaks. This is safe because we own the handle.
 ///
 /// # Invariants
 ///
-/// - The wide_path must be null-terminated
+/// - The `wide_path` must be null-terminated
 /// - HICON handles must be destroyed after use to prevent resource leaks
-/// - Icon handles are only valid until DestroyIcon is called
+/// - Icon handles are only valid until `DestroyIcon` is called
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI for icon extraction
-fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
+fn extract_icon_from_exe_windows(path: &Path) -> Vec<u8> {
     use std::os::windows::ffi::OsStrExt;
 
     // Convert path to wide string for Windows API
@@ -96,7 +96,7 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
         let result = ExtractIconExW(
             PCWSTR(wide_path.as_ptr()),
             0, // Extract first icon
-            Some(&mut large_icon as *mut HICON),
+            Some(&raw mut large_icon),
             None, // We only need large icon
             1,    // Extract one icon
         );
@@ -107,7 +107,7 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
                 path
             );
             // Fallback to SHGetFileInfoW
-            return Ok(extract_icon_using_shgetfileinfo(&wide_path));
+            return extract_icon_using_shgetfileinfo(&wide_path);
         }
     }
 
@@ -115,12 +115,12 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
     let icon_data = match hicon_to_rgba_bytes(large_icon) {
         Ok(data) => data,
         Err(e) => {
-            warn!("Failed to convert HICON to RGBA: {}, using default icon", e);
+            warn!("Failed to convert HICON to RGBA: {e}, using default icon");
             // Cleanup icon handle
             unsafe {
                 let _ = DestroyIcon(large_icon);
             }
-            return Ok(create_default_icon());
+            return create_default_icon();
         }
     };
 
@@ -130,10 +130,10 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
     }
 
     debug!("Successfully extracted icon: {} bytes", icon_data.len());
-    Ok(icon_data)
+    icon_data
 }
 
-/// Fallback icon extraction using SHGetFileInfoW
+/// Fallback icon extraction using `SHGetFileInfoW`
 ///
 /// # Safety
 ///

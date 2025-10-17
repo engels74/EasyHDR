@@ -523,9 +523,9 @@ fn check_hdr_state_change() -> bool {
                 };
 
                 if let Err(e) = state.event_sender.send(event) {
-                    warn!("Failed to send HDR state event: {}", e);
+                    warn!("Failed to send HDR state event: {e}");
                 } else {
-                    debug!("Sent HDR state event: {:?}", event);
+                    debug!("Sent HDR state event: {event:?}");
                 }
 
                 true // State changed

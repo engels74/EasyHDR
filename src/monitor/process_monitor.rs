@@ -165,10 +165,9 @@ impl ProcessMonitor {
             let snapshot = unsafe {
                 CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).map_err(|e| {
                     use tracing::error;
-                    error!("Windows API error - CreateToolhelp32Snapshot failed: {}", e);
+                    error!("Windows API error - CreateToolhelp32Snapshot failed: {e}");
                     EasyHdrError::ProcessMonitorError(format!(
-                        "Failed to create process snapshot: {}",
-                        e
+                        "Failed to create process snapshot: {e}"
                     ))
                 })?
             };
@@ -185,13 +184,17 @@ impl ProcessMonitor {
             let mut current_processes = HashSet::with_capacity(capacity);
 
             // Initialize PROCESSENTRY32W structure
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "size_of::<PROCESSENTRY32W>() is a compile-time constant (592 bytes) that fits in u32"
+            )]
             let mut entry = PROCESSENTRY32W {
                 dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
                 ..Default::default()
             };
 
             // Get the first process
-            let mut has_process = unsafe { Process32FirstW(snapshot, &mut entry).is_ok() };
+            let mut has_process = unsafe { Process32FirstW(snapshot, &raw mut entry).is_ok() };
 
             // Iterate through all processes
             while has_process {
@@ -208,15 +211,15 @@ impl ProcessMonitor {
 
                 // Get the next process
                 has_process = unsafe {
-                    match Process32NextW(snapshot, &mut entry) {
-                        Ok(_) => true,
+                    match Process32NextW(snapshot, &raw mut entry) {
+                        Ok(()) => true,
                         Err(e) => {
                             // ERROR_NO_MORE_FILES is expected at the end
                             if e.code() == ERROR_NO_MORE_FILES.to_hresult() {
                                 false
                             } else {
                                 // Log other errors but continue
-                                warn!("Error iterating processes: {}", e);
+                                warn!("Error iterating processes: {e}");
                                 false
                             }
                         }

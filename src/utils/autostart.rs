@@ -12,7 +12,7 @@ use tracing::{error, info};
 #[cfg(windows)]
 use winreg::RegKey;
 #[cfg(windows)]
-use winreg::enums::*;
+use winreg::enums::{HKEY_CURRENT_USER, KEY_WRITE};
 
 /// Registry key path for Windows auto-start applications
 #[cfg(windows)]
@@ -35,10 +35,9 @@ impl AutoStartManager {
         let run_key = match hkcu.open_subkey(RUN_KEY_PATH) {
             Ok(key) => key,
             Err(e) => {
-                error!("Failed to open registry key {}: {}", RUN_KEY_PATH, e);
+                error!("Failed to open registry key {RUN_KEY_PATH}: {e}");
                 return Err(EasyHdrError::ConfigError(format!(
-                    "Failed to access Windows auto-start registry: {}",
-                    e
+                    "Failed to access Windows auto-start registry: {e}"
                 )));
             }
         };
@@ -54,10 +53,9 @@ impl AutoStartManager {
                 Ok(false)
             }
             Err(e) => {
-                error!("Failed to read registry value {}: {}", APP_NAME, e);
+                error!("Failed to read registry value {APP_NAME}: {e}");
                 Err(EasyHdrError::ConfigError(format!(
-                    "Failed to check auto-start status: {}",
-                    e
+                    "Failed to check auto-start status: {e}"
                 )))
             }
         }
@@ -68,8 +66,8 @@ impl AutoStartManager {
     pub fn enable() -> Result<()> {
         // Get the current executable path
         let exe_path = std::env::current_exe().map_err(|e| {
-            error!("Failed to get current executable path: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to determine application location: {}", e))
+            error!("Failed to get current executable path: {e}");
+            EasyHdrError::ConfigError(format!("Failed to determine application location: {e}"))
         })?;
 
         let exe_path_str = exe_path.to_string_lossy();
@@ -79,27 +77,22 @@ impl AutoStartManager {
         let run_key = match hkcu.open_subkey_with_flags(RUN_KEY_PATH, KEY_WRITE) {
             Ok(key) => key,
             Err(e) => {
-                error!(
-                    "Failed to open registry key {} for writing: {}",
-                    RUN_KEY_PATH, e
-                );
+                error!("Failed to open registry key {RUN_KEY_PATH} for writing: {e}");
                 return Err(EasyHdrError::ConfigError(format!(
-                    "Failed to access Windows auto-start registry. Please check your permissions: {}",
-                    e
+                    "Failed to access Windows auto-start registry. Please check your permissions: {e}"
                 )));
             }
         };
 
         // Set the registry value
         if let Err(e) = run_key.set_value(APP_NAME, &exe_path_str.as_ref()) {
-            error!("Failed to set registry value {}: {}", APP_NAME, e);
+            error!("Failed to set registry value {APP_NAME}: {e}");
             return Err(EasyHdrError::ConfigError(format!(
-                "Failed to enable auto-start. Please check your permissions: {}",
-                e
+                "Failed to enable auto-start. Please check your permissions: {e}"
             )));
         }
 
-        info!("Auto-start enabled: {} -> {}", APP_NAME, exe_path_str);
+        info!("Auto-start enabled: {APP_NAME} -> {exe_path_str}");
         Ok(())
     }
 
@@ -111,13 +104,9 @@ impl AutoStartManager {
         let run_key = match hkcu.open_subkey_with_flags(RUN_KEY_PATH, KEY_WRITE) {
             Ok(key) => key,
             Err(e) => {
-                error!(
-                    "Failed to open registry key {} for writing: {}",
-                    RUN_KEY_PATH, e
-                );
+                error!("Failed to open registry key {RUN_KEY_PATH} for writing: {e}");
                 return Err(EasyHdrError::ConfigError(format!(
-                    "Failed to access Windows auto-start registry. Please check your permissions: {}",
-                    e
+                    "Failed to access Windows auto-start registry. Please check your permissions: {e}"
                 )));
             }
         };
@@ -125,7 +114,7 @@ impl AutoStartManager {
         // Delete the registry value
         match run_key.delete_value(APP_NAME) {
             Ok(()) => {
-                info!("Auto-start disabled: {} removed from registry", APP_NAME);
+                info!("Auto-start disabled: {APP_NAME} removed from registry");
                 Ok(())
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -134,10 +123,9 @@ impl AutoStartManager {
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to delete registry value {}: {}", APP_NAME, e);
+                error!("Failed to delete registry value {APP_NAME}: {e}");
                 Err(EasyHdrError::ConfigError(format!(
-                    "Failed to disable auto-start. Please check your permissions: {}",
-                    e
+                    "Failed to disable auto-start. Please check your permissions: {e}"
                 )))
             }
         }
