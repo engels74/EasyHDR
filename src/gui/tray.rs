@@ -174,8 +174,8 @@ impl TrayIcon {
 
                 // Create Icon from RGBA data
                 Icon::from_rgba(rgba_data, width, height).map_err(|e| {
-                    warn!("Failed to create icon from RGBA data: {}", e);
-                    EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
+                    warn!("Failed to create icon from RGBA data: {e}");
+                    EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {e}"))
                 })
             }
             Err(e) => {
@@ -197,9 +197,9 @@ impl TrayIcon {
 
         // Choose color based on HDR state
         let (r, g, b) = if hdr_enabled {
-            (0, 204, 0) // Green for HDR ON
+            (0_u8, 204_u8, 0_u8) // Green for HDR ON
         } else {
-            (204, 0, 0) // Red for HDR OFF
+            (204_u8, 0_u8, 0_u8) // Red for HDR OFF
         };
 
         // Fill the icon with the chosen color
@@ -210,15 +210,15 @@ impl TrayIcon {
                 // Create a border for better visibility
                 if x == 0 || x == ICON_SIZE - 1 || y == 0 || y == ICON_SIZE - 1 {
                     // Border: darker version of the color
-                    rgba[idx] = (r / 2) as u8;
-                    rgba[idx + 1] = (g / 2) as u8;
-                    rgba[idx + 2] = (b / 2) as u8;
+                    rgba[idx] = r / 2;
+                    rgba[idx + 1] = g / 2;
+                    rgba[idx + 2] = b / 2;
                     rgba[idx + 3] = 255;
                 } else {
                     // Interior: full color
-                    rgba[idx] = r as u8;
-                    rgba[idx + 1] = g as u8;
-                    rgba[idx + 2] = b as u8;
+                    rgba[idx] = r;
+                    rgba[idx + 1] = g;
+                    rgba[idx + 2] = b;
                     rgba[idx + 3] = 255;
                 }
             }
@@ -229,9 +229,13 @@ impl TrayIcon {
             if hdr_enabled { "ON" } else { "OFF" }
         );
 
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "ICON_SIZE is a compile-time constant (32) that fits in u32"
+        )]
         Icon::from_rgba(rgba, ICON_SIZE as u32, ICON_SIZE as u32).map_err(|e| {
-            error!("Failed to create tray icon from RGBA data: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {}", e))
+            error!("Failed to create tray icon from RGBA data: {e}");
+            EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {e}"))
         })
     }
 
@@ -323,6 +327,10 @@ impl TrayIcon {
 
     /// Displays a Windows toast notification (respects user's notification preference).
     #[allow(dead_code)]
+    #[expect(
+        clippy::unused_self,
+        reason = "Method signature matches expected API pattern; self may be used in future implementations"
+    )]
     pub fn show_notification(&self, message: &str) {
         use tracing::{debug, info, warn};
 

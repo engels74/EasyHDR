@@ -204,8 +204,7 @@ fn verify_windows_version() -> Result<()> {
 
         if build_number < MIN_WINDOWS_BUILD {
             return Err(EasyHdrError::ConfigError(format!(
-                "Windows build {} is too old. Minimum required: {}",
-                build_number, MIN_WINDOWS_BUILD
+                "Windows build {build_number} is too old. Minimum required: {MIN_WINDOWS_BUILD}"
             )));
         }
 
@@ -221,7 +220,7 @@ fn verify_windows_version() -> Result<()> {
     }
 }
 
-/// Gets the Windows build number using RtlGetVersion.
+/// Gets the Windows build number using `RtlGetVersion`.
 ///
 /// # Safety
 ///
@@ -231,28 +230,28 @@ fn verify_windows_version() -> Result<()> {
 ///    for "ntdll.dll", which is a system DLL guaranteed to exist on all Windows systems.
 ///
 /// 2. **Function Pointer Retrieval**: `GetProcAddress` is called with a valid module handle
-///    and a valid C string for "RtlGetVersion". We verify the returned pointer is not None
+///    and a valid C string for "`RtlGetVersion`". We verify the returned pointer is not None
 ///    before proceeding.
 ///
 /// 3. **Transmute Soundness**: The transmute from `Option<FARPROC>` to `RtlGetVersionFn` is
 ///    sound because:
 ///    - We've verified the pointer is not None
 ///    - The function signature `unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32`
-///      exactly matches the Windows API contract for RtlGetVersion
+///      exactly matches the Windows API contract for `RtlGetVersion`
 ///    - The calling convention ("system") matches the Windows ABI
 ///
 /// 4. **Structure Initialization**: The `OSVERSIONINFOEXW` structure is properly initialized
 ///    with the correct size in `dwOSVersionInfoSize`, which is required by the Windows API
 ///    to prevent buffer overruns.
 ///
-/// 5. **API Contract**: We check the return status from RtlGetVersion before using the result,
+/// 5. **API Contract**: We check the return status from `RtlGetVersion` before using the result,
 ///    ensuring we only read valid data.
 ///
 /// # Invariants
 ///
 /// - `ntdll.dll` must exist (guaranteed on all Windows systems)
 /// - `RtlGetVersion` must exist in ntdll.dll (guaranteed since Windows 2000)
-/// - The structure size must be set correctly before calling RtlGetVersion
+/// - The structure size must be set correctly before calling `RtlGetVersion`
 ///
 /// # Potential Issues
 ///
@@ -264,6 +263,9 @@ fn get_windows_build_number() -> Result<u32> {
     use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
     use windows::Win32::System::SystemInformation::OSVERSIONINFOEXW;
     use windows::core::HSTRING;
+
+    // Define the function signature for RtlGetVersion
+    type RtlGetVersionFn = unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32;
 
     unsafe {
         // Load ntdll.dll
@@ -280,23 +282,24 @@ fn get_windows_build_number() -> Result<u32> {
             ));
         }
 
-        // Define the function signature for RtlGetVersion
-        type RtlGetVersionFn = unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32;
         let rtl_get_version: RtlGetVersionFn = transmute(rtl_get_version_ptr);
 
         // Prepare version info structure
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "size_of::<OSVERSIONINFOEXW>() is a compile-time constant that fits in u32"
+        )]
         let mut version_info = OSVERSIONINFOEXW {
             dwOSVersionInfoSize: size_of::<OSVERSIONINFOEXW>() as u32,
             ..Default::default()
         };
 
         // Call RtlGetVersion
-        let status = rtl_get_version(&mut version_info);
+        let status = rtl_get_version(&raw mut version_info);
 
         if status != 0 {
             return Err(EasyHdrError::HdrControlFailed(format!(
-                "RtlGetVersion failed with status: {}",
-                status
+                "RtlGetVersion failed with status: {status}"
             )));
         }
 
