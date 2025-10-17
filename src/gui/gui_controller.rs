@@ -13,7 +13,7 @@
 use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Timer, TimerMode};
+use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::TryRecvError;
@@ -288,9 +288,22 @@ impl GuiController {
             .monitored_apps
             .iter()
             .map(|app| {
-                let icon = if let Some(ref _icon_data) = app.icon_data {
-                    // TODO: Convert stored icon bytes into a Slint image
-                    slint::Image::default()
+                let icon = if let Some(ref icon_data) = app.icon_data {
+                    // Validate icon data size (32x32 RGBA = 4096 bytes)
+                    if icon_data.len() == 32 * 32 * 4 {
+                        let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+                            icon_data, 32, // width
+                            32, // height
+                        );
+                        slint::Image::from_rgba8(buffer)
+                    } else {
+                        tracing::warn!(
+                            "Icon data for {} has unexpected size: {} bytes (expected 4096)",
+                            app.display_name,
+                            icon_data.len()
+                        );
+                        slint::Image::default()
+                    }
                 } else {
                     slint::Image::default()
                 };
