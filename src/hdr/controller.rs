@@ -172,21 +172,18 @@ impl HdrController {
             unsafe {
                 let result = GetDisplayConfigBufferSizes(
                     QDC_ONLY_ACTIVE_PATHS,
-                    &mut path_count,
-                    &mut mode_count,
+                    &raw mut path_count,
+                    &raw mut mode_count,
                 );
                 debug!(
-                    "GetDisplayConfigBufferSizes returned: result={}, path_count={}, mode_count={}",
-                    result, path_count, mode_count
+                    "GetDisplayConfigBufferSizes returned: result={result}, path_count={path_count}, mode_count={mode_count}"
                 );
                 if result != 0 {
                     error!(
-                        "Windows API error - GetDisplayConfigBufferSizes failed with code: {}",
-                        result
+                        "Windows API error - GetDisplayConfigBufferSizes failed with code: {result}"
                     );
                     return Err(EasyHdrError::HdrControlFailed(format!(
-                        "Failed to get display config buffer sizes: error code {}",
-                        result
+                        "Failed to get display config buffer sizes: error code {result}"
                     )));
                 }
             }
@@ -204,24 +201,21 @@ impl HdrController {
             unsafe {
                 let result = QueryDisplayConfig(
                     QDC_ONLY_ACTIVE_PATHS,
-                    &mut path_count,
+                    &raw mut path_count,
                     paths.as_mut_ptr(),
-                    &mut mode_count,
+                    &raw mut mode_count,
                     modes.as_mut_ptr(),
                     std::ptr::null_mut(),
                 );
                 debug!(
-                    "QueryDisplayConfig returned: result={}, final_path_count={}, final_mode_count={}",
-                    result, path_count, mode_count
+                    "QueryDisplayConfig returned: result={result}, final_path_count={path_count}, final_mode_count={mode_count}"
                 );
                 if result != 0 {
                     error!(
-                        "Windows API error - QueryDisplayConfig failed with code: {}",
-                        result
+                        "Windows API error - QueryDisplayConfig failed with code: {result}"
                     );
                     return Err(EasyHdrError::HdrControlFailed(format!(
-                        "Failed to query display config: error code {}",
-                        result
+                        "Failed to query display config: error code {result}"
                     )));
                 }
             }
@@ -337,6 +331,10 @@ impl HdrController {
                     );
 
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant that fits in u32"
+                    )]
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                             type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
@@ -352,10 +350,9 @@ impl HdrController {
 
                     unsafe {
                         let result =
-                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                            DisplayConfigGetDeviceInfo(std::ptr::addr_of_mut!(color_info.header).cast());
                         debug!(
-                            "DisplayConfigGetDeviceInfo (GET_ADVANCED_COLOR_INFO_2) returned: result={}",
-                            result
+                            "DisplayConfigGetDeviceInfo (GET_ADVANCED_COLOR_INFO_2) returned: result={result}"
                         );
                         if result != 0 {
                             warn!(

@@ -80,9 +80,8 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
         #[cfg(windows)]
         EasyHdrError::WindowsApiError(e) => {
             format!(
-                "A Windows API error occurred:\n\n{}\n\n\
-                 Please ensure your Windows installation is up to date.",
-                e
+                "A Windows API error occurred:\n\n{e}\n\n\
+                 Please ensure your Windows installation is up to date."
             )
         }
         EasyHdrError::IoError(e) => {

@@ -127,12 +127,13 @@ impl MonitoredApp {
     ///
     /// Clears cached icon data to reduce memory usage. Can be reloaded with `ensure_icon_loaded()`.
     pub fn release_icon(&mut self) {
-        if let Some(_icon_data) = self.icon_data.take() {
+        #[cfg_attr(not(windows), allow(unused_variables))]
+        if let Some(icon_data) = self.icon_data.take() {
             // Record icon removal in memory profiler
             #[cfg(windows)]
             {
                 use crate::utils::memory_profiler;
-                memory_profiler::get_profiler().record_icon_removed(_icon_data.len());
+                memory_profiler::get_profiler().record_icon_removed(icon_data.len());
             }
             tracing::debug!("Released icon data for {}", self.display_name);
         }
