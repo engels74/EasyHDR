@@ -22,8 +22,6 @@ use tray_icon::{
 pub struct TrayIcon {
     /// The tray icon instance. Updated via `update_icon()` when HDR state changes.
     tray: tray_icon::TrayIcon,
-    /// The context menu. Stored for lifetime management; passed to tray during construction.
-    menu: Menu,
     /// Weak reference to the main window
     window_handle: Weak<crate::MainWindow>,
     /// ID of the "Open" menu item
@@ -108,7 +106,6 @@ impl TrayIcon {
         // Create the TrayIcon instance
         let tray_icon = Self {
             tray,
-            menu: tray_menu,
             window_handle: window.as_weak(),
             open_item_id,
             exit_item_id,
