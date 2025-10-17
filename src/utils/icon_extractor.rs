@@ -139,25 +139,29 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
 ///
 /// This function contains unsafe code that is sound because:
 ///
-/// 1. **zeroed() for SHFILEINFOW**: Safe because SHFILEINFOW is a C-compatible struct
+/// 1. **`zeroed()` for SHFILEINFOW**: Safe because SHFILEINFOW is a C-compatible struct
 ///    where all-zeros is a valid initial state.
 ///
-/// 2. **SHGetFileInfoW**: Called with:
+/// 2. **`SHGetFileInfoW`**: Called with:
 ///    - Valid null-terminated wide string pointer from the caller
 ///    - Valid mutable pointer to SHFILEINFOW structure
 ///    - Correct structure size
-///    - Valid flags (SHGFI_ICON | SHGFI_LARGEICON)
+///    - Valid flags (`SHGFI_ICON` | `SHGFI_LARGEICON`)
 ///
-/// 3. **DestroyIcon**: Called to cleanup the HICON handle returned in file_info.hIcon,
+/// 3. **`DestroyIcon`**: Called to cleanup the HICON handle returned in `file_info.hIcon`,
 ///    preventing resource leaks.
 ///
 /// # Invariants
 ///
-/// - wide_path must be a null-terminated wide string
+/// - `wide_path` must be a null-terminated wide string
 /// - HICON handles must be destroyed after use
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI for icon extraction
-fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "size_of::<SHFILEINFOW>() is a compile-time constant (1360 bytes) well within u32::MAX"
+)]
+fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Vec<u8> {
     use std::mem::zeroed;
 
     unsafe {
@@ -166,14 +170,14 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
         let result = SHGetFileInfoW(
             PCWSTR(wide_path.as_ptr()),
             FILE_FLAGS_AND_ATTRIBUTES(0),
-            Some(&mut file_info),
+            Some(&raw mut file_info),
             std::mem::size_of::<SHFILEINFOW>() as u32,
             SHGFI_ICON | SHGFI_LARGEICON,
         );
 
         if result == 0 {
             tracing::warn!("SHGetFileInfoW failed, using default icon");
-            return Ok(create_default_icon());
+            return create_default_icon();
         }
 
         let icon_data = match hicon_to_rgba_bytes(file_info.hIcon) {
@@ -181,14 +185,14 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
             Err(e) => {
                 tracing::warn!("Failed to convert HICON to RGBA: {}, using default icon", e);
                 let _ = DestroyIcon(file_info.hIcon);
-                return Ok(create_default_icon());
+                return create_default_icon();
             }
         };
 
         // Cleanup icon handle
         let _ = DestroyIcon(file_info.hIcon);
 
-        Ok(icon_data)
+        icon_data
     }
 }
 
@@ -198,18 +202,18 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
 ///
 /// This function contains unsafe code that is sound because:
 ///
-/// 1. **zeroed() for Windows Structures**: Safe for ICONINFO, BITMAP, and BITMAPINFO
+/// 1. **`zeroed()` for Windows Structures**: Safe for ICONINFO, BITMAP, and BITMAPINFO
 ///    because these are C-compatible structs where all-zeros is a valid initial state.
 ///
-/// 2. **GetIconInfo**: Called with a valid HICON handle and mutable pointer to ICONINFO.
-///    Returns bitmap handles that must be cleaned up with DeleteObject.
+/// 2. **`GetIconInfo`**: Called with a valid HICON handle and mutable pointer to ICONINFO.
+///    Returns bitmap handles that must be cleaned up with `DeleteObject`.
 ///
-/// 3. **GetObjectW**: Called with:
-///    - Valid bitmap handle from GetIconInfo
+/// 3. **`GetObjectW`**: Called with:
+///    - Valid bitmap handle from `GetIconInfo`
 ///    - Correct structure size
 ///    - Valid mutable pointer to BITMAP structure
 ///
-/// 4. **CreateCompatibleDC**: Creates a device context that must be cleaned up with DeleteDC.
+/// 4. **`CreateCompatibleDC`**: Creates a device context that must be cleaned up with `DeleteDC`.
 ///
 /// 5. **SelectObject/GetDIBits**: Called with valid handles and properly initialized structures:
 ///    - BITMAPINFO is initialized with correct size, dimensions, and format
@@ -221,16 +225,12 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
 ///
 /// # Invariants
 ///
-/// - hicon must be a valid HICON handle
+/// - `hicon` must be a valid HICON handle
 /// - All bitmap and DC handles must be cleaned up before returning
 /// - Buffer size must match width * height * 4 bytes
 /// - BITMAPINFO structure must have correct size and format fields
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI for icon conversion
-/// Convert Windows icon to RGBA bytes
-///
-/// # Safety
-/// This function uses Windows FFI to extract icon bitmap data.
 #[expect(
     clippy::cast_possible_truncation,
     reason = "size_of::<BITMAP>() is a compile-time constant (32 bytes) well within i32::MAX"
@@ -238,6 +238,10 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
 #[expect(
     clippy::cast_sign_loss,
     reason = "bmWidth and bmHeight are guaranteed non-negative by Windows API contract"
+)]
+#[expect(
+    clippy::cast_possible_wrap,
+    reason = "Icon dimensions are typically 16-256 pixels, well within i32 range. Negative height is intentional for top-down DIB"
 )]
 fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
     use std::mem::zeroed;
@@ -415,10 +419,6 @@ pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
 /// Windows-specific display name extraction
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI for version info extraction
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "value_len from VerQueryValueW is guaranteed to be small (string length), well within usize range"
-)]
 fn extract_display_name_windows(path: &Path) -> String {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Storage::FileSystem::{

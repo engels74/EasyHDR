@@ -149,9 +149,12 @@ impl ProcessMonitor {
     /// - If the Windows API contract changes (extremely unlikely for this stable API)
     /// - If a process terminates between snapshot creation and enumeration (handled gracefully)
     #[allow(unsafe_code)] // Windows FFI for process enumeration
-    #[expect(
-        clippy::unused_self,
-        reason = "self is used on Windows (running_processes, estimated_process_count, detect_changes) but not on non-Windows stub implementation"
+    #[cfg_attr(
+        not(windows),
+        expect(
+            clippy::unused_self,
+            reason = "self is used on Windows but not in non-Windows stub implementation"
+        )
     )]
     fn poll_processes(&mut self) -> Result<()> {
         #[cfg(windows)]
