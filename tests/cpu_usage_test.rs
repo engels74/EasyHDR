@@ -27,7 +27,7 @@ fn test_process_monitor_cpu_usage() {
     println!("Target: < 1% CPU on modern systems\n");
 
     // Create a process monitor with 1000ms interval (default)
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::sync_channel(32);
     let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
     // Get initial CPU times
@@ -143,7 +143,7 @@ fn test_process_monitor_cpu_usage_different_intervals() {
     for interval in intervals {
         println!("\nTesting with {}ms interval:", interval.as_millis());
 
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let monitor = ProcessMonitor::new(interval, tx);
 
         let cpu_start = get_process_cpu_time().expect("Failed to get initial CPU time");

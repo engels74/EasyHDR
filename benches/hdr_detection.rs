@@ -15,7 +15,7 @@ mod windows_benches {
         c.bench_function("hdr_controller_new", |b| {
             b.iter(|| {
                 let controller = HdrController::new();
-                black_box(controller);
+                let _ = black_box(controller);
             });
         });
     }
@@ -29,7 +29,7 @@ mod windows_benches {
                 c.bench_function("hdr_is_enabled_check", |b| {
                     b.iter(|| {
                         let enabled = controller.is_hdr_enabled(black_box(display));
-                        black_box(enabled);
+                        let _ = black_box(enabled);
                     });
                 });
             }

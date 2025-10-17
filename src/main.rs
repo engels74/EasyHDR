@@ -121,10 +121,18 @@ fn main() -> Result<()> {
                 {
                     use easyhdr::error::get_user_friendly_error;
 
+                    // Try to downcast to EasyHdrError for user-friendly message
+                    let error_message =
+                        if let Some(easy_hdr_error) = e.downcast_ref::<EasyHdrError>() {
+                            get_user_friendly_error(easy_hdr_error)
+                        } else {
+                            format!("{:#}", e)
+                        };
+
                     show_error_and_exit(&format!(
                         "Failed to initialize EasyHDR:\n\n{}\n\n\
                          Please ensure your display drivers are up to date.",
-                        get_user_friendly_error(&e)
+                        error_message
                     ));
                     return Err(e);
                 }
@@ -211,7 +219,8 @@ fn verify_windows_version() -> Result<()> {
         if build_number < MIN_WINDOWS_BUILD {
             return Err(EasyHdrError::ConfigError(format!(
                 "Windows build {build_number} is too old. Minimum required: {MIN_WINDOWS_BUILD}"
-            )));
+            ))
+            .into());
         }
 
         Ok(())
