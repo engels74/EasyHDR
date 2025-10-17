@@ -126,13 +126,12 @@ fn main() -> Result<()> {
                         if let Some(easy_hdr_error) = e.downcast_ref::<EasyHdrError>() {
                             get_user_friendly_error(easy_hdr_error)
                         } else {
-                            format!("{:#}", e)
+                            format!("{e:#}")
                         };
 
                     show_error_and_exit(&format!(
-                        "Failed to initialize EasyHDR:\n\n{}\n\n\
-                         Please ensure your display drivers are up to date.",
-                        error_message
+                        "Failed to initialize EasyHDR:\n\n{error_message}\n\n\
+                         Please ensure your display drivers are up to date."
                     ));
                     return Err(e);
                 }

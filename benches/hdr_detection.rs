@@ -8,8 +8,9 @@ use criterion::{criterion_group, criterion_main};
 
 #[cfg(windows)]
 mod windows_benches {
-    use criterion::{Criterion, black_box};
+    use criterion::Criterion;
     use easyhdr::hdr::HdrController;
+    use std::hint::black_box;
 
     pub fn bench_hdr_controller_creation(c: &mut Criterion) {
         c.bench_function("hdr_controller_new", |b| {
