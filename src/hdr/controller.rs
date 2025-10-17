@@ -211,9 +211,7 @@ impl HdrController {
                     "QueryDisplayConfig returned: result={result}, final_path_count={path_count}, final_mode_count={mode_count}"
                 );
                 if result != 0 {
-                    error!(
-                        "Windows API error - QueryDisplayConfig failed with code: {result}"
-                    );
+                    error!("Windows API error - QueryDisplayConfig failed with code: {result}");
                     return Err(EasyHdrError::HdrControlFailed(format!(
                         "Failed to query display config: error code {result}"
                     )));
@@ -349,8 +347,9 @@ impl HdrController {
                     };
 
                     unsafe {
-                        let result =
-                            DisplayConfigGetDeviceInfo(std::ptr::addr_of_mut!(color_info.header).cast());
+                        let result = DisplayConfigGetDeviceInfo(
+                            std::ptr::addr_of_mut!(color_info.header).cast(),
+                        );
                         debug!(
                             "DisplayConfigGetDeviceInfo (GET_ADVANCED_COLOR_INFO_2) returned: result={result}"
                         );
