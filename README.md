@@ -82,11 +82,6 @@ cargo +nightly fuzz run fuzz_process_name -- -max_total_time=60
 cargo +nightly fuzz run fuzz_windows_api -- -max_total_time=60
 ```
 
-**Recommended fuzzing parameters:**
-- Duration: 300-600 seconds per target for thorough testing
-- Corpus: Automatically managed in `fuzz/corpus/`
-- Crashes: Saved to `fuzz/artifacts/` if found
-
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE) for details.
