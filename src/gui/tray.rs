@@ -20,13 +20,9 @@ use tray_icon::{
 /// System tray icon with context menu showing HDR state.
 #[cfg(windows)]
 pub struct TrayIcon {
-    /// The actual tray icon
-    // TODO: Wire up to state updates
-    #[allow(dead_code)]
+    /// The tray icon instance. Updated via `update_icon()` when HDR state changes.
     tray: tray_icon::TrayIcon,
-    /// The context menu for the tray icon
-    // TODO: Wire up to state updates
-    #[allow(dead_code)]
+    /// The context menu. Stored for lifetime management; passed to tray during construction.
     menu: Menu,
     /// Weak reference to the main window
     window_handle: Weak<crate::MainWindow>,
@@ -34,9 +30,7 @@ pub struct TrayIcon {
     open_item_id: tray_icon::menu::MenuId,
     /// ID of the "Exit" menu item
     exit_item_id: tray_icon::menu::MenuId,
-    /// Reference to the status menu item for updating text
-    // TODO: Wire up to state updates
-    #[allow(dead_code)]
+    /// Reference to the status menu item. Updated via `update_icon()` to reflect current HDR state.
     status_item: MenuItem,
 }
 
