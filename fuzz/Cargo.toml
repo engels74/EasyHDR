@@ -9,6 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+serde_json = "1.0"
 
 [dependencies.easyhdr]
 path = ".."
@@ -23,6 +24,13 @@ bench = false
 [[bin]]
 name = "fuzz_process_name"
 path = "fuzz_targets/fuzz_process_name.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_windows_api"
+path = "fuzz_targets/fuzz_windows_api.rs"
 test = false
 doc = false
 bench = false

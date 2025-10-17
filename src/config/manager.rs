@@ -238,6 +238,9 @@ mod tests {
     // This is a test isolation issue, not a code defect.
     #[test]
     fn test_load_missing_config() {
+        let test_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&test_dir);
+
         // This should return default config without error
         let config = ConfigManager::load();
         assert!(config.is_ok());
@@ -245,6 +248,8 @@ mod tests {
         let config = config.unwrap();
         assert_eq!(config.monitored_apps.len(), 0);
         assert_eq!(config.preferences.monitoring_interval_ms, 1000);
+
+        // TempDir and AppdataGuard automatically clean up when dropped
     }
 
     #[test]
