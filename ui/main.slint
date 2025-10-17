@@ -286,9 +286,17 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // Spacer to push Settings button to the right
+            // Spacer to push right-aligned buttons to the right
             Rectangle {
                 horizontal-stretch: 1;
+            }
+
+            // Minimize to Tray button
+            Button {
+                text: "Minimize to Tray";
+                clicked => {
+                    minimize-to-tray();
+                }
             }
 
             // Settings button (Task 12.1)

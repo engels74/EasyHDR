@@ -128,6 +128,12 @@ impl GuiController {
             },
         );
 
+        let controller_clone = controller.clone();
+        let window_weak = main_window.as_weak();
+        main_window.on_minimize_to_tray(move || {
+            Self::minimize_to_tray(&controller_clone, &window_weak);
+        });
+
         info!("GUI callbacks connected");
 
         // Set up close request handler to save state and exit the application
@@ -646,6 +652,67 @@ impl GuiController {
         _show_tray_notifications: bool,
     ) {
         Self::show_error_dialog("Settings management is only supported on Windows");
+    }
+
+    /// Minimize the window to tray and release GUI resources
+    ///
+    /// Hides the main window and releases icon data from memory to reduce memory
+    /// footprint while minimized. The window can be restored by clicking the tray icon.
+    /// All background monitoring (`ProcessMonitor`, `HdrStateMonitor`) continues to run.
+    fn minimize_to_tray(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
+        use tracing::{info, warn};
+
+        info!("Minimizing window to tray");
+
+        // Hide the window
+        if let Some(window) = window.upgrade() {
+            window.hide().unwrap_or_else(|e| {
+                warn!("Failed to hide window: {}", e);
+            });
+            info!("Window hidden successfully");
+        } else {
+            warn!("Failed to hide window - window handle is no longer valid");
+            return;
+        }
+
+        // Release GUI resources to reduce memory usage
+        Self::release_gui_resources(controller);
+
+        info!("Window minimized to tray successfully");
+    }
+
+    /// Release GUI resources when window is hidden
+    ///
+    /// Releases icon data from memory to reduce memory footprint when the window
+    /// is minimized to the tray. Icons will be reloaded when the window is shown again.
+    fn release_gui_resources(controller: &Arc<Mutex<AppController>>) {
+        use tracing::info;
+
+        info!("Releasing GUI resources (icon cache)");
+
+        let controller_guard = controller.lock();
+        let mut config = controller_guard.config.lock();
+
+        // Release all icon data
+        let mut released_count = 0;
+        for app in &mut config.monitored_apps {
+            if app.icon_data.is_some() {
+                app.icon_data = None;
+                released_count += 1;
+            }
+        }
+
+        drop(config);
+        drop(controller_guard);
+
+        info!("Released {} icon(s) from cache", released_count);
+
+        // Log memory stats after release
+        #[cfg(windows)]
+        {
+            use crate::utils::memory_profiler;
+            memory_profiler::get_profiler().log_stats();
+        }
     }
 
     /// Show error dialog to the user

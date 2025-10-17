@@ -13,7 +13,7 @@ use tracing::error;
 
 #[cfg(windows)]
 use tray_icon::{
-    Icon, TrayIconBuilder,
+    Icon, TrayIconBuilder, TrayIconEvent,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
 
@@ -117,6 +117,9 @@ impl TrayIcon {
 
         // Set up MenuEvent handler for menu item clicks
         tray_icon.setup_menu_event_handler();
+
+        // Set up TrayIconEvent handler for tray icon clicks (left-click to restore window)
+        tray_icon.setup_tray_icon_event_handler();
 
         Ok(tray_icon)
     }
@@ -282,6 +285,46 @@ impl TrayIcon {
         }));
 
         info!("Menu event handler set up successfully");
+    }
+
+    /// Sets up the tray icon event handler to restore the window on left-click.
+    /// Uses a weak reference to avoid keeping the window alive unnecessarily.
+    fn setup_tray_icon_event_handler(&self) {
+        use tracing::info;
+
+        info!("Setting up tray icon event handler for window restoration");
+
+        // Clone the window handle for the event handler closure
+        let window_weak = self.window_handle.clone();
+
+        // Set up the TrayIconEvent handler
+        // This handler will be called whenever the tray icon is clicked
+        TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
+            use tracing::{debug, error, info, warn};
+
+            debug!("Tray icon event received: {:?}", event);
+
+            // Handle left-click on the tray icon to restore the window
+            if matches!(event.click_type, tray_icon::ClickType::Left) {
+                info!("Tray icon left-clicked - restoring main window");
+
+                if let Some(window) = window_weak.upgrade() {
+                    // Show and bring the window to front
+                    window.show().unwrap_or_else(|e| {
+                        error!("Failed to show window: {}", e);
+                    });
+
+                    // Request focus to bring window to foreground
+                    window.window().request_redraw();
+
+                    info!("Main window restored successfully");
+                } else {
+                    warn!("Failed to restore window - window handle is no longer valid");
+                }
+            }
+        }));
+
+        info!("Tray icon event handler set up successfully");
     }
 
     /// Updates the tray icon and menu item text to reflect the current HDR state.
