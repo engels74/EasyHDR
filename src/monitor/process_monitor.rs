@@ -58,7 +58,7 @@ pub struct ProcessMonitor {
     watch_list: Arc<Mutex<HashSet<String>>>,
     /// Channel to send process events
     #[cfg_attr(not(windows), allow(dead_code))]
-    event_sender: mpsc::Sender<ProcessEvent>,
+    event_sender: mpsc::SyncSender<ProcessEvent>,
     /// Polling interval
     interval: Duration,
     /// Previous snapshot of running processes
@@ -71,7 +71,7 @@ pub struct ProcessMonitor {
 
 impl ProcessMonitor {
     /// Create a new process monitor with the specified polling interval
-    pub fn new(interval: Duration, event_sender: mpsc::Sender<ProcessEvent>) -> Self {
+    pub fn new(interval: Duration, event_sender: mpsc::SyncSender<ProcessEvent>) -> Self {
         // Typical Windows system has 150-250 processes
         const DEFAULT_PROCESS_COUNT: usize = 200;
 
@@ -365,14 +365,14 @@ mod tests {
 
     #[test]
     fn test_process_monitor_creation() {
-        let (tx, _rx) = mpsc::channel();
+        let (tx, _rx) = mpsc::sync_channel(32);
         let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
         assert_eq!(monitor.interval, Duration::from_millis(1000));
     }
 
     #[test]
     fn test_update_watch_list() {
-        let (tx, _rx) = mpsc::channel();
+        let (tx, _rx) = mpsc::sync_channel(32);
         let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         monitor.update_watch_list(vec!["test.exe".to_string(), "game.exe".to_string()]);
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_detect_changes_started() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Set up watch list
@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_detect_changes_stopped() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Set up watch list
@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     fn test_detect_changes_case_insensitive() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Watch list has lowercase
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn test_detect_changes_multiple_processes() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Watch multiple processes
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_watch_list_case_insensitive() {
-        let (tx, _rx) = mpsc::channel();
+        let (tx, _rx) = mpsc::sync_channel(32);
         let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Add watch list with mixed case - should be converted to lowercase
@@ -614,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_state_transition_not_running_to_running() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         monitor.update_watch_list(vec!["game".to_string()]);
@@ -642,7 +642,7 @@ mod tests {
 
     #[test]
     fn test_state_transition_running_to_not_running() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         monitor.update_watch_list(vec!["game".to_string()]);
@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn test_multiple_state_transitions() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         monitor.update_watch_list(vec![
@@ -713,7 +713,7 @@ mod tests {
 
     #[test]
     fn test_no_events_when_no_state_change() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         monitor.update_watch_list(vec!["game".to_string()]);
@@ -732,7 +732,7 @@ mod tests {
 
     #[test]
     fn test_only_monitored_processes_trigger_events() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Only watch "game"
@@ -762,7 +762,7 @@ mod tests {
 
     #[test]
     fn test_empty_watch_list() {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Empty watch list
@@ -803,7 +803,7 @@ mod tests {
 
     #[test]
     fn test_process_name_normalization() {
-        let (tx, _rx) = mpsc::channel();
+        let (tx, _rx) = mpsc::sync_channel(32);
         let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Add processes with various cases
@@ -873,7 +873,7 @@ mod tests {
             fn watch_list_normalization_is_idempotent(
                 names in prop::collection::vec("[a-zA-Z0-9_-]+(\\.exe)?", 1..10)
             ) {
-                let (tx, _rx) = mpsc::channel();
+                let (tx, _rx) = mpsc::sync_channel(32);
                 let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
                 // Normalize once

@@ -120,7 +120,7 @@ pub enum HdrStateEvent {
 #[allow(dead_code)] // Fields are used in Windows-specific code
 pub struct HdrStateMonitor {
     /// Event sender to notify the application controller
-    event_sender: mpsc::Sender<HdrStateEvent>,
+    event_sender: mpsc::SyncSender<HdrStateEvent>,
     /// HDR controller for querying HDR state
     hdr_controller: Arc<Mutex<HdrController>>,
     /// Cached HDR state for change detection
@@ -140,7 +140,7 @@ impl HdrStateMonitor {
     /// Returns a new `HdrStateMonitor` instance with initial state detection
     pub fn new(
         hdr_controller: HdrController,
-        event_sender: mpsc::Sender<HdrStateEvent>,
+        event_sender: mpsc::SyncSender<HdrStateEvent>,
     ) -> Result<Self> {
         // Detect initial HDR state
         let initial_state = Self::detect_current_hdr_state_internal(&hdr_controller);
@@ -340,7 +340,7 @@ impl HdrStateMonitor {
 struct MonitorState {
     hdr_controller: Arc<Mutex<HdrController>>,
     cached_hdr_state: Arc<Mutex<bool>>,
-    event_sender: mpsc::Sender<HdrStateEvent>,
+    event_sender: mpsc::SyncSender<HdrStateEvent>,
     recheck_count: Arc<Mutex<u32>>, // Counter for remaining rechecks
 }
 
@@ -549,7 +549,7 @@ mod tests {
         let hdr_controller = HdrController::new().expect("Failed to create HDR controller");
 
         // Create event channel
-        let (tx, _rx) = mpsc::channel();
+        let (tx, _rx) = mpsc::sync_channel(32);
 
         // Create HDR state monitor
         let monitor = HdrStateMonitor::new(hdr_controller, tx);
@@ -581,7 +581,7 @@ mod tests {
         let hdr_controller = HdrController::new().expect("Failed to create HDR controller");
 
         // Create event channel
-        let (tx, _rx) = mpsc::channel();
+        let (tx, _rx) = mpsc::sync_channel(32);
 
         // Create monitor state
         let state = MonitorState {

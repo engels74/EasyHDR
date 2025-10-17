@@ -26,13 +26,31 @@ pub struct MonitoredApp {
     pub icon_data: Option<Vec<u8>>,
 }
 
+// Implement PartialEq manually to ignore icon_data (cached binary data)
+impl PartialEq for MonitoredApp {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.display_name == other.display_name
+            && self.exe_path == other.exe_path
+            && self.process_name == other.process_name
+            && self.enabled == other.enabled
+        // icon_data is intentionally ignored as it's a cache
+    }
+}
+
+impl Eq for MonitoredApp {}
+
 impl MonitoredApp {
     /// Create a `MonitoredApp` from an executable path
     ///
     /// Extracts display name from file metadata, icon from resources, and generates
     /// a unique UUID. Process name is derived from filename (lowercase, no extension).
-    pub fn from_exe_path(exe_path: PathBuf) -> Result<Self> {
+    ///
+    /// Accepts any type that can be converted into a `PathBuf` for better ergonomics.
+    pub fn from_exe_path(exe_path: impl Into<PathBuf>) -> Result<Self> {
         use crate::error::EasyHdrError;
+
+        let exe_path = exe_path.into();
 
         // Validate that the path exists and is a file
         if !exe_path.exists() {
@@ -161,7 +179,7 @@ pub struct AppConfig {
 }
 
 /// User preferences and settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserPreferences {
     /// Whether to auto-start on Windows login
     pub auto_start: bool,
@@ -172,7 +190,7 @@ pub struct UserPreferences {
 }
 
 /// Window state for position and size persistence
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowState {
     /// X position
     pub x: i32,

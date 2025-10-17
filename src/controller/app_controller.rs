@@ -40,7 +40,7 @@ pub struct AppController {
     /// Event receiver from HDR state monitor (taken when event loop starts)
     hdr_state_receiver: Option<mpsc::Receiver<HdrStateEvent>>,
     /// State sender to GUI
-    gui_state_sender: mpsc::Sender<AppState>,
+    gui_state_sender: mpsc::SyncSender<AppState>,
     /// Last toggle time for debouncing
     last_toggle_time: Arc<Mutex<Instant>>,
     /// Reference to `ProcessMonitor`'s watch list for updating
@@ -53,7 +53,7 @@ impl AppController {
         config: AppConfig,
         event_receiver: mpsc::Receiver<ProcessEvent>,
         hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
-        gui_state_sender: mpsc::Sender<AppState>,
+        gui_state_sender: mpsc::SyncSender<AppState>,
         process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
     ) -> Result<Self> {
         use tracing::info;
@@ -591,9 +591,9 @@ mod tests {
     #[test]
     fn test_app_controller_creation() {
         let config = AppConfig::default();
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
@@ -613,9 +613,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -648,9 +648,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -676,9 +676,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -704,9 +704,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -754,9 +754,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -802,9 +802,9 @@ mod tests {
     #[test]
     fn test_add_application() {
         let config = AppConfig::default();
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -859,9 +859,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -905,9 +905,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -962,9 +962,9 @@ mod tests {
     #[test]
     fn test_update_preferences() {
         let config = AppConfig::default();
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -1016,9 +1016,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let controller =
@@ -1048,9 +1048,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, state_rx) = mpsc::channel();
+        let (event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -1086,9 +1086,9 @@ mod tests {
     fn test_run_handles_channel_disconnection_gracefully() {
         let config = AppConfig::default();
 
-        let (event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -1130,9 +1130,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, state_rx) = mpsc::channel();
+        let (event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -1187,9 +1187,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =
@@ -1250,9 +1250,9 @@ mod tests {
             icon_data: None,
         });
 
-        let (_event_tx, event_rx) = mpsc::channel();
-        let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-        let (state_tx, _state_rx) = mpsc::channel();
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
         let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
         let mut controller =

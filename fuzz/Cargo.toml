@@ -1,0 +1,31 @@
+[package]
+name = "easyhdr-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.easyhdr]
+path = ".."
+
+[[bin]]
+name = "fuzz_config_json"
+path = "fuzz_targets/fuzz_config_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_process_name"
+path = "fuzz_targets/fuzz_process_name.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
