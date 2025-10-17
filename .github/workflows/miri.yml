@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  miri:
-    name: Miri Undefined Behavior Check
+  miri-portable:
+    name: Miri Portable Code (Strict)
     runs-on: ubuntu-latest
 
     steps:
@@ -28,16 +28,36 @@ jobs:
           components: miri
           cache: true
 
-      - name: Run Miri on library tests
+      - name: Run Miri on portable code (config, error modules)
+        run: cargo miri test --lib config error -- --test-threads=1
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check
+        # No continue-on-error: These tests should pass and will fail CI if UB is detected
+
+  miri-full:
+    name: Miri Full Coverage (Best Effort)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust nightly with Miri
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: miri
+          cache: true
+
+      - name: Run Miri on all library tests
         run: cargo miri test --lib -- --test-threads=1
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
         continue-on-error: true
-        # Note: continue-on-error is set because Windows FFI calls
-        # will not work under Miri on Linux. This still validates
-        # pure Rust code and catches UB in portable sections.
+        # Continue-on-error: Windows FFI calls will fail on Linux Miri
+        # but this still validates pure Rust code in other modules
 
-      - name: Run Miri with strict checking
+      - name: Run Miri with strict checking on all tests
         run: cargo miri test --lib -- --test-threads=1
         env:
           MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check

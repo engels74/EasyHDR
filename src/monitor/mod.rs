@@ -43,7 +43,7 @@
 //! use std::time::Duration;
 //!
 //! // Create event channel
-//! let (tx, rx) = mpsc::channel();
+//! let (tx, rx) = mpsc::sync_channel(32);
 //!
 //! // Create process monitor with 1-second polling interval
 //! let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);

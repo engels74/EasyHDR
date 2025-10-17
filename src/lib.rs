@@ -74,9 +74,9 @@
 //! ConfigManager::save(&config)?;
 //!
 //! // Create communication channels
-//! let (event_tx, event_rx) = mpsc::channel();
-//! let (_hdr_state_tx, hdr_state_rx) = mpsc::channel();
-//! let (state_tx, state_rx) = mpsc::channel();
+//! let (event_tx, event_rx) = mpsc::sync_channel(32);
+//! let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+//! let (state_tx, state_rx) = mpsc::sync_channel(32);
 //!
 //! // Create shared watch list
 //! let watch_list = Arc::new(Mutex::new(HashSet::new()));

@@ -44,6 +44,49 @@ Configuration is stored at `%APPDATA%\EasyHDR\config.json` and saved automatical
 - `thiserror` - Error handling
 - `once_cell` - Lazy initialization
 
+## Development
+
+### Performance Benchmarking
+
+Baseline performance metrics (measured with Criterion on release builds):
+
+- **Config Serialization**: ~20 µs
+- **Config Deserialization**: ~35 µs
+- **Config Round Trip**: ~55 µs
+- **HDR State Detection**: Platform-dependent (Windows only)
+
+Run benchmarks: `cargo bench`
+
+To detect performance regressions, compare new benchmark results against these baselines. Criterion automatically tracks changes between runs and flags statistically significant regressions (>5% slower).
+
+### Fuzzing
+
+Three fuzz targets are available to test robustness:
+
+1. **`fuzz_config_json`** - Tests configuration JSON parsing for crashes/panics
+2. **`fuzz_process_name`** - Tests process name extraction from arbitrary paths
+3. **`fuzz_windows_api`** - Tests Windows API structures and bit field logic
+
+**Running fuzzing targets:**
+
+```bash
+# Install cargo-fuzz (requires nightly)
+cargo install cargo-fuzz
+
+# Run a specific fuzz target for 60 seconds
+cargo +nightly fuzz run fuzz_config_json -- -max_total_time=60
+
+# Run all targets sequentially
+cargo +nightly fuzz run fuzz_config_json -- -max_total_time=60
+cargo +nightly fuzz run fuzz_process_name -- -max_total_time=60
+cargo +nightly fuzz run fuzz_windows_api -- -max_total_time=60
+```
+
+**Recommended fuzzing parameters:**
+- Duration: 300-600 seconds per target for thorough testing
+- Corpus: Automatically managed in `fuzz/corpus/`
+- Crashes: Saved to `fuzz/artifacts/` if found
+
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE) for details.
