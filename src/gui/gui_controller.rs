@@ -340,7 +340,16 @@ impl GuiController {
 
         let window_opt = window_weak.upgrade();
         if let Some(window) = window_opt {
-            window_visibility.set(window.window().is_visible());
+            let window_visible = window.window().is_visible();
+
+            // Detect when window becomes visible again (e.g., restored from tray)
+            // and reload GUI resources that were released during minimize
+            if window_visible && !window_visibility.get() {
+                info!("Window shown, reloading GUI resources");
+                Self::reload_gui_resources(controller);
+            }
+
+            window_visibility.set(window_visible);
 
             window.set_hdr_enabled(state.hdr_enabled);
             debug!("Updated HDR enabled state to: {}", state.hdr_enabled);
@@ -643,6 +652,100 @@ impl GuiController {
         Self::show_error_dialog("Settings management is only supported on Windows");
     }
 
+    /// Release GUI resources when window is hidden
+    ///
+    /// Releases icon data from memory to reduce memory footprint when the window
+    /// is minimized to the tray. Icons will be reloaded when the window is shown again.
+    fn release_gui_resources(controller: &Arc<Mutex<AppController>>) {
+        use tracing::info;
+
+        info!("Releasing GUI resources (icon cache)");
+
+        let controller_guard = controller.lock();
+        let mut config = controller_guard.config.lock();
+
+        // Release all icon data
+        let mut released_count = 0;
+        for app in &mut config.monitored_apps {
+            if app.icon_data.is_some() {
+                app.release_icon();
+                released_count += 1;
+            }
+        }
+
+        drop(config);
+        drop(controller_guard);
+
+        info!("Released {} icon(s) from cache", released_count);
+
+        // Log memory stats after release
+        #[cfg(windows)]
+        {
+            use crate::utils::memory_profiler;
+            memory_profiler::get_profiler().log_stats();
+        }
+    }
+
+    /// Reload GUI resources when window is shown
+    ///
+    /// Reloads icon data that was released when the window was minimized to the tray.
+    /// This ensures icons are available for display.
+    fn reload_gui_resources(controller: &Arc<Mutex<AppController>>) {
+        use tracing::info;
+
+        info!("Reloading GUI resources (icon cache)");
+
+        let controller_guard = controller.lock();
+        let mut config = controller_guard.config.lock();
+
+        // Reload all icon data
+        let mut reloaded_count = 0;
+        for app in &mut config.monitored_apps {
+            if app.ensure_icon_loaded().is_some() {
+                reloaded_count += 1;
+            }
+        }
+
+        drop(config);
+        drop(controller_guard);
+
+        info!("Reloaded {} icon(s) into cache", reloaded_count);
+
+        // Log memory stats after reload
+        #[cfg(windows)]
+        {
+            use crate::utils::memory_profiler;
+            memory_profiler::get_profiler().log_stats();
+        }
+    }
+
+    /// Minimize the window to tray and release GUI resources
+    ///
+    /// Hides the main window and releases icon data from memory to reduce memory
+    /// footprint while minimized. The window can be restored by clicking the tray icon.
+    /// All background monitoring (`ProcessMonitor`, `HdrStateMonitor`) continues to run.
+    fn minimize_to_tray(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
+        use tracing::{info, warn};
+
+        info!("Minimizing window to tray");
+
+        // Hide the window
+        if let Some(window) = window.upgrade() {
+            window.hide().unwrap_or_else(|e| {
+                warn!("Failed to hide window: {}", e);
+            });
+            info!("Window hidden successfully");
+        } else {
+            warn!("Failed to hide window - window handle is no longer valid");
+            return;
+        }
+
+        // Release GUI resources to reduce memory usage
+        Self::release_gui_resources(controller);
+
+        info!("Window minimized to tray successfully");
+    }
+
     /// Show error dialog to the user
     ///
     /// Displays a modal error dialog with the provided message.
@@ -828,6 +931,7 @@ impl GuiController {
 
         // State shared with the timer-driven UI pump
         let window_visibility = Rc::new(Cell::new(true));
+        let window_minimized = Rc::new(Cell::new(false));
         let previous_hdr_state = Rc::new(Cell::new(None::<bool>));
         let ui_cmd_rx = Rc::new(ui_cmd_rx);
         let ui_update_timer = Rc::new(Timer::default());
@@ -837,11 +941,28 @@ impl GuiController {
             let controller_handle = controller_handle.clone();
             let tray_icon = tray_icon.clone();
             let window_visibility = window_visibility.clone();
+            let window_minimized = window_minimized.clone();
             let previous_hdr_state = previous_hdr_state.clone();
             let ui_cmd_rx = ui_cmd_rx.clone();
             let timer_handle = ui_update_timer.clone();
 
             ui_update_timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
+                // Check for minimize-to-tray trigger
+                // Poll window minimized state since Slint doesn't provide a minimize event callback
+                if let Some(window) = window_weak.upgrade() {
+                    let is_minimized = window.window().is_minimized();
+                    let was_minimized = window_minimized.get();
+
+                    // Detect transition from not-minimized to minimized
+                    if is_minimized && !was_minimized {
+                        info!("Window minimize detected - triggering minimize-to-tray");
+                        Self::minimize_to_tray(&controller_handle, &window_weak);
+                    }
+
+                    window_minimized.set(is_minimized);
+                }
+
+                // Process state updates from the background thread
                 loop {
                     match ui_cmd_rx.try_recv() {
                         Ok(UiMessage::ApplyState(state)) => {
