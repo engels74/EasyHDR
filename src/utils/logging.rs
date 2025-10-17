@@ -1,35 +1,34 @@
 //! Logging system initialization
 //!
 //! Sets up tracing-based logging with file output to %APPDATA%\EasyHDR\app.log
-//! and automatic rotation at 5MB keeping 3 historical files.
+//! and automatic rotation on application startup keeping 10 historical files.
 
 use crate::error::Result;
 use std::path::PathBuf;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{EnvFilter, fmt};
 
-/// Maximum log file size in bytes (5MB)
-const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024;
+/// Maximum number of historical log files to keep (app.log.1 through app.log.9)
+const MAX_LOG_FILES: u8 = 9;
 
 /// Initialize the logging system
 ///
 /// Log level defaults to INFO but can be configured via `RUST_LOG` environment variable.
+/// Rotates existing logs on startup to maintain a history of the last 10 sessions.
 pub fn init_logging() -> Result<()> {
     let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
     let log_dir = PathBuf::from(appdata).join("EasyHDR");
     std::fs::create_dir_all(&log_dir)?;
 
-    // Check and rotate existing log file if it exceeds size limit
+    // Rotate existing log files on startup
     let log_path = log_dir.join("app.log");
-    if log_path.exists() {
-        check_and_rotate_log(&log_path)?;
-    }
+    rotate_logs_on_startup(&log_path)?;
 
     // Create rolling file appender
-    // Note: tracing_appender's RollingFileAppender doesn't support size-based rotation
-    // with max_log_files in the way we need, so we'll use manual rotation
+    // Note: tracing_appender's RollingFileAppender doesn't support startup-based rotation
+    // with our desired file retention policy, so we handle rotation manually
     let file_appender = RollingFileAppender::builder()
-        .rotation(Rotation::NEVER) // We handle rotation manually
+        .rotation(Rotation::NEVER) // We handle rotation manually on startup
         .filename_prefix("app")
         .filename_suffix("log")
         .build(log_dir)
@@ -58,67 +57,59 @@ pub fn init_logging() -> Result<()> {
     Ok(())
 }
 
-/// Check log file size and rotate if necessary
+/// Rotate log files on application startup
 ///
-/// Rotates logs: app.log.2 deleted, app.log.1 -> app.log.2, app.log -> app.log.1
-fn check_and_rotate_log(log_path: &PathBuf) -> Result<()> {
-    let metadata = std::fs::metadata(log_path)?;
-
-    if metadata.len() > MAX_LOG_SIZE {
-        tracing::debug!(
-            "Log file size {} exceeds limit {}, rotating logs",
-            metadata.len(),
-            MAX_LOG_SIZE
-        );
-
-        // Rotate existing log files
-        // Delete the oldest log file (app.log.2)
-        let oldest_log = log_path.with_extension("log.2");
-        if oldest_log.exists() {
-            std::fs::remove_file(&oldest_log)?;
-        }
-
-        // Rotate app.log.1 -> app.log.2
-        let log_1 = log_path.with_extension("log.1");
-        if log_1.exists() {
-            std::fs::rename(&log_1, &oldest_log)?;
-        }
-
-        // Rotate app.log -> app.log.1
-        std::fs::rename(log_path, &log_1)?;
-
-        tracing::info!("Log rotation completed");
+/// Rotates existing logs to maintain a history of the last 10 application sessions:
+/// - app.log.9 is deleted (oldest log)
+/// - app.log.8 -> app.log.9
+/// - app.log.7 -> app.log.8
+/// - ... (and so on)
+/// - app.log.1 -> app.log.2
+/// - app.log -> app.log.1
+/// - A fresh app.log will be created by the logger
+///
+/// This function is called unconditionally on every application startup,
+/// regardless of log file size, ensuring each session's logs are preserved separately.
+fn rotate_logs_on_startup(log_path: &PathBuf) -> Result<()> {
+    // If the current log doesn't exist, nothing to rotate
+    if !log_path.exists() {
+        return Ok(());
     }
+
+    // Get the parent directory for constructing numbered log paths
+    let log_dir = log_path
+        .parent()
+        .ok_or_else(|| crate::error::EasyHdrError::ConfigError("Invalid log path".to_string()))?;
+
+    let log_name = log_path
+        .file_name()
+        .ok_or_else(|| crate::error::EasyHdrError::ConfigError("Invalid log filename".to_string()))?
+        .to_string_lossy();
+
+    // Delete the oldest log file (app.log.9) if it exists
+    let oldest_log = log_dir.join(format!("{log_name}.{MAX_LOG_FILES}"));
+    if oldest_log.exists() {
+        std::fs::remove_file(&oldest_log)?;
+    }
+
+    // Rotate log files from 8 down to 1
+    // app.log.8 -> app.log.9, app.log.7 -> app.log.8, ..., app.log.1 -> app.log.2
+    for i in (1..MAX_LOG_FILES).rev() {
+        let current_log = log_dir.join(format!("{log_name}.{i}"));
+        let next_log = log_dir.join(format!("{log_name}.{}", i + 1));
+
+        if current_log.exists() {
+            std::fs::rename(&current_log, &next_log)?;
+        }
+    }
+
+    // Rotate the current log file (app.log -> app.log.1)
+    let log_1 = log_dir.join(format!("{log_name}.1"));
+    std::fs::rename(log_path, &log_1)?;
+
+    tracing::info!("Log rotation completed on startup");
 
     Ok(())
-}
-
-/// Log rotator for periodic rotation checks during application runtime
-pub struct LogRotator {
-    log_path: PathBuf,
-    max_size: u64,
-}
-
-impl LogRotator {
-    /// Create a new log rotator
-    pub fn new(log_path: PathBuf, max_size: u64) -> Self {
-        Self { log_path, max_size }
-    }
-
-    /// Check if rotation is needed and perform it
-    pub fn check_and_rotate(&self) -> Result<()> {
-        if !self.log_path.exists() {
-            return Ok(());
-        }
-
-        let metadata = std::fs::metadata(&self.log_path)?;
-
-        if metadata.len() > self.max_size {
-            check_and_rotate_log(&self.log_path)?;
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -127,33 +118,74 @@ mod tests {
     use std::fs;
     use std::io::Write;
 
+    /// Helper function to create a test log file with specific content
+    fn create_test_log(path: &PathBuf, content: &str) {
+        let mut file = fs::File::create(path).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+    }
+
     #[test]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Test uses known small constant values that are well within u32 range"
-    )]
-    fn test_log_rotation() {
+    fn test_rotate_logs_on_startup_basic() {
         // Create a temporary directory for testing
-        let temp_dir = std::env::temp_dir().join("easyhdr_test_logs");
+        let temp_dir = std::env::temp_dir().join("easyhdr_test_basic_rotation");
         fs::create_dir_all(&temp_dir).unwrap();
 
         let log_path = temp_dir.join("app.log");
 
-        // Create a log file larger than MAX_LOG_SIZE
-        let mut file = fs::File::create(&log_path).unwrap();
-        let large_content = vec![b'x'; (MAX_LOG_SIZE + 1000) as usize];
-        file.write_all(&large_content).unwrap();
-        drop(file);
+        // Create initial log file
+        create_test_log(&log_path, "Session 1 log content");
 
         // Perform rotation
-        check_and_rotate_log(&log_path).unwrap();
+        rotate_logs_on_startup(&log_path).unwrap();
 
         // Verify that app.log was rotated to app.log.1
         let log_1 = temp_dir.join("app.log.1");
         assert!(log_1.exists(), "app.log.1 should exist after rotation");
         assert!(
-            !log_path.exists() || fs::metadata(&log_path).unwrap().len() == 0,
-            "app.log should be empty or not exist after rotation"
+            !log_path.exists(),
+            "app.log should not exist after rotation (will be created fresh by logger)"
+        );
+
+        // Verify content was preserved
+        let content = fs::read_to_string(&log_1).unwrap();
+        assert_eq!(content, "Session 1 log content");
+
+        // Clean up
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_rotate_logs_on_startup_multiple_rotations() {
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("easyhdr_test_multiple_rotations");
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let log_path = temp_dir.join("app.log");
+
+        // Simulate multiple application startups
+        for i in 1..=5 {
+            create_test_log(&log_path, &format!("Session {i} log content"));
+            rotate_logs_on_startup(&log_path).unwrap();
+        }
+
+        // Verify rotation chain
+        for i in 1..=5 {
+            let log_i = temp_dir.join(format!("app.log.{i}"));
+            assert!(log_i.exists(), "app.log.{i} should exist");
+
+            let content = fs::read_to_string(&log_i).unwrap();
+            let expected_session = 6 - i; // Most recent is in .1, oldest in .5
+            assert_eq!(
+                content,
+                format!("Session {expected_session} log content"),
+                "app.log.{i} should contain Session {expected_session}"
+            );
+        }
+
+        // app.log should not exist (gets created fresh by logger)
+        assert!(
+            !log_path.exists(),
+            "app.log should not exist after rotation"
         );
 
         // Clean up
@@ -161,36 +193,131 @@ mod tests {
     }
 
     #[test]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Test uses known small constant values that are well within u32 range"
-    )]
-    fn test_log_rotator() {
-        let temp_dir = std::env::temp_dir().join("easyhdr_test_rotator");
+    fn test_rotate_logs_on_startup_respects_max_files() {
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("easyhdr_test_max_files");
         fs::create_dir_all(&temp_dir).unwrap();
 
         let log_path = temp_dir.join("app.log");
-        let rotator = LogRotator::new(log_path.clone(), MAX_LOG_SIZE);
 
-        // Create a small log file
-        let mut file = fs::File::create(&log_path).unwrap();
-        file.write_all(b"small log").unwrap();
-        drop(file);
+        // Simulate more than MAX_LOG_FILES startups
+        for i in 1..=12 {
+            create_test_log(&log_path, &format!("Session {i} log content"));
+            rotate_logs_on_startup(&log_path).unwrap();
+        }
 
-        // Should not rotate
-        rotator.check_and_rotate().unwrap();
-        assert!(log_path.exists(), "app.log should still exist");
+        // Verify we only have MAX_LOG_FILES historical logs
+        for i in 1..=MAX_LOG_FILES {
+            let log_i = temp_dir.join(format!("app.log.{i}"));
+            assert!(
+                log_i.exists(),
+                "app.log.{i} should exist (within MAX_LOG_FILES)"
+            );
+        }
 
-        // Create a large log file
-        let mut file = fs::File::create(&log_path).unwrap();
-        let large_content = vec![b'x'; (MAX_LOG_SIZE + 1000) as usize];
-        file.write_all(&large_content).unwrap();
-        drop(file);
+        // Verify files beyond MAX_LOG_FILES don't exist
+        let log_10 = temp_dir.join("app.log.10");
+        let log_11 = temp_dir.join("app.log.11");
+        let log_12 = temp_dir.join("app.log.12");
+        assert!(
+            !log_10.exists(),
+            "app.log.10 should not exist (beyond MAX_LOG_FILES)"
+        );
+        assert!(
+            !log_11.exists(),
+            "app.log.11 should not exist (beyond MAX_LOG_FILES)"
+        );
+        assert!(
+            !log_12.exists(),
+            "app.log.12 should not exist (beyond MAX_LOG_FILES)"
+        );
 
-        // Should rotate
-        rotator.check_and_rotate().unwrap();
+        // Verify the oldest log (app.log.9) contains the 4th session
+        // (Sessions 1, 2, 3 were deleted, session 4 is now in app.log.9)
+        let log_9 = temp_dir.join("app.log.9");
+        let content = fs::read_to_string(&log_9).unwrap();
+        assert_eq!(
+            content, "Session 4 log content",
+            "app.log.9 should contain the 4th session (oldest retained)"
+        );
+
+        // Verify the most recent log (app.log.1) contains the 12th session
         let log_1 = temp_dir.join("app.log.1");
-        assert!(log_1.exists(), "app.log.1 should exist after rotation");
+        let content = fs::read_to_string(&log_1).unwrap();
+        assert_eq!(
+            content, "Session 12 log content",
+            "app.log.1 should contain the most recent session"
+        );
+
+        // Clean up
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_rotate_logs_on_startup_no_existing_log() {
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("easyhdr_test_no_existing_log");
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let log_path = temp_dir.join("app.log");
+
+        // Should not fail when log doesn't exist
+        let result = rotate_logs_on_startup(&log_path);
+        assert!(
+            result.is_ok(),
+            "Rotation should succeed when log doesn't exist"
+        );
+
+        // No files should be created
+        assert!(!log_path.exists(), "app.log should not exist");
+        let log_1 = temp_dir.join("app.log.1");
+        assert!(!log_1.exists(), "app.log.1 should not exist");
+
+        // Clean up
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_rotate_logs_on_startup_partial_history() {
+        // Create a temporary directory for testing
+        let temp_dir = std::env::temp_dir().join("easyhdr_test_partial_history");
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let log_path = temp_dir.join("app.log");
+
+        // Create current log and only a few historical logs (simulating partial history)
+        create_test_log(&log_path, "Current session");
+        create_test_log(&temp_dir.join("app.log.1"), "Previous session");
+        create_test_log(&temp_dir.join("app.log.5"), "Very old session");
+
+        // Perform rotation
+        rotate_logs_on_startup(&log_path).unwrap();
+
+        // Verify rotation worked with gaps
+        let log_1 = temp_dir.join("app.log.1");
+        let log_2 = temp_dir.join("app.log.2");
+        let log_6 = temp_dir.join("app.log.6");
+
+        assert!(
+            log_1.exists(),
+            "app.log.1 should exist (rotated from app.log)"
+        );
+        assert!(
+            log_2.exists(),
+            "app.log.2 should exist (rotated from app.log.1)"
+        );
+        assert!(
+            log_6.exists(),
+            "app.log.6 should exist (rotated from app.log.5)"
+        );
+
+        let content_1 = fs::read_to_string(&log_1).unwrap();
+        let content_2 = fs::read_to_string(&log_2).unwrap();
+        let content_6 = fs::read_to_string(&log_6).unwrap();
+
+        assert_eq!(content_1, "Current session");
+        assert_eq!(content_2, "Previous session");
+        assert_eq!(content_6, "Very old session");
 
         // Clean up
         fs::remove_dir_all(&temp_dir).unwrap();
