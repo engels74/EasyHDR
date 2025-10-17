@@ -149,7 +149,6 @@ impl ProcessMonitor {
     /// - If the Windows API contract changes (extremely unlikely for this stable API)
     /// - If a process terminates between snapshot creation and enumeration (handled gracefully)
     #[allow(unsafe_code)] // Windows FFI for process enumeration
-    #[allow(clippy::unused_self)] // self is used for consistency with trait pattern
     fn poll_processes(&mut self) -> Result<()> {
         #[cfg(windows)]
         {
@@ -830,7 +829,10 @@ mod tests {
 
             /// Property: Normalization removes .exe extension
             #[test]
-            #[allow(clippy::case_sensitive_file_extension_comparisons)] // Test specifically checks .exe extension
+            #[expect(
+                clippy::case_sensitive_file_extension_comparisons,
+                reason = "Test specifically validates .exe extension handling on Windows where extensions are case-insensitive"
+            )]
             fn normalization_removes_exe_extension(name in "[a-zA-Z0-9_-]+") {
                 let input = format!("{name}.exe");
                 let normalized = extract_filename_without_extension(&input);

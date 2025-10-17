@@ -35,7 +35,10 @@ const MIN_WINDOWS_BUILD: u32 = 19044;
 /// Performs complex initialization including logging, version detection, single-instance
 /// enforcement, HDR capability detection, and multi-threaded component startup.
 /// The length (102 lines) is justified by the sequential initialization requirements.
-#[allow(clippy::too_many_lines)] // Complex initialization sequence
+#[expect(
+    clippy::too_many_lines,
+    reason = "Complex initialization sequence requires sequential setup of logging, version detection, single-instance enforcement, HDR capability detection, and multi-threaded component startup"
+)]
 fn main() -> Result<()> {
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();

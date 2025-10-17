@@ -84,7 +84,10 @@ impl GuiController {
 
             main_window.set_settings_auto_start(config.preferences.auto_start);
             // Safe cast: monitoring_interval_ms is constrained to 500-2000ms range
-            #[allow(clippy::cast_possible_truncation)]
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "monitoring_interval_ms is constrained to 500-2000ms range by validation, well within i32 range"
+            )]
             {
                 main_window.set_settings_monitoring_interval_ms(
                     config.preferences.monitoring_interval_ms as i32,

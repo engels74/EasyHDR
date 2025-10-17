@@ -22,13 +22,19 @@ pub struct MemoryStats {
 
 impl MemoryStats {
     /// Get total memory in megabytes
-    #[allow(clippy::cast_precision_loss)] // Acceptable for display purposes
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "Conversion to f64 for display purposes; precision loss is acceptable for human-readable memory values"
+    )]
     pub fn total_mb(&self) -> f64 {
         self.total_memory as f64 / 1024.0 / 1024.0
     }
 
     /// Get icon cache memory in megabytes
-    #[allow(clippy::cast_precision_loss)] // Acceptable for display purposes
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "Conversion to f64 for display purposes; precision loss is acceptable for human-readable memory values"
+    )]
     pub fn icon_cache_mb(&self) -> f64 {
         self.icon_cache_memory as f64 / 1024.0 / 1024.0
     }
@@ -194,7 +200,10 @@ mod tests {
             monitor_memory: 2048, // 2 KB
         };
 
-        #[allow(clippy::float_cmp)] // Exact comparison is acceptable for test
+        #[expect(
+            clippy::float_cmp,
+            reason = "Test uses exact floating-point comparison with known deterministic values from integer division"
+        )]
         {
             assert_eq!(stats.total_mb(), 10.0);
             assert_eq!(stats.icon_cache_mb(), 5.0);

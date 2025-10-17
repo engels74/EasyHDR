@@ -128,7 +128,10 @@ mod tests {
     use std::io::Write;
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)] // Test uses known small constant
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test uses known small constant values that are well within u32 range"
+    )]
     fn test_log_rotation() {
         // Create a temporary directory for testing
         let temp_dir = std::env::temp_dir().join("easyhdr_test_logs");
@@ -158,7 +161,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)] // Test uses known small constant
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test uses known small constant values that are well within u32 range"
+    )]
     fn test_log_rotator() {
         let temp_dir = std::env::temp_dir().join("easyhdr_test_rotator");
         fs::create_dir_all(&temp_dir).unwrap();

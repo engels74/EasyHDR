@@ -141,7 +141,10 @@ pub struct DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
 
 impl DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
     /// Create a new structure to enable or disable advanced color
-    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
     pub fn new(adapter_id: LUID, target_id: u32, enable: bool) -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -275,7 +278,10 @@ pub struct DISPLAYCONFIG_SET_HDR_STATE {
 
 impl DISPLAYCONFIG_SET_HDR_STATE {
     /// Create a new structure to enable or disable HDR
-    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
     pub fn new(adapter_id: LUID, target_id: u32, enable: bool) -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -423,7 +429,10 @@ impl Default for DISPLAYCONFIG_MODE_INFO {
     }
 }
 
-#[allow(clippy::missing_fields_in_debug)] // Union field cannot be safely accessed
+#[expect(
+    clippy::missing_fields_in_debug,
+    reason = "DISPLAYCONFIG_MODE_INFO contains a union field that cannot be safely accessed without knowing the infoType discriminant"
+)]
 impl std::fmt::Debug for DISPLAYCONFIG_MODE_INFO {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DISPLAYCONFIG_MODE_INFO")
@@ -593,7 +602,10 @@ pub unsafe fn DisplayConfigSetDeviceInfo(
 
 /// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
-    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
     fn default() -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -611,7 +623,10 @@ impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
 
 /// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-    #[allow(clippy::cast_possible_truncation)] // Structure size is compile-time constant < u32::MAX
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
     fn default() -> Self {
         Self {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
@@ -734,7 +749,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)] // Test uses compile-time constant
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test uses compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
     fn test_displayconfig_set_advanced_color_state_new() {
         let luid = LUID {
             LowPart: 0x1234,
@@ -763,7 +781,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)] // Test uses compile-time constant
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test uses compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
     fn test_displayconfig_set_hdr_state_new() {
         let luid = LUID {
             LowPart: 0xABCD,

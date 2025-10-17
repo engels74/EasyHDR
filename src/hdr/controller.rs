@@ -156,7 +156,10 @@ impl HdrController {
     /// - If buffer sizes change between `GetDisplayConfigBufferSizes` and `QueryDisplayConfig`
     ///   (handled by checking return codes)
     #[allow(unsafe_code)] // Windows FFI for display enumeration
-    #[allow(clippy::too_many_lines)] // Complex Windows API interaction requires many lines
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Windows Display Configuration API requires extensive sequential calls for display enumeration, path/mode buffer management, and HDR capability detection across multiple Windows versions"
+    )]
     pub fn enumerate_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         #[cfg(windows)]
         {
