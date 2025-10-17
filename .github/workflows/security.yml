@@ -1,3 +1,4 @@
+---
 name: Security Audit
 
 on:
@@ -38,3 +39,19 @@ jobs:
 
       - name: Run cargo-deny
         run: cargo deny check
+
+  cargo-geiger:
+    name: Cargo Geiger (Unsafe Code Check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-geiger
+        run: cargo install --locked cargo-geiger
+
+      - name: Run cargo-geiger
+        run: cargo geiger --all-features

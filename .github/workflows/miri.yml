@@ -1,0 +1,45 @@
+---
+name: Miri
+
+"on":
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  miri:
+    name: Miri Undefined Behavior Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust nightly with Miri
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          components: miri
+          cache: true
+
+      - name: Run Miri on library tests
+        run: cargo miri test --lib -- --test-threads=1
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        continue-on-error: true
+        # Note: continue-on-error is set because Windows FFI calls
+        # will not work under Miri on Linux. This still validates
+        # pure Rust code and catches UB in portable sections.
+
+      - name: Run Miri with strict checking
+        run: cargo miri test --lib -- --test-threads=1
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check
+        continue-on-error: true
+        # Strict mode catches additional provenance and alignment issues
