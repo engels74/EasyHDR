@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 # GUI
-slint = "1.13"
+slint = { version = "1.13", features = ["unstable-winit-030"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
