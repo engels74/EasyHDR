@@ -439,10 +439,12 @@ unsafe extern "system" fn window_proc(
         WM_DESTROY => {
             debug!("Received WM_DESTROY message");
             stop_periodic_rechecks(hwnd);
-            PostQuitMessage(0);
+            unsafe {
+                PostQuitMessage(0);
+            }
             LRESULT(0)
         }
-        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
     }
 }
 

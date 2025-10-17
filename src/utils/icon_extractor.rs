@@ -107,7 +107,7 @@ fn extract_icon_from_exe_windows(path: &Path) -> Result<Vec<u8>> {
                 path
             );
             // Fallback to SHGetFileInfoW
-            return extract_icon_using_shgetfileinfo(&wide_path);
+            return Ok(extract_icon_using_shgetfileinfo(&wide_path));
         }
     }
 
