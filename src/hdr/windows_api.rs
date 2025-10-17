@@ -518,7 +518,7 @@ pub struct DISPLAYCONFIG_PATH_INFO {
 #[cfg(windows)]
 #[allow(unsafe_code)]
 unsafe extern "system" {
-    /// Gets the size of the buffers needed for QueryDisplayConfig
+    /// Gets the size of the buffers needed for `QueryDisplayConfig`
     pub fn GetDisplayConfigBufferSizes(
         flags: u32,
         numPathArrayElements: *mut u32,

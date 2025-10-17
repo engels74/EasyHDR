@@ -104,7 +104,7 @@ impl WindowsVersion {
         }
     }
 
-    /// Detect Windows version using RtlGetVersion from ntdll.dll
+    /// Detect Windows version using `RtlGetVersion` from ntdll.dll
     ///
     /// This is the most reliable method as it's not subject to compatibility shims.
     #[cfg(windows)]
@@ -113,12 +113,15 @@ impl WindowsVersion {
         Ok(Self::parse_build_number(build_number))
     }
 
-    /// Get Windows build number using RtlGetVersion from ntdll.dll
+    /// Get Windows build number using `RtlGetVersion` from ntdll.dll
     ///
     /// This is the most reliable method as it's not subject to compatibility shims.
     #[cfg(windows)]
     #[allow(unsafe_code)] // Windows FFI for version detection
     fn get_build_number_with_rtl_get_version() -> crate::error::Result<u32> {
+        // Define the function signature for RtlGetVersion
+        type RtlGetVersionFn = unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32;
+
         use std::mem::transmute;
 
         unsafe {
@@ -136,23 +139,24 @@ impl WindowsVersion {
                 ));
             }
 
-            // Define the function signature for RtlGetVersion
-            type RtlGetVersionFn = unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32;
             let rtl_get_version: RtlGetVersionFn = transmute(rtl_get_version_ptr);
 
             // Prepare version info structure
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "size_of::<OSVERSIONINFOEXW>() is a compile-time constant (284 bytes) that fits in u32"
+            )]
             let mut version_info = OSVERSIONINFOEXW {
                 dwOSVersionInfoSize: size_of::<OSVERSIONINFOEXW>() as u32,
                 ..Default::default()
             };
 
             // Call RtlGetVersion
-            let status = rtl_get_version(&mut version_info);
+            let status = rtl_get_version(&raw mut version_info);
 
             if status != 0 {
                 return Err(crate::error::EasyHdrError::HdrControlFailed(format!(
-                    "RtlGetVersion failed with status: {}",
-                    status
+                    "RtlGetVersion failed with status: {status}",
                 )));
             }
 
@@ -160,7 +164,7 @@ impl WindowsVersion {
         }
     }
 
-    /// Detect Windows version using GetVersionExW (fallback method)
+    /// Detect Windows version using `GetVersionExW` (fallback method)
     ///
     /// This method may be affected by compatibility shims but serves as a fallback.
     #[cfg(windows)]
@@ -169,20 +173,24 @@ impl WindowsVersion {
         Ok(Self::parse_build_number(build_number))
     }
 
-    /// Get Windows build number using GetVersionExW (fallback method)
+    /// Get Windows build number using `GetVersionExW` (fallback method)
     ///
     /// This method may be affected by compatibility shims but serves as a fallback.
     #[cfg(windows)]
     #[allow(unsafe_code)] // Windows FFI for version detection fallback
     fn get_build_number_with_get_version_ex() -> crate::error::Result<u32> {
         unsafe {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "size_of::<OSVERSIONINFOEXW>() is a compile-time constant (284 bytes) that fits in u32"
+            )]
             let mut version_info = OSVERSIONINFOEXW {
                 dwOSVersionInfoSize: size_of::<OSVERSIONINFOEXW>() as u32,
                 ..Default::default()
             };
 
             // Call GetVersionExW
-            let result = GetVersionExW(&mut version_info as *mut _ as *mut _);
+            let result = GetVersionExW(std::ptr::addr_of_mut!(version_info).cast());
 
             if result.is_ok() {
                 Ok(version_info.dwBuildNumber)

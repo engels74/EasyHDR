@@ -280,7 +280,7 @@ impl HdrStateMonitor {
                 ..Default::default()
             };
 
-            let atom = RegisterClassW(&wnd_class);
+            let atom = RegisterClassW(&raw const wnd_class);
             if atom == 0 {
                 return Err(crate::error::EasyHdrError::WindowsApiError(
                     windows::core::Error::from_thread(),
@@ -322,8 +322,8 @@ impl HdrStateMonitor {
 
             // Enter message loop
             let mut msg = MSG::default();
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                DispatchMessageW(&msg);
+            while GetMessageW(&raw mut msg, None, 0, 0).as_bool() {
+                DispatchMessageW(&raw const msg);
             }
 
             // Cleanup
@@ -352,7 +352,7 @@ thread_local! {
 
 /// Window procedure for the hidden window
 ///
-/// Handles WM_DISPLAYCHANGE and WM_SETTINGCHANGE messages to detect display configuration changes.
+/// Handles `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE` messages to detect display configuration changes.
 ///
 /// # HDR State Detection Strategy
 ///
@@ -364,7 +364,7 @@ thread_local! {
 /// 3. **Maximum duration**: Up to 10 rechecks (5 seconds total) to handle slow drivers
 /// 4. **Early termination**: Stop rechecking once state change is detected
 ///
-/// This approach is based on HDRTray's proven strategy and handles various driver update latencies.
+/// This approach is based on `HDRTray`'s proven strategy and handles various driver update latencies.
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI callback
 unsafe extern "system" fn window_proc(
@@ -378,16 +378,16 @@ unsafe extern "system" fn window_proc(
             debug!("Received WM_DISPLAYCHANGE message");
 
             // Try immediate check
-            if !check_hdr_state_change() {
+            if check_hdr_state_change() {
+                // State changed immediately - cancel any pending rechecks
+                stop_periodic_rechecks(hwnd);
+            } else {
                 // State didn't change - start periodic rechecks
                 debug!(
                     "HDR state unchanged on WM_DISPLAYCHANGE, starting periodic rechecks ({}ms interval, max {} rechecks)",
                     RECHECK_INTERVAL_MS, MAX_RECHECK_COUNT
                 );
                 start_periodic_rechecks(hwnd);
-            } else {
-                // State changed immediately - cancel any pending rechecks
-                stop_periodic_rechecks(hwnd);
             }
             LRESULT(0)
         }
@@ -395,16 +395,16 @@ unsafe extern "system" fn window_proc(
             debug!("Received WM_SETTINGCHANGE message");
 
             // Try immediate check
-            if !check_hdr_state_change() {
+            if check_hdr_state_change() {
+                // State changed immediately - cancel any pending rechecks
+                stop_periodic_rechecks(hwnd);
+            } else {
                 // State didn't change - start periodic rechecks
                 debug!(
                     "HDR state unchanged on WM_SETTINGCHANGE, starting periodic rechecks ({}ms interval, max {} rechecks)",
                     RECHECK_INTERVAL_MS, MAX_RECHECK_COUNT
                 );
                 start_periodic_rechecks(hwnd);
-            } else {
-                // State changed immediately - cancel any pending rechecks
-                stop_periodic_rechecks(hwnd);
             }
             LRESULT(0)
         }
@@ -505,7 +505,10 @@ fn check_hdr_state_change() -> bool {
 
             // Compare with cached state
             let mut cached_state = state.cached_hdr_state.lock();
-            if current_state != *cached_state {
+            if current_state == *cached_state {
+                debug!("HDR state unchanged: {}", current_state);
+                false // State unchanged
+            } else {
                 info!(
                     "HDR state changed: {} -> {}",
                     if *cached_state { "ON" } else { "OFF" },
@@ -529,9 +532,6 @@ fn check_hdr_state_change() -> bool {
                 }
 
                 true // State changed
-            } else {
-                debug!("HDR state unchanged: {}", current_state);
-                false // State unchanged
             }
         } else {
             false // No state available

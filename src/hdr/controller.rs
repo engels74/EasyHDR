@@ -156,10 +156,6 @@ impl HdrController {
     /// - If buffer sizes change between `GetDisplayConfigBufferSizes` and `QueryDisplayConfig`
     ///   (handled by checking return codes)
     #[allow(unsafe_code)] // Windows FFI for display enumeration
-    #[expect(
-        clippy::too_many_lines,
-        reason = "Windows Display Configuration API requires extensive sequential calls for display enumeration, path/mode buffer management, and HDR capability detection across multiple Windows versions"
-    )]
     pub fn enumerate_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         #[cfg(windows)]
         {
@@ -433,9 +429,14 @@ impl HdrController {
     /// Check HDR support using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
     #[allow(unsafe_code)] // Windows FFI for legacy HDR capability detection
+    #[expect(
+        clippy::unused_self,
+        reason = "Method signature matches trait-like pattern for consistency with other HDR detection methods"
+    )]
     fn is_hdr_supported_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
+        #[expect(clippy::cast_possible_truncation, reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32")]
         let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
@@ -449,19 +450,18 @@ impl HdrController {
         };
 
         unsafe {
-            let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+            let result =
+                DisplayConfigGetDeviceInfo(std::ptr::addr_of_mut!(color_info.header).cast());
             debug!(
-                "DisplayConfigGetDeviceInfo (GET_ADVANCED_COLOR_INFO) returned: result={}",
-                result
+                "DisplayConfigGetDeviceInfo (GET_ADVANCED_COLOR_INFO) returned: result={result}",
             );
             if result != 0 {
                 error!(
-                    "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info) failed for adapter {:?}, target {}: error code {}",
-                    target.adapter_id, target.target_id, result
+                    "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info) failed for adapter {:?}, target {}: error code {result}",
+                    target.adapter_id, target.target_id
                 );
                 return Err(EasyHdrError::HdrControlFailed(format!(
-                    "Failed to get advanced color info (legacy): error code {}",
-                    result
+                    "Failed to get advanced color info (legacy): error code {result}",
                 )));
             }
         }
@@ -518,6 +518,7 @@ impl HdrController {
             match self.windows_version {
                 WindowsVersion::Windows11_24H2 => {
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
+                    #[expect(clippy::cast_possible_truncation, reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant (48 bytes) that fits in u32")]
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                             type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
@@ -532,13 +533,14 @@ impl HdrController {
                     };
 
                     unsafe {
-                        let result =
-                            DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+                        let result = DisplayConfigGetDeviceInfo(
+                            std::ptr::addr_of_mut!(color_info.header).cast(),
+                        );
                         if result != 0 {
                             use tracing::warn;
                             warn!(
-                                "Windows API - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: error code {}. Falling back to legacy API.",
-                                target.adapter_id, target.target_id, result
+                                "Windows API - DisplayConfigGetDeviceInfo (advanced color info 2 for HDR enabled check) failed for adapter {:?}, target {}: error code {result}. Falling back to legacy API.",
+                                target.adapter_id, target.target_id
                             );
 
                             // Fallback to the older API for compatibility
@@ -578,9 +580,14 @@ impl HdrController {
     /// Check HDR enabled state using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
     #[allow(unsafe_code)] // Windows FFI for legacy HDR state detection
+    #[expect(
+        clippy::unused_self,
+        reason = "Method signature matches trait-like pattern for consistency with other HDR detection methods"
+    )]
     fn is_hdr_enabled_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
+        #[expect(clippy::cast_possible_truncation, reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32")]
         let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
@@ -594,15 +601,15 @@ impl HdrController {
         };
 
         unsafe {
-            let result = DisplayConfigGetDeviceInfo(&mut color_info.header as *mut _ as *mut _);
+            let result =
+                DisplayConfigGetDeviceInfo(std::ptr::addr_of_mut!(color_info.header).cast());
             if result != 0 {
                 error!(
-                    "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info for HDR enabled check) failed for adapter {:?}, target {}: error code {}",
-                    target.adapter_id, target.target_id, result
+                    "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info for HDR enabled check) failed for adapter {:?}, target {}: error code {result}",
+                    target.adapter_id, target.target_id
                 );
                 return Err(EasyHdrError::HdrControlFailed(format!(
-                    "Failed to get advanced color info (legacy): error code {}",
-                    result
+                    "Failed to get advanced color info (legacy): error code {result}",
                 )));
             }
         }
@@ -684,16 +691,16 @@ impl HdrController {
                     );
 
                     unsafe {
-                        let result =
-                            DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _);
+                        let result = DisplayConfigSetDeviceInfo(
+                            std::ptr::addr_of_mut!(set_state.header).cast(),
+                        );
                         if result != 0 {
                             error!(
-                                "Windows API error - DisplayConfigSetDeviceInfo (set HDR state 24H2+) failed for adapter {:?}, target {}: error code {}",
-                                target.adapter_id, target.target_id, result
+                                "Windows API error - DisplayConfigSetDeviceInfo (set HDR state 24H2+) failed for adapter {:?}, target {}: error code {result}",
+                                target.adapter_id, target.target_id
                             );
                             return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to set HDR state (24H2+): error code {}",
-                                result
+                                "Failed to set HDR state (24H2+): error code {result}",
                             )));
                         }
                     }
@@ -728,16 +735,16 @@ impl HdrController {
                     );
 
                     unsafe {
-                        let result =
-                            DisplayConfigSetDeviceInfo(&mut set_state.header as *mut _ as *mut _);
+                        let result = DisplayConfigSetDeviceInfo(
+                            std::ptr::addr_of_mut!(set_state.header).cast(),
+                        );
                         if result != 0 {
                             error!(
-                                "Windows API error - DisplayConfigSetDeviceInfo (set advanced color state) failed for adapter {:?}, target {}: error code {}",
-                                target.adapter_id, target.target_id, result
+                                "Windows API error - DisplayConfigSetDeviceInfo (set advanced color state) failed for adapter {:?}, target {}: error code {result}",
+                                target.adapter_id, target.target_id
                             );
                             return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to set advanced color state: error code {}",
-                                result
+                                "Failed to set advanced color state: error code {result}",
                             )));
                         }
                     }
