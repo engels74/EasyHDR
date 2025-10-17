@@ -227,13 +227,25 @@ fn extract_icon_using_shgetfileinfo(wide_path: &[u16]) -> Result<Vec<u8>> {
 /// - BITMAPINFO structure must have correct size and format fields
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI for icon conversion
+/// Convert Windows icon to RGBA bytes
+///
+/// # Safety
+/// This function uses Windows FFI to extract icon bitmap data.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "size_of::<BITMAP>() is a compile-time constant (32 bytes) well within i32::MAX"
+)]
+#[expect(
+    clippy::cast_sign_loss,
+    reason = "bmWidth and bmHeight are guaranteed non-negative by Windows API contract"
+)]
 fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
     use std::mem::zeroed;
 
     unsafe {
         // Get icon information
         let mut icon_info: ICONINFO = zeroed();
-        if GetIconInfo(hicon, &mut icon_info).is_err() {
+        if GetIconInfo(hicon, &raw mut icon_info).is_err() {
             return Err(EasyHdrError::WindowsApiError(
                 windows::core::Error::from_thread(),
             ));
@@ -248,7 +260,7 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
         if GetObjectW(
             color_bitmap.into(),
             std::mem::size_of::<BITMAP>() as i32,
-            Some(&mut bitmap as *mut BITMAP as *mut _),
+            Some((&raw mut bitmap).cast()),
         ) == 0
         {
             let _ = DeleteObject(color_bitmap.into());
@@ -292,8 +304,8 @@ fn hicon_to_rgba_bytes(hicon: HICON) -> Result<Vec<u8>> {
             color_bitmap,
             0,
             height as u32,
-            Some(buffer.as_mut_ptr() as *mut _),
-            &mut bmi,
+            Some(buffer.as_mut_ptr().cast()),
+            &raw mut bmi,
             DIB_RGB_COLORS,
         );
 
@@ -386,7 +398,7 @@ fn create_default_icon() -> Vec<u8> {
 pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
     #[cfg(windows)]
     {
-        extract_display_name_windows(path)
+        Ok(extract_display_name_windows(path))
     }
 
     #[cfg(not(windows))]
@@ -403,7 +415,11 @@ pub fn extract_display_name_from_exe(path: &Path) -> Result<String> {
 /// Windows-specific display name extraction
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI for version info extraction
-fn extract_display_name_windows(path: &Path) -> Result<String> {
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "value_len from VerQueryValueW is guaranteed to be small (string length), well within usize range"
+)]
+fn extract_display_name_windows(path: &Path) -> String {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Storage::FileSystem::{
         GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW,
@@ -421,11 +437,11 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
     unsafe {
         // Get the size of version info
         let mut handle: u32 = 0;
-        let size = GetFileVersionInfoSizeW(PCWSTR(wide_path.as_ptr()), Some(&mut handle));
+        let size = GetFileVersionInfoSizeW(PCWSTR(wide_path.as_ptr()), Some(&raw mut handle));
 
         if size == 0 {
             debug!("No version info available, using filename");
-            return Ok(get_filename_fallback(path));
+            return get_filename_fallback(path);
         }
 
         // Allocate buffer for version info
@@ -436,12 +452,12 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
             PCWSTR(wide_path.as_ptr()),
             Some(handle),
             size,
-            buffer.as_mut_ptr() as *mut _,
+            buffer.as_mut_ptr().cast(),
         )
         .is_err()
         {
             debug!("GetFileVersionInfoW failed, using filename");
-            return Ok(get_filename_fallback(path));
+            return get_filename_fallback(path);
         }
 
         // Query for FileDescription
@@ -458,10 +474,10 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
             let mut value_len: u32 = 0;
 
             if VerQueryValueW(
-                buffer.as_ptr() as *const _,
+                buffer.as_ptr().cast(),
                 PCWSTR(query_wide.as_ptr()),
-                &mut value_ptr as *mut *mut u16 as *mut *mut _,
-                &mut value_len,
+                (&raw mut value_ptr).cast::<*mut _>(),
+                &raw mut value_len,
             )
             .as_bool()
                 && !value_ptr.is_null()
@@ -479,7 +495,7 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
                 if let Ok(description) = String::from_utf16(&description_slice[..len]) {
                     if !description.is_empty() {
                         debug!("Extracted display name: {}", description);
-                        return Ok(description);
+                        return description;
                     }
                 }
             }
@@ -487,7 +503,7 @@ fn extract_display_name_windows(path: &Path) -> Result<String> {
 
         // Fallback to filename if no description found
         debug!("No FileDescription found, using filename");
-        Ok(get_filename_fallback(path))
+        get_filename_fallback(path)
     }
 }
 

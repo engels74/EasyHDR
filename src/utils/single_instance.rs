@@ -32,21 +32,19 @@ impl SingleInstanceGuard {
         unsafe {
             // First, try to open an existing mutex
             // If this succeeds, another instance is already running
-            match OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, false, &mutex_name) {
-                Ok(existing_handle) => {
-                    // Mutex already exists - another instance is running
-                    error!("Another instance of EasyHDR is already running");
-                    let _ = CloseHandle(existing_handle);
-                    Err(EasyHdrError::ConfigError(
-                        "Another instance of EasyHDR is already running".to_string(),
-                    ))
-                }
-                Err(_) => {
-                    // Mutex doesn't exist, create it
-                    let mutex_handle = CreateMutexW(None, true, &mutex_name)?;
-                    debug!("Single instance mutex created successfully");
-                    Ok(Self { mutex_handle })
-                }
+            if let Ok(existing_handle) = OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, false, &mutex_name)
+            {
+                // Mutex already exists - another instance is running
+                error!("Another instance of EasyHDR is already running");
+                let _ = CloseHandle(existing_handle);
+                Err(EasyHdrError::ConfigError(
+                    "Another instance of EasyHDR is already running".to_string(),
+                ))
+            } else {
+                // Mutex doesn't exist, create it
+                let mutex_handle = CreateMutexW(None, true, &mutex_name)?;
+                debug!("Single instance mutex created successfully");
+                Ok(Self { mutex_handle })
             }
         }
     }

@@ -127,6 +127,10 @@ impl MemoryProfiler {
         };
         use windows::Win32::System::Threading::GetCurrentProcess;
 
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "size_of::<PROCESS_MEMORY_COUNTERS>() is a compile-time constant (72 bytes) well within u32::MAX"
+        )]
         unsafe {
             let process = GetCurrentProcess();
             let mut pmc = PROCESS_MEMORY_COUNTERS {
@@ -134,8 +138,8 @@ impl MemoryProfiler {
                 ..Default::default()
             };
 
-            match GetProcessMemoryInfo(process, &mut pmc, pmc.cb) {
-                Ok(_) => pmc.WorkingSetSize,
+            match GetProcessMemoryInfo(process, &raw mut pmc, pmc.cb) {
+                Ok(()) => pmc.WorkingSetSize,
                 Err(e) => {
                     tracing::warn!("Failed to get process memory info: {}", e);
                     0
