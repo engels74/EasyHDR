@@ -42,6 +42,7 @@ tracing-appender = "0.2"
 
 # Concurrency
 parking_lot = "0.12"
+smallvec = { version = "1.15.1", features = ["union"] }
 
 # Windows-specific dependencies
 [target.'cfg(windows)'.dependencies]

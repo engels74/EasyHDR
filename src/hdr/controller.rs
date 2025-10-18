@@ -6,6 +6,7 @@
 use crate::error::Result;
 use crate::hdr::WindowsVersion;
 use crate::hdr::windows_api::LUID;
+use smallvec::SmallVec;
 use tracing::{debug, info, warn};
 
 #[cfg(windows)]
@@ -40,7 +41,11 @@ pub struct HdrController {
     #[cfg_attr(not(windows), allow(dead_code))]
     windows_version: WindowsVersion,
     /// Cached display targets
-    display_cache: Vec<DisplayTarget>,
+    ///
+    /// Uses `SmallVec` with inline capacity of 4 to avoid heap allocation for typical
+    /// 1-4 display setups. Most users have 1-2 monitors; 4 covers dual 4K + laptop screen
+    /// scenarios while keeping the common case stack-allocated for better cache locality.
+    display_cache: SmallVec<[DisplayTarget; 4]>,
 }
 
 impl HdrController {
@@ -49,7 +54,7 @@ impl HdrController {
         let windows_version = WindowsVersion::detect()?;
         let mut controller = Self {
             windows_version,
-            display_cache: Vec::new(),
+            display_cache: SmallVec::new(),
         };
 
         // Enumerate displays on creation
@@ -136,6 +141,10 @@ impl HdrController {
         windows,
         expect(unsafe_code, reason = "Windows FFI for display enumeration")
     )]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Display enumeration requires multiple Windows API calls with validation"
+    )]
     pub fn enumerate_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         #[cfg(windows)]
         {
@@ -200,7 +209,9 @@ impl HdrController {
             );
 
             // Step 4: Extract display targets from paths and detect HDR support
+            // Pre-allocate with known capacity from path_count
             self.display_cache.clear();
+            self.display_cache.reserve(path_count as usize);
 
             for (index, path) in paths.iter().enumerate() {
                 debug!(
@@ -249,14 +260,14 @@ impl HdrController {
                 self.display_cache.iter().filter(|d| d.supports_hdr).count()
             );
 
-            Ok(self.display_cache.clone())
+            Ok(self.display_cache.to_vec())
         }
 
         #[cfg(not(windows))]
         {
             // For non-Windows platforms (testing), return empty list
             self.display_cache.clear();
-            Ok(self.display_cache.clone())
+            Ok(self.display_cache.to_vec())
         }
     }
 
@@ -767,7 +778,8 @@ impl HdrController {
             self.display_cache.len()
         );
 
-        let mut results = Vec::new();
+        // Pre-allocate with exact capacity since we know the maximum size
+        let mut results = Vec::with_capacity(self.display_cache.len());
 
         for target in &self.display_cache {
             // Only attempt to set HDR on displays that support it

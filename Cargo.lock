@@ -1477,6 +1477,7 @@ dependencies = [
  "serde_json",
  "slint",
  "slint-build",
+ "smallvec",
  "tauri-winrt-notification",
  "tempfile",
  "thiserror 2.0.17",

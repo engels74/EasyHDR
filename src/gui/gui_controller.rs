@@ -249,7 +249,8 @@ impl GuiController {
 
             let mut success_count = 0;
             let mut error_count = 0;
-            let mut error_messages = Vec::new();
+            // Pre-allocate with exact capacity since we know the maximum number of errors
+            let mut error_messages = Vec::with_capacity(file_count);
 
             // Process each selected file
             for path in paths {
