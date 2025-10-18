@@ -1,8 +1,4 @@
 // Main window UI definition for EasyHDR
-// Implements task 9.1: Create main window UI definition
-// Implements task 9.4: Theme support with Palette and StyleMetrics
-// Implements task 12.1: Settings dialog/panel component
-// Requirements: 5.1, 5.2, 5.3, 5.4, 5.8, 5.9, 5.13, 6.1, 6.2, 6.3, 6.4
 // Enhanced with modern, elegant visual design
 
 import { Button, ListView, CheckBox, Palette, StyleMetrics, Slider } from "std-widgets.slint";
@@ -146,7 +142,7 @@ component StyledCheckBox inherits HorizontalLayout {
     }
 }
 
-// Settings dialog content component (Task 12.1, Requirements 6.1-6.4)
+// Settings dialog content component
 // Provides UI for configuring user preferences with modern, elegant styling
 component SettingsDialogContent inherits Rectangle {
     // Properties for settings values
@@ -199,7 +195,7 @@ component SettingsDialogContent inherits Rectangle {
                 VerticalLayout {
                     spacing: DesignTokens.space-md;
 
-                    // Auto-start setting (Requirement 6.1)
+                    // Auto-start setting
                     StyledCheckBox {
                         text: "Auto-start on Windows login";
                         checked <=> auto-start;
@@ -238,7 +234,7 @@ component SettingsDialogContent inherits Rectangle {
                     color: DesignTokens.text-primary;
                 }
 
-                // Monitoring interval setting (Requirement 6.2)
+                // Monitoring interval setting
                 VerticalLayout {
                     spacing: DesignTokens.space-sm;
                     Text {
@@ -296,7 +292,7 @@ component SettingsDialogContent inherits Rectangle {
                     color: DesignTokens.text-primary;
                 }
 
-                // Tray notifications setting (Requirement 6.4)
+                // Tray notifications setting
                 StyledCheckBox {
                     text: "Show tray notifications on HDR changes";
                     checked <=> show-tray-notifications;
@@ -650,7 +646,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    // Settings dialog popup (Task 12.1, Requirements 6.1-6.4)
+    // Settings dialog popup
     settings-dialog := PopupWindow {
         x: (parent.width - 500px) / 2;
         y: (parent.height - 400px) / 2;

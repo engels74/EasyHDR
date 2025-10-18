@@ -3,16 +3,16 @@
 //! This test module provides comprehensive integration testing for the entire application,
 //! verifying that all components work together correctly.
 //!
-//! # Requirements Coverage
+//! # Coverage
 //!
 //! These tests verify:
-//! - Requirement 1: Application Configuration Management
-//! - Requirement 2: Process Monitoring
-//! - Requirement 3: HDR Display Control
-//! - Requirement 4: Automatic HDR Activation Logic
-//! - Requirement 7: Error Handling and User Feedback
-//! - Requirement 8: Logging and Diagnostics
-//! - Requirement 9: Performance and Resource Efficiency
+//! - Application Configuration Management
+//! - Process Monitoring
+//! - HDR Display Control
+//! - Automatic HDR Activation Logic
+//! - Error Handling and User Feedback
+//! - Logging and Diagnostics
+//! - Performance and Resource Efficiency
 //!
 //! # Test Scenarios
 //!
