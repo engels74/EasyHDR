@@ -120,6 +120,29 @@ component StyledButton inherits Rectangle {
     }
 }
 
+// Custom styled checkbox component with guaranteed text contrast
+component StyledCheckBox inherits HorizontalLayout {
+    in property <string> text;
+    in-out property <bool> checked: false;
+    callback toggled;
+
+    spacing: DesignTokens.space-md;
+
+    CheckBox {
+        checked <=> root.checked;
+        toggled => {
+            root.toggled();
+        }
+    }
+
+    Text {
+        text: root.text;
+        color: DesignTokens.text-primary;
+        font-size: DesignTokens.font-size-base;
+        vertical-alignment: center;
+    }
+}
+
 // Settings dialog content component (Task 12.1, Requirements 6.1-6.4)
 // Provides UI for configuring user preferences with modern, elegant styling
 component SettingsDialogContent inherits Rectangle {
@@ -156,12 +179,9 @@ component SettingsDialogContent inherits Rectangle {
             }
 
             // Auto-start setting (Requirement 6.1)
-            HorizontalLayout {
-                spacing: DesignTokens.space-md;
-                CheckBox {
-                    text: "Auto-start on Windows login";
-                    checked <=> auto-start;
-                }
+            StyledCheckBox {
+                text: "Auto-start on Windows login";
+                checked <=> auto-start;
             }
 
             // Monitoring interval setting (Requirement 6.2)
@@ -200,30 +220,21 @@ component SettingsDialogContent inherits Rectangle {
             }
 
             // Tray notifications setting (Requirement 6.4)
-            HorizontalLayout {
-                spacing: DesignTokens.space-md;
-                CheckBox {
-                    text: "Show tray notifications on HDR changes";
-                    checked <=> show-tray-notifications;
-                }
+            StyledCheckBox {
+                text: "Show tray notifications on HDR changes";
+                checked <=> show-tray-notifications;
             }
 
             // Minimize button behavior setting
-            HorizontalLayout {
-                spacing: DesignTokens.space-md;
-                CheckBox {
-                    text: "Minimize to tray (instead of taskbar)";
-                    checked <=> minimize-to-tray-on-minimize;
-                }
+            StyledCheckBox {
+                text: "Minimize to tray (instead of taskbar)";
+                checked <=> minimize-to-tray-on-minimize;
             }
 
             // Close button behavior setting
-            HorizontalLayout {
-                spacing: DesignTokens.space-md;
-                CheckBox {
-                    text: "Close to tray (instead of exiting)";
-                    checked <=> minimize-to-tray-on-close;
-                }
+            StyledCheckBox {
+                text: "Close to tray (instead of exiting)";
+                checked <=> minimize-to-tray-on-close;
             }
 
             // Spacer to push buttons to bottom
