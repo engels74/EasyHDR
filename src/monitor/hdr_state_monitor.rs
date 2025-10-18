@@ -290,7 +290,7 @@ thread_local! {
 ///
 /// Handles `WM_DISPLAYCHANGE`/`WM_SETTINGCHANGE`. Immediate check, then periodic rechecks
 /// (500ms × 10 max) if state unchanged. Handles race condition where Windows messages
-/// arrive before DisplayConfig APIs reflect state change.
+/// arrive before `DisplayConfig` APIs reflect state change.
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI callback
 unsafe extern "system" fn window_proc(
