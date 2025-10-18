@@ -19,8 +19,13 @@ fn main() {
     {
         let mut res = winres::WindowsResource::new();
         res.set_icon("assets/icon.ico");
-        res.set("ProductName", "EasyHDR");
-        res.set("FileDescription", "Automatic HDR for Windows");
+        // ProductName: Full descriptive name shown in file properties
+        res.set(
+            "ProductName",
+            "EasyHDR - Automatic HDR management for Windows",
+        );
+        // FileDescription: Brief name shown in Windows Task Manager
+        res.set("FileDescription", "EasyHDR");
         res.set("CompanyName", "EasyHDR Contributors");
         res.set("LegalCopyright", "Copyright © 2024 EasyHDR Contributors");
         res.set("OriginalFilename", "easyhdr.exe");
