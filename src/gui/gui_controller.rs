@@ -195,11 +195,8 @@ impl GuiController {
                 use slint::winit_030::WinitWindowAccessor;
 
                 main_window.window().with_winit_window(|winit_window| {
-                    if let Err(e) = winit_window.set_window_icon(Some(icon)) {
-                        warn!("Failed to set window icon: {}", e);
-                    } else {
-                        info!("Window icon set successfully");
-                    }
+                    winit_window.set_window_icon(Some(icon));
+                    info!("Window icon set successfully");
                 });
             }
             Err(e) => {
@@ -227,7 +224,7 @@ impl GuiController {
 
         // Create winit Icon from RGBA data
         slint::winit_030::winit::window::Icon::from_rgba(rgba.to_vec(), width, height)
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to create icon: {e}")).into())
+            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to create icon: {e}")))
     }
 
     /// Show file picker dialog for adding applications
