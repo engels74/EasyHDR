@@ -19,6 +19,20 @@
 #[cfg(windows)]
 pub use windows::Win32::Foundation::LUID;
 
+// Implement Hash and Eq for Windows LUID to enable use in hash-based collections
+// The windows-rs LUID type only implements PartialEq, but we need Eq and Hash
+// for DisplayTarget to be used in HashSet/HashMap
+#[cfg(windows)]
+impl Eq for LUID {}
+
+#[cfg(windows)]
+impl std::hash::Hash for LUID {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.LowPart.hash(state);
+        self.HighPart.hash(state);
+    }
+}
+
 /// Locally Unique Identifier (LUID) structure for non-Windows platforms
 ///
 /// This is a stub implementation for testing on non-Windows platforms.
@@ -528,15 +542,15 @@ pub struct DISPLAYCONFIG_PATH_INFO {
 // Windows API function declarations
 // These functions are not available in windows-rs 0.52, so we declare them manually
 
-/// Windows Display Configuration API FFI declarations
-///
-/// # Safety
-///
-/// Raw FFI for Windows Display Config APIs. Callers must ensure: valid aligned pointers
-/// to initialized memory; buffer capacity ≥ sizes from `GetDisplayConfigBufferSizes`;
-/// structures initialized with correct size/type fields; synchronized access to shared
-/// buffers; return codes checked (0 = success) before using output; `currentTopologyId`
-/// may be null, all other pointers non-null.
+// Windows Display Configuration API FFI declarations
+//
+// # Safety
+//
+// Raw FFI for Windows Display Config APIs. Callers must ensure: valid aligned pointers
+// to initialized memory; buffer capacity ≥ sizes from `GetDisplayConfigBufferSizes`;
+// structures initialized with correct size/type fields; synchronized access to shared
+// buffers; return codes checked (0 = success) before using output; `currentTopologyId`
+// may be null, all other pointers non-null.
 #[cfg(windows)]
 #[expect(
     unsafe_code,
