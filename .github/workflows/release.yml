@@ -51,5 +51,5 @@ jobs:
           update_release_body: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
           files: |
-            target/release/easyhdr.exe
+            \.exe$
           request_rate: 4
