@@ -125,7 +125,7 @@ impl WindowsVersion {
     /// "system" calling convention correct. `OSVERSIONINFOEXW` initialized with correct
     /// size to prevent buffer overruns. Return status checked before reading data.
     ///
-    /// Invariants: ntdll.dll exists (all Windows), RtlGetVersion exists (since Win2000),
+    /// Invariants: ntdll.dll exists (all Windows), `RtlGetVersion` exists (since Win2000),
     /// structure size set correctly.
     #[cfg(windows)]
     #[expect(

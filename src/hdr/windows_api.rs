@@ -184,9 +184,6 @@ impl DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE,
                 size: std::mem::size_of::<Self>() as u32,
-                #[cfg(windows)]
-                adapterId: adapter_id.into(),
-                #[cfg(not(windows))]
                 adapterId: adapter_id,
                 id: target_id,
             },
@@ -324,9 +321,6 @@ impl DISPLAYCONFIG_SET_HDR_STATE {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_HDR_STATE,
                 size: std::mem::size_of::<Self>() as u32,
-                #[cfg(windows)]
-                adapterId: adapter_id.into(),
-                #[cfg(not(windows))]
                 adapterId: adapter_id,
                 id: target_id,
             },

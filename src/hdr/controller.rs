@@ -223,13 +223,8 @@ impl HdrController {
                     path.flags
                 );
 
-                #[cfg(windows)]
-                let adapter_id = path.targetInfo.adapterId.into();
-                #[cfg(not(windows))]
-                let adapter_id = path.targetInfo.adapterId;
-
                 let mut target = DisplayTarget {
-                    adapter_id,
+                    adapter_id: path.targetInfo.adapterId,
                     target_id: path.targetInfo.id,
                     supports_hdr: false, // Will be detected below
                 };
@@ -294,10 +289,6 @@ impl HdrController {
         windows,
         expect(unsafe_code, reason = "Windows FFI for HDR capability detection")
     )]
-    #[expect(
-        clippy::too_many_lines,
-        reason = "Complex HDR detection logic with version-specific Windows API calls and platform-specific cfg blocks"
-    )]
     pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
@@ -311,20 +302,15 @@ impl HdrController {
                     );
 
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant that fits in u32"
-                    )]
-                    #[cfg(windows)]
-                    let adapter_id = target.adapter_id.into();
-                    #[cfg(not(windows))]
-                    let adapter_id = target.adapter_id;
-
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                             type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
+                            #[expect(
+                                clippy::cast_possible_truncation,
+                                reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant that fits in u32"
+                            )]
                             size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() as u32,
-                            adapterId: adapter_id,
+                            adapterId: target.adapter_id,
                             id: target.target_id,
                         },
                         value: 0,
@@ -436,20 +422,15 @@ impl HdrController {
     fn is_hdr_supported_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32"
-        )]
-        #[cfg(windows)]
-        let adapter_id = target.adapter_id.into();
-        #[cfg(not(windows))]
-        let adapter_id = target.adapter_id;
-
         let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32"
+                )]
                 size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
-                adapterId: adapter_id,
+                adapterId: target.adapter_id,
                 id: target.target_id,
             },
             value: 0,
@@ -529,20 +510,15 @@ impl HdrController {
             match self.windows_version {
                 WindowsVersion::Windows11_24H2 => {
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant (48 bytes) that fits in u32"
-                    )]
-                    #[cfg(windows)]
-                    let adapter_id = target.adapter_id.into();
-                    #[cfg(not(windows))]
-                    let adapter_id = target.adapter_id;
-
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
                         header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                             type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
+                            #[expect(
+                                clippy::cast_possible_truncation,
+                                reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant (48 bytes) that fits in u32"
+                            )]
                             size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() as u32,
-                            adapterId: adapter_id,
+                            adapterId: target.adapter_id,
                             id: target.target_id,
                         },
                         value: 0,
@@ -612,20 +588,15 @@ impl HdrController {
     fn is_hdr_enabled_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32"
-        )]
-        #[cfg(windows)]
-        let adapter_id = target.adapter_id.into();
-        #[cfg(not(windows))]
-        let adapter_id = target.adapter_id;
-
         let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32"
+                )]
                 size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
-                adapterId: adapter_id,
+                adapterId: target.adapter_id,
                 id: target.target_id,
             },
             value: 0,
