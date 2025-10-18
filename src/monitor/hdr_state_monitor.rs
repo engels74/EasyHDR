@@ -180,6 +180,31 @@ impl HdrStateMonitor {
     ///
     /// Creates a message-only window and processes Windows messages.
     /// This method blocks until the window is destroyed.
+    ///
+    /// # Safety
+    ///
+    /// This function contains unsafe code that is sound because:
+    ///
+    /// 1. **Null-Terminated Strings**: Wide strings are properly null-terminated via
+    ///    `.chain(std::iter::once(0))`, meeting Windows API requirements.
+    ///
+    /// 2. **Valid Window Class**: `WNDCLASSW` is initialized with a valid window procedure
+    ///    (`window_proc`) and null-terminated class name. `RegisterClassW` validates the
+    ///    structure and returns 0 on error, which is checked.
+    ///
+    /// 3. **Valid Pointers**: `PCWSTR(class_name_wide.as_ptr())` creates valid pointers from
+    ///    Vec<u16> that remain valid for the duration of the unsafe block.
+    ///
+    /// 4. **Window Creation Validation**: `CreateWindowExW` return value is checked for null,
+    ///    and errors are propagated before proceeding.
+    ///
+    /// 5. **Message Loop Safety**: `GetMessageW` is called with valid pointers to stack-allocated
+    ///    `MSG` structure. Return values are checked: -1 = error, 0 = WM_QUIT, >0 = message.
+    ///
+    /// 6. **TLS State Management**: Monitor state is stored in thread-local storage before
+    ///    window creation, ensuring `window_proc` can safely access it.
+    ///
+    /// 7. **Window Cleanup**: `DestroyWindow` is called on valid window handle before returning.
     #[cfg(windows)]
     #[expect(
         unsafe_code,
@@ -294,6 +319,28 @@ thread_local! {
 /// Handles `WM_DISPLAYCHANGE`/`WM_SETTINGCHANGE`. Immediate check, then periodic rechecks
 /// (500ms × 10 max) if state unchanged. Handles race condition where Windows messages
 /// arrive before `DisplayConfig` APIs reflect state change.
+///
+/// # Safety
+///
+/// This is an `unsafe extern "system"` callback that is sound because:
+///
+/// 1. **Callback Contract**: The function signature matches the Windows `WNDPROC` callback
+///    contract exactly: `unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT`.
+///
+/// 2. **Parameter Validity**: Windows guarantees that `hwnd` is a valid window handle for
+///    the window this procedure is registered with. `msg`, `wparam`, and `lparam` are
+///    valid message parameters.
+///
+/// 3. **TLS Access Safety**: Thread-local storage access via `MONITOR_STATE_TLS.with()` is
+///    safe because the state is initialized in `run_message_loop` before window creation,
+///    and this callback only runs on the same thread.
+///
+/// 4. **Nested Unsafe Calls**: Calls to `PostQuitMessage`, `DefWindowProcW`, `SetTimer`,
+///    and `KillTimer` are safe because they receive valid parameters (valid `hwnd`, valid
+///    timer IDs, valid message parameters).
+///
+/// 5. **No Data Races**: All state access is protected by `Mutex` or `RefCell` (TLS),
+///    preventing data races.
 #[cfg(windows)]
 #[expect(
     unsafe_code,
@@ -383,6 +430,22 @@ unsafe extern "system" fn window_proc(
 /// Start periodic HDR state rechecks
 ///
 /// Initializes the recheck counter and starts a timer for periodic rechecks.
+///
+/// # Safety
+///
+/// This function contains unsafe code that is sound because:
+///
+/// 1. **Valid Window Handle**: `hwnd` is a valid window handle passed from `window_proc`,
+///    which receives it from Windows as a valid handle for the registered window.
+///
+/// 2. **Valid Timer ID**: `TIMER_ID_HDR_RECHECK` is a constant (1001) that uniquely
+///    identifies this timer for the window.
+///
+/// 3. **Valid Interval**: `RECHECK_INTERVAL_MS` is a valid millisecond interval (500ms).
+///
+/// 4. **Null Callback**: The timer callback is `None`, meaning timer messages are posted
+///    to the window's message queue (handled by `window_proc`), which is the intended
+///    behavior.
 #[cfg(windows)]
 #[expect(
     unsafe_code,
@@ -405,6 +468,20 @@ fn start_periodic_rechecks(hwnd: HWND) {
 /// Stop periodic HDR state rechecks
 ///
 /// Kills the recheck timer and resets the counter.
+///
+/// # Safety
+///
+/// This function contains unsafe code that is sound because:
+///
+/// 1. **Valid Window Handle**: `hwnd` is a valid window handle passed from `window_proc`
+///    or other functions that receive it from Windows.
+///
+/// 2. **Valid Timer ID**: `TIMER_ID_HDR_RECHECK` matches the timer ID used in
+///    `start_periodic_rechecks`, ensuring we're killing the correct timer.
+///
+/// 3. **Idempotent Operation**: `KillTimer` is safe to call even if the timer doesn't exist
+///    or has already been killed. The result is intentionally ignored as there's no recovery
+///    action needed.
 #[cfg(windows)]
 #[expect(
     unsafe_code,

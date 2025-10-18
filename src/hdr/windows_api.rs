@@ -494,9 +494,15 @@ pub struct DISPLAYCONFIG_PATH_TARGET_INFO {
 }
 
 impl Default for DISPLAYCONFIG_PATH_TARGET_INFO {
+    /// Creates a default instance by zero-initializing the structure.
+    ///
+    /// # Safety
+    ///
+    /// This is sound because `DISPLAYCONFIG_PATH_TARGET_INFO` is a `#[repr(C)]` struct
+    /// containing only primitive integer fields (`LUID`, `u32`). All-zero bit patterns
+    /// are valid for these types. Zero-initialization matches Windows Display Configuration
+    /// API expectations for uninitialized structures.
     fn default() -> Self {
-        // SAFETY: DISPLAYCONFIG_PATH_TARGET_INFO is a C struct with all primitive fields
-        // that can be safely zero-initialized. This matches Windows API expectations.
         #[expect(
             unsafe_code,
             reason = "Zero-initialization of C struct DISPLAYCONFIG_PATH_TARGET_INFO with primitive fields"
@@ -524,6 +530,32 @@ pub struct DISPLAYCONFIG_PATH_INFO {
 // Windows API function declarations
 // These functions are not available in windows-rs 0.52, so we declare them manually
 
+/// Windows Display Configuration API FFI declarations
+///
+/// # Safety
+///
+/// These are raw FFI declarations for Windows Display Configuration APIs. Callers must ensure:
+///
+/// 1. **Pointer Validity**: All pointer parameters must be valid, properly aligned, and point to
+///    initialized memory of the correct type and size.
+///
+/// 2. **Buffer Sizes**: For `QueryDisplayConfig`, the `pathArray` and `modeInfoArray` buffers
+///    must have capacity for at least `*numPathArrayElements` and `*numModeInfoArrayElements`
+///    elements respectively. The caller must obtain these sizes via `GetDisplayConfigBufferSizes`
+///    first.
+///
+/// 3. **Structure Initialization**: All structures passed to these functions must have their
+///    `size` and `type` fields correctly initialized before calling. This is required by the
+///    Windows API to prevent buffer overruns and ensure correct behavior.
+///
+/// 4. **Thread Safety**: These functions may be called from any thread, but the caller is
+///    responsible for synchronizing access to shared buffers.
+///
+/// 5. **Return Code Validation**: Callers must check return codes (0 = success, non-zero = error)
+///    before using output data.
+///
+/// 6. **Null Pointers**: `currentTopologyId` in `QueryDisplayConfig` may be null if topology
+///    information is not needed. All other pointers must be non-null.
 #[cfg(windows)]
 #[expect(
     unsafe_code,

@@ -116,6 +116,37 @@ impl WindowsVersion {
     /// Get Windows build number using `RtlGetVersion` from ntdll.dll
     ///
     /// This is the most reliable method as it's not subject to compatibility shims.
+    ///
+    /// # Safety
+    ///
+    /// This function contains unsafe code that is sound because:
+    ///
+    /// 1. **Library Loading**: `LoadLibraryW` is called with a valid, null-terminated wide string
+    ///    for "ntdll.dll", which is a system DLL guaranteed to exist on all Windows systems.
+    ///
+    /// 2. **Function Pointer Retrieval**: `GetProcAddress` is called with a valid module handle
+    ///    and a valid C string for "RtlGetVersion". We verify the returned pointer is not None
+    ///    before proceeding.
+    ///
+    /// 3. **Transmute Soundness**: The transmute from `Option<FARPROC>` to `RtlGetVersionFn` is
+    ///    sound because:
+    ///    - We've verified the pointer is not None
+    ///    - The function signature `unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32`
+    ///      exactly matches the Windows API contract for `RtlGetVersion`
+    ///    - The calling convention ("system") matches the Windows ABI
+    ///
+    /// 4. **Structure Initialization**: The `OSVERSIONINFOEXW` structure is properly initialized
+    ///    with the correct size in `dwOSVersionInfoSize`, which is required by the Windows API
+    ///    to prevent buffer overruns.
+    ///
+    /// 5. **API Contract**: We check the return status from `RtlGetVersion` before using the result,
+    ///    ensuring we only read valid data.
+    ///
+    /// # Invariants
+    ///
+    /// - `ntdll.dll` must exist (guaranteed on all Windows systems)
+    /// - `RtlGetVersion` must exist in ntdll.dll (guaranteed since Windows 2000)
+    /// - The structure size must be set correctly before calling `RtlGetVersion`
     #[cfg(windows)]
     #[expect(
         unsafe_code,
@@ -179,6 +210,23 @@ impl WindowsVersion {
     /// Get Windows build number using `GetVersionExW` (fallback method)
     ///
     /// This method may be affected by compatibility shims but serves as a fallback.
+    ///
+    /// # Safety
+    ///
+    /// This function contains unsafe code that is sound because:
+    ///
+    /// 1. **Structure Initialization**: `OSVERSIONINFOEXW` is properly initialized with the
+    ///    correct size in `dwOSVersionInfoSize`, which is required by the Windows API to
+    ///    prevent buffer overruns.
+    ///
+    /// 2. **Valid Pointer**: `std::ptr::addr_of_mut!(version_info).cast()` creates a valid
+    ///    mutable pointer to the stack-allocated structure with correct alignment.
+    ///
+    /// 3. **API Contract**: `GetVersionExW` is called with a properly initialized structure.
+    ///    The return value is checked via `is_ok()` before accessing the output data.
+    ///
+    /// 4. **Error Handling**: If the API call fails, we retrieve the error via
+    ///    `Error::from_thread()` and propagate it, ensuring we never read invalid data.
     #[cfg(windows)]
     #[expect(
         unsafe_code,

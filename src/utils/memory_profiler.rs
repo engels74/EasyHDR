@@ -119,6 +119,26 @@ impl MemoryProfiler {
     }
 
     /// Get process memory usage in bytes (Windows only, returns 0 on other platforms)
+    ///
+    /// # Safety
+    ///
+    /// This function contains unsafe code that is sound because:
+    ///
+    /// 1. **Valid Process Handle**: `GetCurrentProcess()` returns a pseudo-handle to the current
+    ///    process, which is always valid and doesn't need to be closed.
+    ///
+    /// 2. **Structure Initialization**: `PROCESS_MEMORY_COUNTERS` is properly initialized with
+    ///    the correct size in the `cb` field, which is required by the Windows API to prevent
+    ///    buffer overruns.
+    ///
+    /// 3. **Valid Pointer**: `&raw mut pmc` creates a valid mutable pointer to the stack-allocated
+    ///    structure with correct alignment.
+    ///
+    /// 4. **Size Parameter**: The `pmc.cb` parameter matches the actual structure size, ensuring
+    ///    the Windows API doesn't write beyond the allocated memory.
+    ///
+    /// 5. **Error Handling**: The result is checked via `match`. On success, we read the valid
+    ///    `WorkingSetSize` field. On error, we return 0 and log a warning.
     #[cfg(windows)]
     #[expect(
         unsafe_code,
