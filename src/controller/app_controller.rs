@@ -4,7 +4,7 @@
 //! coordinates between process monitoring and HDR control.
 
 use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
-use crate::error::Result;
+use crate::error::{EasyHdrError, Result};
 use crate::hdr::HdrController;
 use crate::monitor::{HdrStateEvent, ProcessEvent};
 use parking_lot::Mutex;
@@ -58,7 +58,11 @@ impl AppController {
     ) -> Result<Self> {
         use tracing::info;
 
-        let hdr_controller = HdrController::new()?;
+        let hdr_controller = HdrController::new().map_err(|e| {
+            use tracing::error;
+            error!("Failed to initialize HDR controller: {e}");
+            EasyHdrError::HdrControlFailed(format!("Failed to initialize HDR controller: {e}"))
+        })?;
 
         // Detect the actual current HDR state at startup
         // This ensures the GUI displays the correct initial state
@@ -324,7 +328,14 @@ impl AppController {
         info!("Toggling HDR: {}", if enable { "ON" } else { "OFF" });
 
         // Call HDR controller to set HDR state globally
-        let results = self.hdr_controller.set_hdr_global(enable)?;
+        let results = self.hdr_controller.set_hdr_global(enable).map_err(|e| {
+            use tracing::error;
+            error!("Failed to set HDR state globally: {e}");
+            EasyHdrError::HdrControlFailed(format!(
+                "Failed to {} HDR globally: {e}",
+                if enable { "enable" } else { "disable" }
+            ))
+        })?;
 
         // Log results for each display
         for (target, result) in results {
@@ -544,7 +555,11 @@ impl AppController {
         use tracing::info;
 
         info!("Refreshing display list due to potential display configuration change");
-        let displays = self.hdr_controller.refresh_displays()?;
+        let displays = self.hdr_controller.refresh_displays().map_err(|e| {
+            use tracing::error;
+            error!("Failed to refresh display list: {e}");
+            EasyHdrError::HdrControlFailed(format!("Failed to refresh display list: {e}"))
+        })?;
         info!(
             "Display list refreshed: {} display(s) found ({} HDR-capable)",
             displays.len(),

@@ -13,6 +13,8 @@ use std::sync::mpsc;
 use tracing::{debug, info, warn};
 
 #[cfg(windows)]
+use crate::error::EasyHdrError;
+#[cfg(windows)]
 use tracing::error;
 
 #[cfg(windows)]
@@ -257,7 +259,13 @@ impl HdrStateMonitor {
                 None,
                 None,
                 None,
-            )?;
+            )
+            .map_err(|e| {
+                error!("Failed to create hidden window for HDR state monitoring: {e}");
+                EasyHdrError::ProcessMonitorError(format!(
+                    "Failed to create hidden window for HDR state monitoring: {e}"
+                ))
+            })?;
 
             if hwnd.0.is_null() {
                 let _ = UnregisterClassW(PCWSTR(class_name_wide.as_ptr()), None);
