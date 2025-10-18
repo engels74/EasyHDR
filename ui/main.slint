@@ -39,6 +39,7 @@ global DesignTokens {
     out property <color> shadow-strong: #00000030;
 
     // Typography
+    out property <string> font-family-primary: "Segoe UI";
     out property <length> font-size-xs: 10px;
     out property <length> font-size-sm: 11px;
     out property <length> font-size-base: 13px;
@@ -109,6 +110,7 @@ component StyledButton inherits Rectangle {
 
         Text {
             text: root.text;
+            font-family: DesignTokens.font-family-primary;
             color: root.enabled ?
                 (primary ? DesignTokens.text-on-primary : DesignTokens.text-primary) :
                 DesignTokens.text-tertiary;
@@ -137,6 +139,7 @@ component StyledCheckBox inherits HorizontalLayout {
 
     Text {
         text: root.text;
+        font-family: DesignTokens.font-family-primary;
         color: DesignTokens.text-primary;
         font-size: DesignTokens.font-size-base;
         vertical-alignment: center;
@@ -165,7 +168,6 @@ component SettingsDialogContent inherits Rectangle {
     drop-shadow-blur: 20px;
     drop-shadow-color: DesignTokens.shadow-medium;
     drop-shadow-offset-y: 4px;
-    default-font-family: "Segoe UI";
 
         VerticalLayout {
             padding: DesignTokens.space-2xl;
@@ -174,6 +176,7 @@ component SettingsDialogContent inherits Rectangle {
             // Title with modern typography
             Text {
                 text: "Settings";
+                font-family: DesignTokens.font-family-primary;
                 font-size: DesignTokens.font-size-3xl;
                 font-weight: 700;
                 color: DesignTokens.text-primary;
@@ -190,6 +193,7 @@ component SettingsDialogContent inherits Rectangle {
                 spacing: DesignTokens.space-sm;
                 Text {
                     text: "Monitoring interval: " + round(monitoring-interval-ms) + "ms";
+                    font-family: DesignTokens.font-family-primary;
                     color: DesignTokens.text-primary;
                     font-size: DesignTokens.font-size-base;
                     font-weight: 600;
@@ -198,6 +202,7 @@ component SettingsDialogContent inherits Rectangle {
                     spacing: DesignTokens.space-md;
                     Text {
                         text: "500ms";
+                        font-family: DesignTokens.font-family-primary;
                         color: DesignTokens.text-secondary;
                         font-size: DesignTokens.font-size-sm;
                         vertical-alignment: center;
@@ -213,6 +218,7 @@ component SettingsDialogContent inherits Rectangle {
                     }
                     Text {
                         text: "2000ms";
+                        font-family: DesignTokens.font-family-primary;
                         color: DesignTokens.text-secondary;
                         font-size: DesignTokens.font-size-sm;
                         vertical-alignment: center;
@@ -333,6 +339,7 @@ export component MainWindow inherits Window {
 
                         Text {
                             text: "EasyHDR";
+                            font-family: DesignTokens.font-family-primary;
                             font-size: DesignTokens.font-size-2xl;
                             font-weight: 700;
                             color: #FFFFFF;
@@ -340,6 +347,7 @@ export component MainWindow inherits Window {
 
                         Text {
                             text: "HDR Management Made Easy";
+                            font-family: DesignTokens.font-family-primary;
                             font-size: DesignTokens.font-size-sm;
                             color: #FFFFFF.transparentize(0.3);
                         }
@@ -384,12 +392,14 @@ export component MainWindow inherits Window {
 
                             Text {
                                 text: "HDR Status";
+                                font-family: DesignTokens.font-family-primary;
                                 font-size: DesignTokens.font-size-xs;
                                 color: #FFFFFF.transparentize(0.3);
                             }
 
                             Text {
                                 text: hdr-enabled ? "ENABLED" : "DISABLED";
+                                font-family: DesignTokens.font-family-primary;
                                 font-size: DesignTokens.font-size-lg;
                                 font-weight: 700;
                                 color: #FFFFFF;
@@ -422,6 +432,7 @@ export component MainWindow inherits Window {
 
                     Text {
                         text: "No Applications Configured";
+                        font-family: DesignTokens.font-family-primary;
                         horizontal-alignment: center;
                         font-size: DesignTokens.font-size-xl;
                         font-weight: 600;
@@ -430,6 +441,7 @@ export component MainWindow inherits Window {
 
                     Text {
                         text: "Click 'Add Application(s)' below to get started";
+                        font-family: DesignTokens.font-family-primary;
                         horizontal-alignment: center;
                         font-size: DesignTokens.font-size-base;
                         color: DesignTokens.text-tertiary;
@@ -485,6 +497,7 @@ export component MainWindow inherits Window {
 
                                 Text {
                                     text: item.display-name;
+                                    font-family: DesignTokens.font-family-primary;
                                     font-weight: 600;
                                     font-size: DesignTokens.font-size-base;
                                     overflow: elide;
@@ -492,6 +505,7 @@ export component MainWindow inherits Window {
                                 }
                                 Text {
                                     text: item.exe-path;
+                                    font-family: DesignTokens.font-family-primary;
                                     font-size: DesignTokens.font-size-sm;
                                     color: DesignTokens.text-secondary;
                                     overflow: elide;
@@ -562,11 +576,13 @@ export component MainWindow inherits Window {
 
                     Text {
                         text: "💡";
+                        font-family: DesignTokens.font-family-primary;
                         font-size: DesignTokens.font-size-lg;
                     }
 
                     Text {
                         text: "Tip: You can select multiple .exe files at once using the file dialog";
+                        font-family: DesignTokens.font-family-primary;
                         font-size: DesignTokens.font-size-sm;
                         color: DesignTokens.text-secondary;
                     }
