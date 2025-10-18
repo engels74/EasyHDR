@@ -40,6 +40,18 @@ impl PartialEq for MonitoredApp {
 
 impl Eq for MonitoredApp {}
 
+// Implement Hash manually to match manual PartialEq/Eq (ignore icon_data)
+impl std::hash::Hash for MonitoredApp {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.display_name.hash(state);
+        self.exe_path.hash(state);
+        self.process_name.hash(state);
+        self.enabled.hash(state);
+        // icon_data is intentionally ignored as it's a cache (same as PartialEq)
+    }
+}
+
 impl AsRef<std::path::Path> for MonitoredApp {
     fn as_ref(&self) -> &std::path::Path {
         &self.exe_path
@@ -185,7 +197,7 @@ pub struct AppConfig {
 }
 
 /// User preferences and settings
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct UserPreferences {
     /// Whether to auto-start on Windows login
@@ -207,7 +219,7 @@ pub struct UserPreferences {
 }
 
 /// Window state for position and size persistence
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WindowState {
     /// X position
     pub x: i32,

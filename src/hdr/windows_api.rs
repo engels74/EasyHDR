@@ -25,7 +25,7 @@ pub use windows::Win32::Foundation::LUID;
 /// On Windows, the real LUID from windows-rs is used instead.
 #[cfg(not(windows))]
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct LUID {
     /// Low-order 32 bits
     pub LowPart: u32,

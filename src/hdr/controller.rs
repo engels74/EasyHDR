@@ -24,7 +24,7 @@ use crate::error::EasyHdrError;
 use tracing::error;
 
 /// Represents a display target
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DisplayTarget {
     /// Adapter LUID
     pub adapter_id: LUID,
