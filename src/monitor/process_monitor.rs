@@ -1,25 +1,9 @@
 //! Process monitoring implementation
 //!
-//! This module implements the process monitoring subsystem that polls
-//! Windows processes and detects state changes.
+//! Polls Windows processes and detects state changes. Matches by executable filename only
+//! (lowercase, no extension), not full path. Name collisions trigger HDR for all matching processes.
 //!
-//! # Known Limitations
-//!
-//! ## Process Name Collisions
-//!
-//! The process monitor matches processes by their executable filename (without extension),
-//! converted to lowercase. This means that if multiple different applications have the same
-//! executable filename, they will all trigger HDR toggling.
-//!
-//! For example:
-//! - If you configure "game.exe" to trigger HDR
-//! - Any process named "game.exe" will trigger HDR, regardless of its full path
-//! - This includes "C:\Games\Game1\game.exe" and "D:\OtherGames\game.exe"
-//!
-//! This is a known limitation of the current implementation. The process monitor only has
-//! access to the process name, not the full executable path, when enumerating running processes.
-//!
-//! **Workaround:** Ensure that the applications you want to monitor have unique executable names.
+//! **Limitation:** Use unique executable names to avoid false positives.
 
 use parking_lot::Mutex;
 use std::collections::HashSet;
@@ -117,37 +101,9 @@ impl ProcessMonitor {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **`CreateToolhelp32Snapshot`**: Called with valid flags (`TH32CS_SNAPPROCESS`) and
-    ///    process ID (0 for all processes). Returns a handle that must be closed, which
-    ///    is guaranteed by the `SnapshotGuard` RAII wrapper.
-    ///
-    /// 2. **PROCESSENTRY32W Initialization**: The structure is properly initialized with
-    ///    the correct size in `dwSize`, which is required by the Windows API to prevent
-    ///    buffer overruns and ensure correct structure versioning.
-    ///
-    /// 3. **Process32FirstW/Process32NextW**: Called with a valid snapshot handle and a
-    ///    properly initialized PROCESSENTRY32W structure. These functions:
-    ///    - Only write to the structure we provide
-    ///    - Return error codes we check before using the data
-    ///    - Write null-terminated wide strings to szExeFile (fixed-size array)
-    ///
-    /// 4. **String Extraction**: The `szExeFile` field is a fixed-size array of u16 that
-    ///    contains a null-terminated wide string. We safely extract this using
-    ///    `extract_process_name` which handles the null terminator correctly.
-    ///
-    /// # Invariants
-    ///
-    /// - The snapshot handle must be valid (checked via Result from `CreateToolhelp32Snapshot`)
-    /// - PROCESSENTRY32W.dwSize must be set to the structure size before API calls
-    /// - The snapshot handle must be closed when done (enforced by `SnapshotGuard`)
-    /// - `Process32FirstW` must be called before `Process32NextW`
-    ///
-    /// # Potential Issues
-    ///
-    /// - If the Windows API contract changes (extremely unlikely for this stable API)
-    /// - If a process terminates between snapshot creation and enumeration (handled gracefully)
+    /// Uses `CreateToolhelp32Snapshot` with valid flags. Snapshot handle closed via `SnapshotGuard`.
+    /// PROCESSENTRY32W initialized with correct size. Process32FirstW/NextW called with valid
+    /// handle and check return codes before accessing data.
     #[allow(unsafe_code)] // Windows FFI for process enumeration
     #[cfg_attr(
         not(windows),

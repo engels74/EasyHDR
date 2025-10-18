@@ -127,34 +127,9 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **`GetDisplayConfigBufferSizes`**: Called with valid mutable references to u32 values.
-    ///    The Windows API contract guarantees these will be written with valid buffer sizes.
-    ///
-    /// 2. **`QueryDisplayConfig`**: Called with properly allocated Vec buffers:
-    ///    - `paths` and `modes` are allocated with exact sizes from `GetDisplayConfigBufferSizes`
-    ///    - `as_mut_ptr()` provides valid pointers to the Vec's backing storage
-    ///    - The API writes at most `path_count` and `mode_count` elements, which fit in our buffers
-    ///    - We pass null for the last parameter (topology info) which is optional
-    ///
-    /// 3. **DisplayConfigGetDeviceInfo/DisplayConfigSetDeviceInfo**: Called with properly
-    ///    initialized structures:
-    ///    - Headers are initialized with correct size and type fields
-    ///    - Adapter IDs and target IDs come from `QueryDisplayConfig` results
-    ///    - Pointer casts are valid because the header is the first field in each structure
-    ///
-    /// # Invariants
-    ///
-    /// - Buffer sizes from `GetDisplayConfigBufferSizes` must be used to allocate exact-sized buffers
-    /// - Structure headers must have correct size and type fields before API calls
-    /// - Adapter and target IDs must come from valid `QueryDisplayConfig` results
-    ///
-    /// # Potential Issues
-    ///
-    /// - If Windows API contract changes (extremely unlikely for stable APIs)
-    /// - If buffer sizes change between `GetDisplayConfigBufferSizes` and `QueryDisplayConfig`
-    ///   (handled by checking return codes)
+    /// Calls Windows Display Config APIs with properly allocated buffers from
+    /// `GetDisplayConfigBufferSizes`. Structures are initialized with correct size/type fields.
+    /// Adapter/target IDs come from valid `QueryDisplayConfig` results.
     #[allow(unsafe_code)] // Windows FFI for display enumeration
     pub fn enumerate_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         #[cfg(windows)]
@@ -289,27 +264,8 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Structure Initialization**: The `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2` and
-    ///    `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` structures are properly initialized with:
-    ///    - Correct size from `std::mem::size_of`
-    ///    - Correct type field matching the API being called
-    ///    - Valid adapter ID and target ID from `enumerate_displays` results
-    ///
-    /// 2. **Pointer Cast**: The cast `&mut color_info.header as *mut _ as *mut _` is sound because:
-    ///    - The header is the first field in the structure (guaranteed by repr(C) layout)
-    ///    - The Windows API expects a pointer to the header and reads the full structure
-    ///    - The structure size in the header tells the API how much memory to access
-    ///
-    /// 3. **API Contract**: `DisplayConfigGetDeviceInfo` is called with a properly initialized
-    ///    header and will only write to fields within the structure bounds.
-    ///
-    /// # Invariants
-    ///
-    /// - The target parameter must contain valid adapter and target IDs from `QueryDisplayConfig`
-    /// - Structure size and type fields must match the actual structure being used
-    /// - The header must be the first field in the structure
+    /// Structures are initialized with correct size/type fields. Target IDs from `QueryDisplayConfig`.
+    /// Header pointer casts are sound (repr(C) layout guarantees header is first field).
     #[cfg_attr(not(windows), allow(unused_variables))]
     #[allow(unsafe_code)] // Windows FFI for HDR capability detection
     pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
@@ -638,31 +594,8 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Structure Initialization**: Both `DISPLAYCONFIG_SET_HDR_STATE` (24H2+) and
-    ///    `DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE` (legacy) are properly initialized via
-    ///    their `new()` constructors with:
-    ///    - Correct size and type fields in the header
-    ///    - Valid adapter ID and target ID from `enumerate_displays` results
-    ///    - Proper enable/disable flag
-    ///
-    /// 2. **Pointer Cast**: The cast `&mut set_state.header as *mut _ as *mut _` is sound because:
-    ///    - The header is the first field in both structures (repr(C) layout)
-    ///    - `DisplayConfigSetDeviceInfo` expects a pointer to the header
-    ///    - The structure size in the header tells the API how much memory to access
-    ///
-    /// 3. **API Contract**: `DisplayConfigSetDeviceInfo` is called with properly initialized
-    ///    structures and will only access memory within the structure bounds.
-    ///
-    /// 4. **State Propagation**: The 100ms delay ensures Windows has time to propagate the
-    ///    HDR state change before subsequent operations.
-    ///
-    /// # Invariants
-    ///
-    /// - The target parameter must contain valid adapter and target IDs
-    /// - Structure size and type fields must match the actual structure being used
-    /// - The header must be the first field in the structure
+    /// Structures initialized via `new()` with correct size/type/ID fields. Header pointer casts
+    /// are sound (repr(C) layout). 100ms delay ensures state propagation.
     #[cfg_attr(not(windows), allow(dead_code))]
     #[allow(unsafe_code)] // Windows FFI for HDR state control
     pub fn set_hdr_state(&self, target: &DisplayTarget, enable: bool) -> Result<()> {

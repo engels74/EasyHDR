@@ -1,38 +1,7 @@
 //! Integration tests for `EasyHDR`
 //!
-//! This test module provides comprehensive integration testing for the entire application,
-//! verifying that all components work together correctly.
-//!
-//! # Coverage
-//!
-//! These tests verify:
-//! - Application Configuration Management
-//! - Process Monitoring
-//! - HDR Display Control
-//! - Automatic HDR Activation Logic
-//! - Error Handling and User Feedback
-//! - Logging and Diagnostics
-//! - Performance and Resource Efficiency
-//!
-//! # Test Scenarios
-//!
-//! 1. **End-to-End Application Flow**
-//!    - Add application → Start process → Verify HDR enabled
-//!    - Stop process → Verify HDR disabled
-//!    - Multiple apps → Stop all → Verify HDR disabled only after last one
-//!
-//! 2. **Configuration Persistence**
-//!    - Save config → Restart app → Verify config loaded
-//!
-//! 3. **Error Scenarios**
-//!    - Invalid exe path
-//!    - Corrupt configuration file
-//!    - Missing configuration directory
-//!
-//! 4. **Edge Cases**
-//!    - Rapid start/stop → Verify debouncing works
-//!    - Process name collisions
-//!    - Display disconnection during operation
+//! Tests configuration persistence, process monitoring, HDR control,
+//! and error handling for the full application lifecycle.
 
 use easyhdr::{
     config::{AppConfig, ConfigManager, MonitoredApp},

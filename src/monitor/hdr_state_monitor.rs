@@ -1,73 +1,9 @@
 //! HDR state monitoring module
 //!
-//! This module provides functionality to monitor HDR state changes in Windows
-//! and detect when HDR is manually enabled or disabled via Windows settings.
-//!
-//! # Overview
-//!
-//! The HDR state monitoring system provides:
-//! - **Event-driven detection** of display configuration changes
-//! - **Message-only window** to receive Windows messages without GUI overhead
-//! - **HDR state verification** when display configuration changes
-//! - **Event notification** when HDR state transitions occur
-//!
-//! # Architecture
-//!
-//! - `HdrStateMonitor`: Background thread with message-only window
-//! - `HdrStateEvent`: Events sent when HDR state changes
-//! - **Windows Messages**: `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE` triggers
-//! - **Event channel**: mpsc channel for sending events to the application controller
-//!
-//! # How It Works
-//!
-//! 1. Create a hidden window (not visible, but can receive broadcast messages)
-//! 2. Register window class and window procedure
-//! 3. Enter Windows message loop in background thread
-//! 4. On `WM_DISPLAYCHANGE` or `WM_SETTINGCHANGE`:
-//!    - Query actual HDR state via `HdrController` (immediate check)
-//!    - If state changed: Send `HdrStateEvent`
-//!    - If state unchanged: Schedule recheck timer (handles race condition)
-//! 5. Recheck timers (adaptive approach):
-//!    - Periodic rechecks at 500ms intervals
-//!    - Up to 10 rechecks (5 seconds total) to handle slow driver updates
-//!    - Stops early if state change is detected
-//! 6. `AppController` receives event and updates GUI
-//!
-//! # Race Condition Handling
-//!
-//! Windows can send `WM_DISPLAYCHANGE` before `DisplayConfigGetDeviceInfo` reflects
-//! the actual HDR state change. The recheck strategy handles this:
-//!
-//! - **Immediate check**: Detects state changes that are already reflected (fast path)
-//! - **Periodic rechecks**: Checks every 500ms for up to 5 seconds
-//! - **Early termination**: Stops rechecking once state change is detected
-//!
-//! This approach is based on `HDRTray`'s proven strategy and handles various driver
-//! update latencies reliably.
-//!
-//! # Why Hidden Window (Not Message-Only)?
-//!
-//! Windows provides no native event-driven API for HDR state changes on Win32 desktop apps.
-//! Microsoft documentation recommends using `WM_DISPLAYCHANGE` as a trigger to check state.
-//!
-//! **Critical**: Message-only windows (`HWND_MESSAGE`) do NOT receive broadcast messages
-//! like `WM_DISPLAYCHANGE`. We must use a regular hidden window to receive these messages.
-//! The window is created with `WS_OVERLAPPEDWINDOW` style but is never shown, so it has
-//! no visual presence while still receiving broadcast messages.
-//!
-//! # Performance
-//!
-//! - Hidden window: negligible CPU when idle (~0.01%)
-//! - HDR state polling: only on Windows messages (very infrequent, ~0.05% CPU)
-//! - Recheck timers: only active for 5 seconds after display change (~0.1% CPU during rechecks)
-//! - Total overhead: <0.1% CPU average
-//!
-//! # Requirements
-//!
-//! - Detect HDR state changes when manually toggled via Windows settings
-//! - Update GUI HDR status display in real-time
-//! - Update tray icon in real-time
-//! - Maintain performance target (<1% CPU usage)
+//! Detects HDR state changes via hidden window receiving `WM_DISPLAYCHANGE`/`WM_SETTINGCHANGE`.
+//! Uses periodic rechecks (500ms × 10 = 5s max) to handle race condition where Windows messages
+//! arrive before `DisplayConfig` APIs reflect state change. Hidden window (not message-only) required
+//! to receive broadcast messages. Performance: <0.1% CPU average.
 
 use crate::error::Result;
 use crate::hdr::HdrController;
@@ -352,19 +288,9 @@ thread_local! {
 
 /// Window procedure for the hidden window
 ///
-/// Handles `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE` messages to detect display configuration changes.
-///
-/// # HDR State Detection Strategy
-///
-/// Uses a periodic recheck approach to handle the race condition where
-/// `WM_DISPLAYCHANGE` arrives before `DisplayConfigGetDeviceInfo` reflects the actual state:
-///
-/// 1. **Immediate check**: Try to detect state change immediately
-/// 2. **Periodic rechecks**: If state unchanged, schedule periodic rechecks at 500ms intervals
-/// 3. **Maximum duration**: Up to 10 rechecks (5 seconds total) to handle slow drivers
-/// 4. **Early termination**: Stop rechecking once state change is detected
-///
-/// This approach is based on `HDRTray`'s proven strategy and handles various driver update latencies.
+/// Handles `WM_DISPLAYCHANGE`/`WM_SETTINGCHANGE`. Immediate check, then periodic rechecks
+/// (500ms × 10 max) if state unchanged. Handles race condition where Windows messages
+/// arrive before DisplayConfig APIs reflect state change.
 #[cfg(windows)]
 #[allow(unsafe_code)] // Windows FFI callback
 unsafe extern "system" fn window_proc(
