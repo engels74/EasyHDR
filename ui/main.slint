@@ -182,66 +182,125 @@ component SettingsDialogContent inherits Rectangle {
                 color: DesignTokens.text-primary;
             }
 
-            // Auto-start setting (Requirement 6.1)
-            StyledCheckBox {
-                text: "Auto-start on Windows login";
-                checked <=> auto-start;
+            // Category 1: System Integration
+            VerticalLayout {
+                spacing: DesignTokens.space-md;
+
+                // Section header
+                Text {
+                    text: "System Integration";
+                    font-family: DesignTokens.font-family-primary;
+                    font-size: DesignTokens.font-size-lg;
+                    font-weight: 600;
+                    color: DesignTokens.text-primary;
+                }
+
+                // Settings in this category
+                VerticalLayout {
+                    spacing: DesignTokens.space-md;
+
+                    // Auto-start setting (Requirement 6.1)
+                    StyledCheckBox {
+                        text: "Auto-start on Windows login";
+                        checked <=> auto-start;
+                    }
+
+                    // Minimize button behavior setting
+                    StyledCheckBox {
+                        text: "Minimize to tray (instead of taskbar)";
+                        checked <=> minimize-to-tray-on-minimize;
+                    }
+
+                    // Close button behavior setting
+                    StyledCheckBox {
+                        text: "Close to tray (instead of exiting)";
+                        checked <=> minimize-to-tray-on-close;
+                    }
+                }
             }
 
-            // Monitoring interval setting (Requirement 6.2)
+            // Visual separator
+            Rectangle {
+                height: 1px;
+                background: DesignTokens.border-light;
+            }
+
+            // Category 2: Monitoring & Performance
             VerticalLayout {
-                spacing: DesignTokens.space-sm;
+                spacing: DesignTokens.space-md;
+
+                // Section header
                 Text {
-                    text: "Monitoring interval: " + round(monitoring-interval-ms) + "ms";
+                    text: "Monitoring & Performance";
                     font-family: DesignTokens.font-family-primary;
-                    color: DesignTokens.text-primary;
-                    font-size: DesignTokens.font-size-base;
+                    font-size: DesignTokens.font-size-lg;
                     font-weight: 600;
+                    color: DesignTokens.text-primary;
                 }
-                HorizontalLayout {
-                    spacing: DesignTokens.space-md;
+
+                // Monitoring interval setting (Requirement 6.2)
+                VerticalLayout {
+                    spacing: DesignTokens.space-sm;
                     Text {
-                        text: "500ms";
+                        text: "Monitoring interval: " + round(monitoring-interval-ms) + "ms";
                         font-family: DesignTokens.font-family-primary;
-                        color: DesignTokens.text-secondary;
-                        font-size: DesignTokens.font-size-sm;
-                        vertical-alignment: center;
+                        color: DesignTokens.text-primary;
+                        font-size: DesignTokens.font-size-base;
+                        font-weight: 600;
                     }
-                    Slider {
-                        minimum: 500;
-                        maximum: 2000;
-                        value: monitoring-interval-ms;
-                        horizontal-stretch: 1;
-                        changed(value) => {
-                            monitoring-interval-ms = round(value);
+                    HorizontalLayout {
+                        spacing: DesignTokens.space-md;
+                        Text {
+                            text: "500ms";
+                            font-family: DesignTokens.font-family-primary;
+                            color: DesignTokens.text-secondary;
+                            font-size: DesignTokens.font-size-sm;
+                            vertical-alignment: center;
+                        }
+                        Slider {
+                            minimum: 500;
+                            maximum: 2000;
+                            value: monitoring-interval-ms;
+                            horizontal-stretch: 1;
+                            changed(value) => {
+                                monitoring-interval-ms = round(value);
+                            }
+                        }
+                        Text {
+                            text: "2000ms";
+                            font-family: DesignTokens.font-family-primary;
+                            color: DesignTokens.text-secondary;
+                            font-size: DesignTokens.font-size-sm;
+                            vertical-alignment: center;
                         }
                     }
-                    Text {
-                        text: "2000ms";
-                        font-family: DesignTokens.font-family-primary;
-                        color: DesignTokens.text-secondary;
-                        font-size: DesignTokens.font-size-sm;
-                        vertical-alignment: center;
-                    }
                 }
             }
 
-            // Tray notifications setting (Requirement 6.4)
-            StyledCheckBox {
-                text: "Show tray notifications on HDR changes";
-                checked <=> show-tray-notifications;
+            // Visual separator
+            Rectangle {
+                height: 1px;
+                background: DesignTokens.border-light;
             }
 
-            // Minimize button behavior setting
-            StyledCheckBox {
-                text: "Minimize to tray (instead of taskbar)";
-                checked <=> minimize-to-tray-on-minimize;
-            }
+            // Category 3: Notifications & Feedback
+            VerticalLayout {
+                spacing: DesignTokens.space-md;
 
-            // Close button behavior setting
-            StyledCheckBox {
-                text: "Close to tray (instead of exiting)";
-                checked <=> minimize-to-tray-on-close;
+                // Section header
+                Text {
+                    text: "Notifications & Feedback";
+                    font-family: DesignTokens.font-family-primary;
+                    font-size: DesignTokens.font-size-lg;
+                    font-weight: 600;
+                    color: DesignTokens.text-primary;
+                }
+
+                // Tray notifications setting (Requirement 6.4)
+                StyledCheckBox {
+                    text: "Show tray notifications on HDR changes";
+                    checked <=> show-tray-notifications;
+                }
             }
 
             // Spacer to push buttons to bottom
