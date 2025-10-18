@@ -130,7 +130,10 @@ impl HdrController {
     /// Calls Windows Display Config APIs with properly allocated buffers from
     /// `GetDisplayConfigBufferSizes`. Structures are initialized with correct size/type fields.
     /// Adapter/target IDs come from valid `QueryDisplayConfig` results.
-    #[allow(unsafe_code)] // Windows FFI for display enumeration
+    #[cfg_attr(
+        windows,
+        expect(unsafe_code, reason = "Windows FFI for display enumeration")
+    )]
     pub fn enumerate_displays(&mut self) -> Result<Vec<DisplayTarget>> {
         #[cfg(windows)]
         {
@@ -267,7 +270,10 @@ impl HdrController {
     /// Structures are initialized with correct size/type fields. Target IDs from `QueryDisplayConfig`.
     /// Header pointer casts are sound (repr(C) layout guarantees header is first field).
     #[cfg_attr(not(windows), allow(unused_variables))]
-    #[allow(unsafe_code)] // Windows FFI for HDR capability detection
+    #[cfg_attr(
+        windows,
+        expect(unsafe_code, reason = "Windows FFI for HDR capability detection")
+    )]
     pub fn is_hdr_supported(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
@@ -384,7 +390,10 @@ impl HdrController {
 
     /// Check HDR support using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
-    #[allow(unsafe_code)] // Windows FFI for legacy HDR capability detection
+    #[expect(
+        unsafe_code,
+        reason = "Windows FFI for legacy HDR capability detection"
+    )]
     #[expect(
         clippy::unused_self,
         reason = "Method signature matches trait-like pattern for consistency with other HDR detection methods"
@@ -465,7 +474,10 @@ impl HdrController {
     /// same reasons as `is_hdr_supported`: properly initialized structures with correct size/type
     /// fields, valid adapter/target IDs, and sound pointer casts to the header field.
     #[cfg_attr(not(windows), allow(unused_variables))]
-    #[allow(unsafe_code)] // Windows FFI for HDR state detection
+    #[cfg_attr(
+        windows,
+        expect(unsafe_code, reason = "Windows FFI for HDR state detection")
+    )]
     pub fn is_hdr_enabled(&self, target: &DisplayTarget) -> Result<bool> {
         #[cfg(windows)]
         {
@@ -535,7 +547,7 @@ impl HdrController {
 
     /// Check HDR enabled state using legacy API (Windows 10/11, or fallback for 24H2+)
     #[cfg(windows)]
-    #[allow(unsafe_code)] // Windows FFI for legacy HDR state detection
+    #[expect(unsafe_code, reason = "Windows FFI for legacy HDR state detection")]
     #[expect(
         clippy::unused_self,
         reason = "Method signature matches trait-like pattern for consistency with other HDR detection methods"
@@ -597,7 +609,10 @@ impl HdrController {
     /// Structures initialized via `new()` with correct size/type/ID fields. Header pointer casts
     /// are sound (repr(C) layout). 100ms delay ensures state propagation.
     #[cfg_attr(not(windows), allow(dead_code))]
-    #[allow(unsafe_code)] // Windows FFI for HDR state control
+    #[cfg_attr(
+        windows,
+        expect(unsafe_code, reason = "Windows FFI for HDR state control")
+    )]
     pub fn set_hdr_state(&self, target: &DisplayTarget, enable: bool) -> Result<()> {
         #[cfg(windows)]
         {

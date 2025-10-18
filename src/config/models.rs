@@ -40,6 +40,12 @@ impl PartialEq for MonitoredApp {
 
 impl Eq for MonitoredApp {}
 
+impl AsRef<std::path::Path> for MonitoredApp {
+    fn as_ref(&self) -> &std::path::Path {
+        &self.exe_path
+    }
+}
+
 impl MonitoredApp {
     /// Create a `MonitoredApp` from an executable path
     ///

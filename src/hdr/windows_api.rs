@@ -6,8 +6,14 @@
 //! Many of these structures are not available in windows-rs 0.52, so they are
 //! manually defined here with #[repr(C)] to match the Windows API layout.
 
-#![allow(non_snake_case)]
-#![allow(non_camel_case_types)]
+#![expect(
+    non_snake_case,
+    reason = "Windows API structures use PascalCase and camelCase naming conventions"
+)]
+#![expect(
+    non_camel_case_types,
+    reason = "Windows API types use SCREAMING_SNAKE_CASE naming conventions"
+)]
 
 // Import LUID from windows-rs on Windows, or define a stub for non-Windows platforms
 #[cfg(windows)]

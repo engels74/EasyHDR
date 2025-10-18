@@ -13,6 +13,7 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Threading::{CreateMutexW, OpenMutexW, SYNCHRONIZATION_SYNCHRONIZE};
 
 /// Single instance guard using a Windows named mutex (released on drop)
+#[must_use = "SingleInstanceGuard must be held for the lifetime of the application to prevent multiple instances"]
 #[cfg(windows)]
 pub struct SingleInstanceGuard {
     mutex_handle: HANDLE,
@@ -21,7 +22,7 @@ pub struct SingleInstanceGuard {
 #[cfg(windows)]
 impl SingleInstanceGuard {
     /// Create a new single instance guard, returning an error if another instance is running
-    #[allow(unsafe_code)] // Windows FFI for mutex
+    #[expect(unsafe_code, reason = "Windows FFI for mutex creation")]
     pub fn new() -> Result<Self> {
         use tracing::{debug, error};
         use windows::core::HSTRING;
@@ -52,7 +53,7 @@ impl SingleInstanceGuard {
 
 #[cfg(windows)]
 impl Drop for SingleInstanceGuard {
-    #[allow(unsafe_code)] // Windows FFI for mutex cleanup
+    #[expect(unsafe_code, reason = "Windows FFI for mutex cleanup")]
     fn drop(&mut self) {
         use tracing::debug;
 
@@ -65,6 +66,7 @@ impl Drop for SingleInstanceGuard {
 }
 
 /// Stub implementation for non-Windows platforms
+#[must_use = "SingleInstanceGuard must be held for the lifetime of the application to prevent multiple instances"]
 #[cfg(not(windows))]
 pub struct SingleInstanceGuard;
 
