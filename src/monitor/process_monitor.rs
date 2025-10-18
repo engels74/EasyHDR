@@ -101,27 +101,12 @@ impl ProcessMonitor {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Valid Snapshot Flags**: `CreateToolhelp32Snapshot` is called with `TH32CS_SNAPPROCESS`
-    ///    (valid flag) and process ID 0 (all processes), which are valid parameters.
-    ///
-    /// 2. **Handle Validation**: The return value from `CreateToolhelp32Snapshot` is checked via
-    ///    `map_err`. Only valid handles proceed; errors are propagated.
-    ///
-    /// 3. **RAII Handle Management**: The snapshot handle is wrapped in `SnapshotGuard`, ensuring
-    ///    it's closed via `CloseHandle` even if errors occur during iteration.
-    ///
-    /// 4. **Structure Initialization**: `PROCESSENTRY32W` is initialized with correct `dwSize`
-    ///    field set to `size_of::<PROCESSENTRY32W>()`, which is required by the Windows API
-    ///    to prevent buffer overruns.
-    ///
-    /// 5. **Return Code Validation**: Both `Process32FirstW` and `Process32NextW` return codes
-    ///    are checked before accessing the `entry` data. `ERROR_NO_MORE_FILES` is handled as
-    ///    the expected end-of-iteration condition.
-    ///
-    /// 6. **Valid Pointers**: The `&raw mut entry` pointer is valid because `entry` is a
-    ///    properly initialized stack variable with correct size.
+    /// `CreateToolhelp32Snapshot` called with valid flags (`TH32CS_SNAPPROCESS`, PID 0).
+    /// Return value validated via `map_err`; errors propagated. Handle wrapped in
+    /// `SnapshotGuard` (RAII) for cleanup. `PROCESSENTRY32W` initialized with correct
+    /// `dwSize` to prevent buffer overruns. `Process32FirstW`/`NextW` return codes checked
+    /// before data access; `ERROR_NO_MORE_FILES` handled as iteration end. `&raw mut entry`
+    /// valid (stack variable, correct size).
     #[cfg_attr(
         windows,
         expect(
@@ -292,16 +277,9 @@ impl Drop for SnapshotGuard {
     ///
     /// # Safety
     ///
-    /// This is sound because:
-    ///
-    /// 1. **Valid Handle**: The handle is obtained from `CreateToolhelp32Snapshot`, which
-    ///    returns a valid handle or an error. Only valid handles are stored in `SnapshotGuard`.
-    ///
-    /// 2. **Single Ownership**: The guard takes ownership of the handle, ensuring it's only
-    ///    closed once. The handle is not cloned or shared.
-    ///
-    /// 3. **CloseHandle Safety**: `CloseHandle` is safe to call on valid snapshot handles.
-    ///    The result is intentionally ignored as there's no recovery action in a destructor.
+    /// Handle from `CreateToolhelp32Snapshot` (valid or error; only valid stored). Guard
+    /// owns handle (closed once, not cloned/shared). `CloseHandle` safe on valid snapshot
+    /// handles; result ignored (no destructor recovery).
     #[expect(
         unsafe_code,
         reason = "Windows FFI for CloseHandle to release snapshot handle"

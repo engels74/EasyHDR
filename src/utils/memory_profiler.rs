@@ -122,23 +122,11 @@ impl MemoryProfiler {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Valid Process Handle**: `GetCurrentProcess()` returns a pseudo-handle to the current
-    ///    process, which is always valid and doesn't need to be closed.
-    ///
-    /// 2. **Structure Initialization**: `PROCESS_MEMORY_COUNTERS` is properly initialized with
-    ///    the correct size in the `cb` field, which is required by the Windows API to prevent
-    ///    buffer overruns.
-    ///
-    /// 3. **Valid Pointer**: `&raw mut pmc` creates a valid mutable pointer to the stack-allocated
-    ///    structure with correct alignment.
-    ///
-    /// 4. **Size Parameter**: The `pmc.cb` parameter matches the actual structure size, ensuring
-    ///    the Windows API doesn't write beyond the allocated memory.
-    ///
-    /// 5. **Error Handling**: The result is checked via `match`. On success, we read the valid
-    ///    `WorkingSetSize` field. On error, we return 0 and log a warning.
+    /// `GetCurrentProcess()` returns valid pseudo-handle (no close needed).
+    /// `PROCESS_MEMORY_COUNTERS` initialized with correct `cb` size to prevent buffer
+    /// overruns. `&raw mut pmc` creates valid aligned pointer to stack variable. Size
+    /// parameter matches structure size. Result checked via `match`; success reads valid
+    /// `WorkingSetSize`, error returns 0 with warning.
     #[cfg(windows)]
     #[expect(
         unsafe_code,

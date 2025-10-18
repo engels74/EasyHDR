@@ -127,25 +127,11 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Buffer Size Validation**: `GetDisplayConfigBufferSizes` is called first to obtain
-    ///    the required buffer sizes. Return code is checked before proceeding.
-    ///
-    /// 2. **Proper Buffer Allocation**: Vectors are allocated with exact capacity from
-    ///    `GetDisplayConfigBufferSizes`, ensuring sufficient space for Windows API writes.
-    ///
-    /// 3. **Valid Pointers**: `as_mut_ptr()` on allocated vectors provides valid, properly
-    ///    aligned pointers. Mutable references (`&raw mut`) to stack variables are valid.
-    ///
-    /// 4. **Null Pointer Handling**: `currentTopologyId` is explicitly set to `null_mut()`
-    ///    which is allowed by the Windows API when topology information is not needed.
-    ///
-    /// 5. **Return Code Validation**: All Windows API calls check return codes (0 = success)
-    ///    before accessing output data.
-    ///
-    /// 6. **Structure Initialization**: All structures use `Default` implementations that
-    ///    properly zero-initialize fields, meeting Windows API requirements.
+    /// Buffers sized via `GetDisplayConfigBufferSizes` with return code validation.
+    /// Vectors allocated with exact capacity for API writes. `as_mut_ptr()` and `&raw mut`
+    /// provide valid aligned pointers. `currentTopologyId` null allowed per API contract.
+    /// All API return codes checked (0 = success) before data access. Structures
+    /// zero-initialized via `Default` per API requirements.
     #[cfg_attr(
         windows,
         expect(unsafe_code, reason = "Windows FFI for display enumeration")
@@ -283,27 +269,10 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Structure Initialization**: Both `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2` and
-    ///    `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` are initialized with correct `size` and `type`
-    ///    fields matching their respective structure sizes and API requirements.
-    ///
-    /// 2. **Valid Adapter/Target IDs**: The `adapterId` and `id` fields come from `DisplayTarget`,
-    ///    which is populated by `QueryDisplayConfig` and guaranteed to contain valid display
-    ///    identifiers.
-    ///
-    /// 3. **Pointer Cast Soundness**: The cast from `&mut color_info.header` to
-    ///    `*mut DISPLAYCONFIG_DEVICE_INFO_HEADER` is sound because:
-    ///    - Both structures are `#[repr(C)]`
-    ///    - The `header` field is the first field, guaranteeing same memory address
-    ///    - Both types have compatible alignment and layout per Windows API contract
-    ///
-    /// 4. **Return Code Validation**: Windows API return codes are checked before accessing
-    ///    output data. Non-zero return codes trigger fallback to legacy API or error return.
-    ///
-    /// 5. **Fallback Safety**: If the 24H2+ API fails, the function safely falls back to
-    ///    `is_hdr_supported_legacy` which has its own safety guarantees.
+    /// Structures initialized with correct size/type fields per API requirements.
+    /// Adapter/target IDs from validated `DisplayTarget` (via `QueryDisplayConfig`).
+    /// Header pointer cast sound: `#[repr(C)]` layout, header is first field.
+    /// Return codes checked before data access; failures trigger legacy fallback.
     #[cfg_attr(not(windows), allow(unused_variables))]
     #[cfg_attr(
         windows,
@@ -427,22 +396,9 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Structure Initialization**: `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` is properly
-    ///    initialized with correct `size` and `type` fields matching Windows API requirements.
-    ///
-    /// 2. **Valid Adapter/Target IDs**: The `adapterId` and `id` fields come from `DisplayTarget`,
-    ///    which is populated by `QueryDisplayConfig` and guaranteed to be valid.
-    ///
-    /// 3. **Pointer Cast Soundness**: The cast from `&mut color_info.header` to
-    ///    `*mut DISPLAYCONFIG_DEVICE_INFO_HEADER` is sound because:
-    ///    - `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` is `#[repr(C)]`
-    ///    - The `header` field is the first field, guaranteeing same address
-    ///    - Both types have compatible alignment and layout
-    ///
-    /// 4. **Return Code Validation**: The Windows API return code is checked before accessing
-    ///    the output data, ensuring we only read valid results.
+    /// Structure initialized with correct size/type fields. Adapter/target IDs from
+    /// validated `DisplayTarget`. Header pointer cast sound: `#[repr(C)]`, header first field.
+    /// Return code checked before data access.
     #[cfg(windows)]
     #[expect(
         unsafe_code,
@@ -524,20 +480,9 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound for the same reasons as `is_hdr_supported`:
-    ///
-    /// 1. **Structure Initialization**: `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2` is properly
-    ///    initialized with correct `size` and `type` fields.
-    ///
-    /// 2. **Valid Adapter/Target IDs**: IDs come from validated `DisplayTarget` instances.
-    ///
-    /// 3. **Pointer Cast Soundness**: Cast to header pointer is sound due to `#[repr(C)]`
-    ///    layout guarantees (header is first field).
-    ///
-    /// 4. **Return Code Validation**: Windows API return codes are checked before reading results.
-    ///    Non-zero codes trigger fallback to `is_hdr_enabled_legacy`.
-    ///
-    /// 5. **Fallback Safety**: The legacy fallback function has its own documented safety guarantees.
+    /// Same soundness as `is_hdr_supported`: structures initialized with correct size/type,
+    /// IDs from validated `DisplayTarget`, header cast sound (`#[repr(C)]`, first field),
+    /// return codes checked before data access, failures trigger legacy fallback.
     #[cfg_attr(not(windows), allow(unused_variables))]
     #[cfg_attr(
         windows,
@@ -614,18 +559,9 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound for the same reasons as
-    /// `is_hdr_supported_legacy`:
-    ///
-    /// 1. **Structure Initialization**: `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` is properly
-    ///    initialized with correct `size` and `type` fields.
-    ///
-    /// 2. **Valid Adapter/Target IDs**: IDs come from validated `DisplayTarget` instances.
-    ///
-    /// 3. **Pointer Cast Soundness**: Cast to header pointer is sound due to `#[repr(C)]`
-    ///    layout guarantees.
-    ///
-    /// 4. **Return Code Validation**: Windows API return code is checked before reading results.
+    /// Same soundness as `is_hdr_supported_legacy`: structure initialized with correct
+    /// size/type, IDs from validated `DisplayTarget`, header cast sound (`#[repr(C)]`),
+    /// return code checked before data access.
     #[cfg(windows)]
     #[expect(unsafe_code, reason = "Windows FFI for legacy HDR state detection")]
     #[expect(
@@ -686,27 +622,10 @@ impl HdrController {
     ///
     /// # Safety
     ///
-    /// This function contains unsafe code that is sound because:
-    ///
-    /// 1. **Structure Initialization**: Both `DISPLAYCONFIG_SET_HDR_STATE` and
-    ///    `DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE` are initialized via their `new()` methods,
-    ///    which properly set all required fields including `size`, `type`, `adapterId`, and `id`.
-    ///
-    /// 2. **Valid Adapter/Target IDs**: The `adapterId` and `id` come from `DisplayTarget`,
-    ///    which is populated by `QueryDisplayConfig` and guaranteed to be valid.
-    ///
-    /// 3. **Pointer Cast Soundness**: The cast from `&mut set_state.header` to
-    ///    `*mut DISPLAYCONFIG_DEVICE_INFO_HEADER` is sound because:
-    ///    - Both structures are `#[repr(C)]`
-    ///    - The `header` field is the first field, guaranteeing same memory address
-    ///    - Both types have compatible alignment and layout per Windows API contract
-    ///
-    /// 4. **Return Code Validation**: Windows API return codes are checked before proceeding.
-    ///    Non-zero codes result in error returns.
-    ///
-    /// 5. **State Propagation Delay**: The 100ms delay after `DisplayConfigSetDeviceInfo`
-    ///    ensures the Windows display subsystem has time to propagate the state change before
-    ///    the function returns, preventing race conditions in callers.
+    /// Structures initialized via `new()` with correct size/type/ID fields. IDs from
+    /// validated `DisplayTarget`. Header pointer cast sound: `#[repr(C)]`, header first field.
+    /// Return codes checked; failures return errors. 100ms delay ensures state propagation
+    /// before return, preventing caller race conditions.
     #[cfg_attr(not(windows), allow(dead_code))]
     #[cfg_attr(
         windows,
