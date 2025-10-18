@@ -117,7 +117,10 @@ impl WindowsVersion {
     ///
     /// This is the most reliable method as it's not subject to compatibility shims.
     #[cfg(windows)]
-    #[allow(unsafe_code)] // Windows FFI for version detection
+    #[expect(
+        unsafe_code,
+        reason = "Windows FFI for RtlGetVersion via ntdll.dll to detect Windows build number"
+    )]
     fn get_build_number_with_rtl_get_version() -> crate::error::Result<u32> {
         // Define the function signature for RtlGetVersion
         type RtlGetVersionFn = unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32;
@@ -177,7 +180,10 @@ impl WindowsVersion {
     ///
     /// This method may be affected by compatibility shims but serves as a fallback.
     #[cfg(windows)]
-    #[allow(unsafe_code)] // Windows FFI for version detection fallback
+    #[expect(
+        unsafe_code,
+        reason = "Windows FFI for GetVersionExW fallback method to detect Windows build number"
+    )]
     fn get_build_number_with_get_version_ex() -> crate::error::Result<u32> {
         unsafe {
             #[expect(

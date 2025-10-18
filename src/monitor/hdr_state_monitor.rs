@@ -181,7 +181,10 @@ impl HdrStateMonitor {
     /// Creates a message-only window and processes Windows messages.
     /// This method blocks until the window is destroyed.
     #[cfg(windows)]
-    #[allow(unsafe_code)] // Windows FFI for message loop
+    #[expect(
+        unsafe_code,
+        reason = "Windows FFI for message-only window creation and message loop via CreateWindowExW and GetMessageW"
+    )]
     fn run_message_loop(&self) -> Result<()> {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
@@ -292,7 +295,10 @@ thread_local! {
 /// (500ms × 10 max) if state unchanged. Handles race condition where Windows messages
 /// arrive before `DisplayConfig` APIs reflect state change.
 #[cfg(windows)]
-#[allow(unsafe_code)] // Windows FFI callback
+#[expect(
+    unsafe_code,
+    reason = "Windows FFI callback for window procedure handling WM_DISPLAYCHANGE and WM_SETTINGCHANGE messages"
+)]
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
     msg: u32,
@@ -378,7 +384,10 @@ unsafe extern "system" fn window_proc(
 ///
 /// Initializes the recheck counter and starts a timer for periodic rechecks.
 #[cfg(windows)]
-#[allow(unsafe_code)] // Windows FFI for timer
+#[expect(
+    unsafe_code,
+    reason = "Windows FFI for SetTimer to schedule periodic HDR state rechecks"
+)]
 fn start_periodic_rechecks(hwnd: HWND) {
     MONITOR_STATE_TLS.with(|cell| {
         if let Some(state) = cell.borrow().as_ref() {
@@ -397,7 +406,10 @@ fn start_periodic_rechecks(hwnd: HWND) {
 ///
 /// Kills the recheck timer and resets the counter.
 #[cfg(windows)]
-#[allow(unsafe_code)] // Windows FFI for timer
+#[expect(
+    unsafe_code,
+    reason = "Windows FFI for KillTimer to stop periodic HDR state rechecks"
+)]
 fn stop_periodic_rechecks(hwnd: HWND) {
     MONITOR_STATE_TLS.with(|cell| {
         if let Some(state) = cell.borrow().as_ref() {

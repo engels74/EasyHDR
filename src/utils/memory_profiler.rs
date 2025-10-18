@@ -120,7 +120,10 @@ impl MemoryProfiler {
 
     /// Get process memory usage in bytes (Windows only, returns 0 on other platforms)
     #[cfg(windows)]
-    #[allow(unsafe_code)] // Windows FFI for memory info
+    #[expect(
+        unsafe_code,
+        reason = "Windows FFI for GetProcessMemoryInfo to retrieve process memory usage"
+    )]
     fn get_process_memory() -> usize {
         use windows::Win32::System::ProcessStatus::{
             GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,

@@ -104,7 +104,13 @@ impl ProcessMonitor {
     /// Uses `CreateToolhelp32Snapshot` with valid flags. Snapshot handle closed via `SnapshotGuard`.
     /// PROCESSENTRY32W initialized with correct size. Process32FirstW/NextW called with valid
     /// handle and check return codes before accessing data.
-    #[allow(unsafe_code)] // Windows FFI for process enumeration
+    #[cfg_attr(
+        windows,
+        expect(
+            unsafe_code,
+            reason = "Windows FFI for process enumeration via CreateToolhelp32Snapshot and Process32FirstW/NextW"
+        )
+    )]
     #[cfg_attr(
         not(windows),
         expect(
@@ -262,7 +268,10 @@ struct SnapshotGuard(windows::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl Drop for SnapshotGuard {
-    #[allow(unsafe_code)] // Windows FFI for handle cleanup
+    #[expect(
+        unsafe_code,
+        reason = "Windows FFI for CloseHandle to release snapshot handle"
+    )]
     fn drop(&mut self) {
         unsafe {
             let _ = CloseHandle(self.0);

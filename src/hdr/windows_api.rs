@@ -497,7 +497,10 @@ impl Default for DISPLAYCONFIG_PATH_TARGET_INFO {
     fn default() -> Self {
         // SAFETY: DISPLAYCONFIG_PATH_TARGET_INFO is a C struct with all primitive fields
         // that can be safely zero-initialized. This matches Windows API expectations.
-        #[allow(unsafe_code)]
+        #[expect(
+            unsafe_code,
+            reason = "Zero-initialization of C struct DISPLAYCONFIG_PATH_TARGET_INFO with primitive fields"
+        )]
         unsafe {
             std::mem::zeroed()
         }
@@ -522,7 +525,10 @@ pub struct DISPLAYCONFIG_PATH_INFO {
 // These functions are not available in windows-rs 0.52, so we declare them manually
 
 #[cfg(windows)]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Windows FFI declarations for Display Configuration API functions not in windows-rs 0.52"
+)]
 unsafe extern "system" {
     /// Gets the size of the buffers needed for `QueryDisplayConfig`
     pub fn GetDisplayConfigBufferSizes(
@@ -552,7 +558,10 @@ unsafe extern "system" {
 // These stubs are necessary for cross-platform compilation and testing.
 // They match the Windows API signatures but always return errors.
 #[cfg(not(windows))]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Stub FFI function for GetDisplayConfigBufferSizes on non-Windows platforms"
+)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
@@ -566,7 +575,10 @@ pub unsafe fn GetDisplayConfigBufferSizes(
 }
 
 #[cfg(not(windows))]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Stub FFI function for QueryDisplayConfig on non-Windows platforms"
+)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
@@ -583,7 +595,10 @@ pub unsafe fn QueryDisplayConfig(
 }
 
 #[cfg(not(windows))]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Stub FFI function for DisplayConfigGetDeviceInfo on non-Windows platforms"
+)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
@@ -595,7 +610,10 @@ pub unsafe fn DisplayConfigGetDeviceInfo(
 }
 
 #[cfg(not(windows))]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Stub FFI function for DisplayConfigSetDeviceInfo on non-Windows platforms"
+)]
 /// Stub implementation for non-Windows platforms
 ///
 /// # Safety
