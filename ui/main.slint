@@ -3,8 +3,58 @@
 // Implements task 9.4: Theme support with Palette and StyleMetrics
 // Implements task 12.1: Settings dialog/panel component
 // Requirements: 5.1, 5.2, 5.3, 5.4, 5.8, 5.9, 5.13, 6.1, 6.2, 6.3, 6.4
+// Enhanced with modern, elegant visual design
 
 import { Button, ListView, CheckBox, Palette, StyleMetrics, Slider } from "std-widgets.slint";
+
+// Modern color constants for enhanced visual design
+global DesignTokens {
+    // Brand colors
+    out property <color> brand-primary: #4A90E2;
+    out property <color> brand-primary-dark: #357ABD;
+    out property <color> brand-accent: #5DA3F5;
+
+    // Status colors - vibrant but not overwhelming
+    out property <color> status-success: #10B981;
+    out property <color> status-success-glow: #10B98140;
+    out property <color> status-error: #EF4444;
+    out property <color> status-error-glow: #EF444440;
+
+    // Neutral colors for layering and depth
+    out property <color> surface-primary: #FFFFFF;
+    out property <color> surface-secondary: #F8FAFC;
+    out property <color> surface-tertiary: #F1F5F9;
+    out property <color> border-light: #E2E8F0;
+    out property <color> border-medium: #CBD5E1;
+
+    // Shadow colors for depth
+    out property <color> shadow-light: #00000010;
+    out property <color> shadow-medium: #00000020;
+    out property <color> shadow-strong: #00000030;
+
+    // Typography
+    out property <length> font-size-xs: 10px;
+    out property <length> font-size-sm: 11px;
+    out property <length> font-size-base: 13px;
+    out property <length> font-size-lg: 14px;
+    out property <length> font-size-xl: 16px;
+    out property <length> font-size-2xl: 20px;
+    out property <length> font-size-3xl: 24px;
+
+    // Spacing scale
+    out property <length> space-xs: 4px;
+    out property <length> space-sm: 8px;
+    out property <length> space-md: 12px;
+    out property <length> space-lg: 16px;
+    out property <length> space-xl: 20px;
+    out property <length> space-2xl: 24px;
+
+    // Border radius scale
+    out property <length> radius-sm: 6px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+    out property <length> radius-xl: 16px;
+}
 
 // AppListItem struct represents a configured application in the list
 // Fields: id (UUID), display-name (app name), exe-path (full path), enabled (checkbox state), icon (app icon)
@@ -17,10 +67,7 @@ export struct AppListItem {
 }
 
 // Settings dialog content component (Task 12.1, Requirements 6.1-6.4)
-// Provides UI for configuring user preferences:
-// - Auto-start on Windows login
-// - Monitoring interval (500-2000ms)
-// - Tray notifications on HDR changes
+// Provides UI for configuring user preferences with modern, elegant styling
 component SettingsDialogContent inherits Rectangle {
     // Properties for settings values
     in-out property <bool> auto-start: false;
@@ -33,26 +80,30 @@ component SettingsDialogContent inherits Rectangle {
     callback save-settings(bool, int, bool, bool, bool);
     callback cancel-settings();
 
-    background: Palette.background;
-    border-width: 2px;
-    border-color: Palette.border;
-    border-radius: 8px;
+    // Modern card-like design with layered shadows
+    background: DesignTokens.surface-primary;
+    border-width: 1px;
+    border-color: DesignTokens.border-light;
+    border-radius: DesignTokens.radius-xl;
+    drop-shadow-blur: 20px;
+    drop-shadow-color: DesignTokens.shadow-medium;
+    drop-shadow-offset-y: 4px;
 
         VerticalLayout {
-            padding: StyleMetrics.layout-padding * 2;
-            spacing: StyleMetrics.layout-spacing * 2;
+            padding: DesignTokens.space-2xl;
+            spacing: DesignTokens.space-xl;
 
-            // Title
+            // Title with modern typography
             Text {
                 text: "Settings";
-                font-size: 18px;
+                font-size: DesignTokens.font-size-3xl;
                 font-weight: 700;
                 color: Palette.foreground;
             }
 
             // Auto-start setting (Requirement 6.1)
             HorizontalLayout {
-                spacing: StyleMetrics.layout-spacing;
+                spacing: DesignTokens.space-md;
                 CheckBox {
                     text: "Auto-start on Windows login";
                     checked <=> auto-start;
@@ -61,18 +112,19 @@ component SettingsDialogContent inherits Rectangle {
 
             // Monitoring interval setting (Requirement 6.2)
             VerticalLayout {
-                spacing: 4px;
+                spacing: DesignTokens.space-sm;
                 Text {
                     text: "Monitoring interval: " + round(monitoring-interval-ms) + "ms";
                     color: Palette.foreground;
-                    font-size: 13px;
+                    font-size: DesignTokens.font-size-base;
+                    font-weight: 600;
                 }
                 HorizontalLayout {
-                    spacing: StyleMetrics.layout-spacing;
+                    spacing: DesignTokens.space-md;
                     Text {
                         text: "500ms";
                         color: Palette.foreground.transparentize(0.4);
-                        font-size: 11px;
+                        font-size: DesignTokens.font-size-sm;
                         vertical-alignment: center;
                     }
                     Slider {
@@ -87,7 +139,7 @@ component SettingsDialogContent inherits Rectangle {
                     Text {
                         text: "2000ms";
                         color: Palette.foreground.transparentize(0.4);
-                        font-size: 11px;
+                        font-size: DesignTokens.font-size-sm;
                         vertical-alignment: center;
                     }
                 }
@@ -95,7 +147,7 @@ component SettingsDialogContent inherits Rectangle {
 
             // Tray notifications setting (Requirement 6.4)
             HorizontalLayout {
-                spacing: StyleMetrics.layout-spacing;
+                spacing: DesignTokens.space-md;
                 CheckBox {
                     text: "Show tray notifications on HDR changes";
                     checked <=> show-tray-notifications;
@@ -104,7 +156,7 @@ component SettingsDialogContent inherits Rectangle {
 
             // Minimize button behavior setting
             HorizontalLayout {
-                spacing: StyleMetrics.layout-spacing;
+                spacing: DesignTokens.space-md;
                 CheckBox {
                     text: "Minimize to tray (instead of taskbar)";
                     checked <=> minimize-to-tray-on-minimize;
@@ -113,7 +165,7 @@ component SettingsDialogContent inherits Rectangle {
 
             // Close button behavior setting
             HorizontalLayout {
-                spacing: StyleMetrics.layout-spacing;
+                spacing: DesignTokens.space-md;
                 CheckBox {
                     text: "Close to tray (instead of exiting)";
                     checked <=> minimize-to-tray-on-close;
@@ -125,9 +177,9 @@ component SettingsDialogContent inherits Rectangle {
                 vertical-stretch: 1;
             }
 
-            // Dialog buttons
+            // Dialog buttons with modern spacing
             HorizontalLayout {
-                spacing: StyleMetrics.layout-spacing;
+                spacing: DesignTokens.space-md;
 
                 // Spacer to push buttons to the right
                 Rectangle {
@@ -153,8 +205,8 @@ component SettingsDialogContent inherits Rectangle {
 export component MainWindow inherits Window {
     title: "EasyHDR";
     icon: @image-url("../assets/icon.ico");
-    preferred-width: 600px;
-    preferred-height: 500px;
+    preferred-width: 650px;
+    preferred-height: 550px;
 
     // Properties
     in-out property <[AppListItem]> app-list: [];
@@ -175,93 +227,205 @@ export component MainWindow inherits Window {
     callback open-settings();
     callback save-settings(bool, int, bool, bool, bool);
 
-    VerticalLayout {
-        padding: StyleMetrics.layout-padding;
-        spacing: StyleMetrics.layout-spacing;
+    // Modern background with subtle gradient
+    background: DesignTokens.surface-secondary;
 
-        // HDR Status indicator (Requirement 5.8, 5.13)
-        // Shows colored circle (green for ON, red for OFF) and text label
-        // Theme-aware colors with clear ON/OFF distinction
-        HorizontalLayout {
-            spacing: StyleMetrics.layout-spacing;
-            Text {
-                text: "HDR Status:";
-                font-size: 14px;
-                color: Palette.foreground;
-            }
-            Rectangle {
-                width: 16px;
-                height: 16px;
-                border-radius: 8px;
-                // Use semantic colors: success green for ON, error red for OFF
-                background: hdr-enabled ? #00cc00 : #cc0000;
-            }
-            Text {
-                text: hdr-enabled ? "ON" : "OFF";
-                font-size: 14px;
-                font-weight: 700;
-                color: Palette.foreground;
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+
+        // Modern header with branding and HDR status
+        Rectangle {
+            height: 80px;
+            background: @linear-gradient(180deg, DesignTokens.brand-primary 0%, DesignTokens.brand-primary-dark 100%);
+            drop-shadow-blur: 8px;
+            drop-shadow-color: DesignTokens.shadow-light;
+            drop-shadow-offset-y: 2px;
+
+            HorizontalLayout {
+                padding-left: DesignTokens.space-xl;
+                padding-right: DesignTokens.space-xl;
+                padding-top: DesignTokens.space-lg;
+                padding-bottom: DesignTokens.space-lg;
+                spacing: DesignTokens.space-lg;
+
+                // App icon and title
+                HorizontalLayout {
+                    spacing: DesignTokens.space-md;
+
+                    Image {
+                        source: @image-url("../assets/icon.ico");
+                        width: 48px;
+                        height: 48px;
+                        image-fit: contain;
+                    }
+
+                    VerticalLayout {
+                        spacing: DesignTokens.space-xs;
+
+                        Text {
+                            text: "EasyHDR";
+                            font-size: DesignTokens.font-size-2xl;
+                            font-weight: 700;
+                            color: #FFFFFF;
+                        }
+
+                        Text {
+                            text: "HDR Management Made Easy";
+                            font-size: DesignTokens.font-size-sm;
+                            color: #FFFFFF.transparentize(0.3);
+                        }
+                    }
+                }
+
+                // Spacer
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                // Enhanced HDR Status indicator with glow effect
+                Rectangle {
+                    width: 180px;
+                    height: 56px;
+                    border-radius: DesignTokens.radius-lg;
+                    background: #FFFFFF.transparentize(0.9);
+                    border-width: 1px;
+                    border-color: #FFFFFF.transparentize(0.7);
+
+                    HorizontalLayout {
+                        padding: DesignTokens.space-md;
+                        spacing: DesignTokens.space-md;
+
+                        // Status indicator with animated glow
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 16px;
+                            background: hdr-enabled ? DesignTokens.status-success : DesignTokens.status-error;
+                            drop-shadow-blur: 12px;
+                            drop-shadow-color: hdr-enabled ? DesignTokens.status-success-glow : DesignTokens.status-error-glow;
+
+                            animate background {
+                                duration: 300ms;
+                                easing: ease-in-out;
+                            }
+                        }
+
+                        VerticalLayout {
+                            spacing: 2px;
+
+                            Text {
+                                text: "HDR Status";
+                                font-size: DesignTokens.font-size-xs;
+                                color: #FFFFFF.transparentize(0.3);
+                            }
+
+                            Text {
+                                text: hdr-enabled ? "ENABLED" : "DISABLED";
+                                font-size: DesignTokens.font-size-lg;
+                                font-weight: 700;
+                                color: #FFFFFF;
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // Application list container (Requirements 5.2, 5.3, 5.4, 5.13)
-        // Task 9.2: Implement application list display with proper styling
-        // Task 9.4: Theme-aware colors and spacing
-        Rectangle {
-            border-width: 1px;
-            border-color: Palette.border;
-            border-radius: 4px;
-            background: Palette.alternate-background;
+        // Main content area
+        VerticalLayout {
+            padding: DesignTokens.space-xl;
+            spacing: DesignTokens.space-lg;
 
-            // Empty state message (Requirement 5.4)
-            if app-list.length == 0: Text {
-                text: "No applications configured. Click 'Add Application' to get started.";
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                color: Palette.foreground;
-            }
+            // Application list card with modern styling
+            Rectangle {
+                border-width: 1px;
+                border-color: DesignTokens.border-light;
+                border-radius: DesignTokens.radius-lg;
+                background: DesignTokens.surface-primary;
+                drop-shadow-blur: 8px;
+                drop-shadow-color: DesignTokens.shadow-light;
+                drop-shadow-offset-y: 2px;
 
-            // Scrollable ListView for application list (Requirements 5.2, 5.3, 5.13)
-            if app-list.length > 0: ListView {
-                for item[index] in app-list: VerticalLayout {
-                    // List item row with visual highlight for selection
-                    Rectangle {
-                        // Visual highlight for selected row - theme-aware
-                        background: selected-index == index ? Palette.selection-background : Colors.transparent;
+                // Empty state with better styling
+                if app-list.length == 0: VerticalLayout {
+                    padding: DesignTokens.space-2xl;
+                    spacing: DesignTokens.space-md;
 
-                        // Touch area for row click handling - covers entire row
-                        TouchArea {
+                    Text {
+                        text: "No Applications Configured";
+                        horizontal-alignment: center;
+                        font-size: DesignTokens.font-size-xl;
+                        font-weight: 600;
+                        color: Palette.foreground.transparentize(0.3);
+                    }
+
+                    Text {
+                        text: "Click 'Add Application(s)' below to get started";
+                        horizontal-alignment: center;
+                        font-size: DesignTokens.font-size-base;
+                        color: Palette.foreground.transparentize(0.5);
+                    }
+                }
+
+                // Scrollable ListView with modern card items
+                if app-list.length > 0: ListView {
+                    for item[index] in app-list: Rectangle {
+                        // Modern list item with hover and selection states
+                        border-radius: DesignTokens.radius-md;
+                        background: selected-index == index ?
+                            DesignTokens.brand-primary.transparentize(0.9) :
+                            (touch-area.has-hover ? DesignTokens.surface-tertiary : Colors.transparent);
+
+                        // Smooth transitions
+                        animate background {
+                            duration: 200ms;
+                            easing: ease-in-out;
+                        }
+
+                        // Touch area for row interactions
+                        touch-area := TouchArea {
                             clicked => {
                                 selected-index = index;
                             }
                         }
 
                         HorizontalLayout {
-                            spacing: StyleMetrics.layout-spacing;
-                            padding: StyleMetrics.layout-padding;
+                            spacing: DesignTokens.space-md;
+                            padding: DesignTokens.space-md;
 
-                            // Application icon (32x32)
-                            Image {
-                                source: item.icon;
-                                width: 32px;
-                                height: 32px;
+                            // Application icon with subtle shadow
+                            Rectangle {
+                                width: 40px;
+                                height: 40px;
+                                border-radius: DesignTokens.radius-sm;
+                                background: DesignTokens.surface-secondary;
+
+                                Image {
+                                    source: item.icon;
+                                    width: 36px;
+                                    height: 36px;
+                                    x: 2px;
+                                    y: 2px;
+                                    image-fit: contain;
+                                }
                             }
 
-                            // Application name and path with truncation
+                            // Application details with improved typography
                             VerticalLayout {
-                                spacing: 2px;
+                                spacing: DesignTokens.space-xs;
 
                                 Text {
                                     text: item.display-name;
                                     font-weight: 600;
-                                    font-size: 13px;
+                                    font-size: DesignTokens.font-size-base;
                                     overflow: elide;
                                     color: Palette.foreground;
                                 }
                                 Text {
                                     text: item.exe-path;
-                                    font-size: 11px;
-                                    color: Palette.foreground.transparentize(0.4);
+                                    font-size: DesignTokens.font-size-sm;
+                                    color: Palette.foreground.transparentize(0.5);
                                     overflow: elide;
                                 }
                             }
@@ -271,7 +435,7 @@ export component MainWindow inherits Window {
                                 horizontal-stretch: 1;
                             }
 
-                            // Enabled checkbox aligned to the right
+                            // Enabled checkbox
                             CheckBox {
                                 checked: item.enabled;
                                 toggled => {
@@ -280,55 +444,65 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
+                }
+            }
 
-                    // Row separator line - theme-aware
-                    Rectangle {
-                        height: 1px;
-                        background: Palette.border;
+            // Modern action toolbar
+            HorizontalLayout {
+                spacing: DesignTokens.space-md;
+
+                Button {
+                    text: "Add Application(s)";
+                    clicked => {
+                        add-application();
+                    }
+                }
+                Button {
+                    text: "Remove Selected";
+                    enabled: selected-index >= 0;
+                    clicked => {
+                        remove-application(selected-index);
+                    }
+                }
+
+                // Spacer
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                // Settings button
+                Button {
+                    text: "Settings";
+                    clicked => {
+                        settings-dialog.show();
                     }
                 }
             }
-        }
 
-        // Bottom toolbar with buttons (Requirement 5.9, 5.13, 5.14)
-        // Theme-aware spacing
-        HorizontalLayout {
-            spacing: StyleMetrics.layout-spacing;
-            Button {
-                text: "Add Application(s)";
-                clicked => {
-                    add-application();
-                }
-            }
-            Button {
-                text: "Remove Selected";
-                enabled: selected-index >= 0;
-                clicked => {
-                    remove-application(selected-index);
-                }
-            }
-
-            // Spacer to push right-aligned buttons to the right
+            // Helpful tip with modern styling
             Rectangle {
-                horizontal-stretch: 1;
-            }
+                height: 40px;
+                border-radius: DesignTokens.radius-md;
+                background: DesignTokens.brand-accent.transparentize(0.9);
+                border-width: 1px;
+                border-color: DesignTokens.brand-accent.transparentize(0.7);
 
-            // Settings button (Task 12.1)
-            Button {
-                text: "Settings";
-                clicked => {
-                    settings-dialog.show();
+                HorizontalLayout {
+                    padding: DesignTokens.space-md;
+                    spacing: DesignTokens.space-sm;
+
+                    Text {
+                        text: "💡";
+                        font-size: DesignTokens.font-size-lg;
+                    }
+
+                    Text {
+                        text: "Tip: You can select multiple .exe files at once using the file dialog";
+                        font-size: DesignTokens.font-size-sm;
+                        color: Palette.foreground.transparentize(0.3);
+                    }
                 }
             }
-        }
-
-        // Drag-and-drop hint (Requirement 5.14)
-        // Inform users about drag-and-drop functionality
-        Text {
-            text: "Tip: You can select multiple .exe files at once using the file dialog";
-            font-size: 11px;
-            color: Palette.foreground.transparentize(0.5);
-            horizontal-alignment: center;
         }
     }
 
