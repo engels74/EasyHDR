@@ -38,6 +38,12 @@ jobs:
           Write-Host "Executable found: $size bytes"
         shell: pwsh
 
+      - name: Upload release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.event.release.tag_name }} target/release/easyhdr.exe --clobber
+        shell: pwsh
+
       - name: VirusTotal Scan
         uses: crazy-max/ghaction-virustotal@v4
         with:
@@ -47,13 +53,3 @@ jobs:
           files: |
             target/release/easyhdr.exe
           request_rate: 4
-
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: target/release/easyhdr.exe
-          asset_name: easyhdr.exe
-          asset_content_type: application/vnd.microsoft.portable-executable
