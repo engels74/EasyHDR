@@ -27,6 +27,12 @@ global DesignTokens {
     out property <color> border-light: #E2E8F0;
     out property <color> border-medium: #CBD5E1;
 
+    // Text colors for proper contrast and readability
+    out property <color> text-primary: #1E293B;      // Dark slate for primary text
+    out property <color> text-secondary: #475569;    // Medium slate for secondary text
+    out property <color> text-tertiary: #64748B;     // Light slate for tertiary/hint text
+    out property <color> text-on-primary: #FFFFFF;   // White text on primary backgrounds
+
     // Shadow colors for depth
     out property <color> shadow-light: #00000010;
     out property <color> shadow-medium: #00000020;
@@ -66,6 +72,54 @@ export struct AppListItem {
     icon: image,
 }
 
+// Custom styled button component with guaranteed text contrast
+component StyledButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> primary: false;
+    callback clicked;
+
+    // Modern button styling with proper contrast
+    height: 32px;
+    border-radius: DesignTokens.radius-sm;
+    background: primary ?
+        (touch-area.pressed ? DesignTokens.brand-primary-dark :
+         (touch-area.has-hover ? DesignTokens.brand-primary : DesignTokens.brand-primary)) :
+        (touch-area.pressed ? DesignTokens.surface-tertiary :
+         (touch-area.has-hover ? DesignTokens.surface-secondary : DesignTokens.surface-primary));
+    border-width: primary ? 0px : 1px;
+    border-color: DesignTokens.border-medium;
+
+    // Smooth transitions
+    animate background {
+        duration: 150ms;
+        easing: ease-in-out;
+    }
+
+    touch-area := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: DesignTokens.space-lg;
+        padding-right: DesignTokens.space-lg;
+
+        Text {
+            text: root.text;
+            color: root.enabled ?
+                (primary ? DesignTokens.text-on-primary : DesignTokens.text-primary) :
+                DesignTokens.text-tertiary;
+            font-size: DesignTokens.font-size-base;
+            font-weight: primary ? 600 : 400;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
 // Settings dialog content component (Task 12.1, Requirements 6.1-6.4)
 // Provides UI for configuring user preferences with modern, elegant styling
 component SettingsDialogContent inherits Rectangle {
@@ -98,7 +152,7 @@ component SettingsDialogContent inherits Rectangle {
                 text: "Settings";
                 font-size: DesignTokens.font-size-3xl;
                 font-weight: 700;
-                color: Palette.foreground;
+                color: DesignTokens.text-primary;
             }
 
             // Auto-start setting (Requirement 6.1)
@@ -115,7 +169,7 @@ component SettingsDialogContent inherits Rectangle {
                 spacing: DesignTokens.space-sm;
                 Text {
                     text: "Monitoring interval: " + round(monitoring-interval-ms) + "ms";
-                    color: Palette.foreground;
+                    color: DesignTokens.text-primary;
                     font-size: DesignTokens.font-size-base;
                     font-weight: 600;
                 }
@@ -123,7 +177,7 @@ component SettingsDialogContent inherits Rectangle {
                     spacing: DesignTokens.space-md;
                     Text {
                         text: "500ms";
-                        color: Palette.foreground.transparentize(0.4);
+                        color: DesignTokens.text-secondary;
                         font-size: DesignTokens.font-size-sm;
                         vertical-alignment: center;
                     }
@@ -138,7 +192,7 @@ component SettingsDialogContent inherits Rectangle {
                     }
                     Text {
                         text: "2000ms";
-                        color: Palette.foreground.transparentize(0.4);
+                        color: DesignTokens.text-secondary;
                         font-size: DesignTokens.font-size-sm;
                         vertical-alignment: center;
                     }
@@ -186,14 +240,15 @@ component SettingsDialogContent inherits Rectangle {
                     horizontal-stretch: 1;
                 }
 
-                Button {
+                StyledButton {
                     text: "Cancel";
                     clicked => {
                         cancel-settings();
                     }
                 }
-                Button {
+                StyledButton {
                     text: "Save";
+                    primary: true;
                     clicked => {
                         save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close);
                     }
@@ -357,14 +412,14 @@ export component MainWindow inherits Window {
                         horizontal-alignment: center;
                         font-size: DesignTokens.font-size-xl;
                         font-weight: 600;
-                        color: Palette.foreground.transparentize(0.3);
+                        color: DesignTokens.text-secondary;
                     }
 
                     Text {
                         text: "Click 'Add Application(s)' below to get started";
                         horizontal-alignment: center;
                         font-size: DesignTokens.font-size-base;
-                        color: Palette.foreground.transparentize(0.5);
+                        color: DesignTokens.text-tertiary;
                     }
                 }
 
@@ -420,12 +475,12 @@ export component MainWindow inherits Window {
                                     font-weight: 600;
                                     font-size: DesignTokens.font-size-base;
                                     overflow: elide;
-                                    color: Palette.foreground;
+                                    color: DesignTokens.text-primary;
                                 }
                                 Text {
                                     text: item.exe-path;
                                     font-size: DesignTokens.font-size-sm;
-                                    color: Palette.foreground.transparentize(0.5);
+                                    color: DesignTokens.text-secondary;
                                     overflow: elide;
                                 }
                             }
@@ -451,13 +506,14 @@ export component MainWindow inherits Window {
             HorizontalLayout {
                 spacing: DesignTokens.space-md;
 
-                Button {
+                StyledButton {
                     text: "Add Application(s)";
+                    primary: true;
                     clicked => {
                         add-application();
                     }
                 }
-                Button {
+                StyledButton {
                     text: "Remove Selected";
                     enabled: selected-index >= 0;
                     clicked => {
@@ -471,7 +527,7 @@ export component MainWindow inherits Window {
                 }
 
                 // Settings button
-                Button {
+                StyledButton {
                     text: "Settings";
                     clicked => {
                         settings-dialog.show();
@@ -499,7 +555,7 @@ export component MainWindow inherits Window {
                     Text {
                         text: "Tip: You can select multiple .exe files at once using the file dialog";
                         font-size: DesignTokens.font-size-sm;
-                        color: Palette.foreground.transparentize(0.3);
+                        color: DesignTokens.text-secondary;
                     }
                 }
             }
