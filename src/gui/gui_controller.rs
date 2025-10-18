@@ -57,6 +57,10 @@ impl GuiController {
     ///
     /// Creates the `MainWindow` Slint component and sets up the bridge between
     /// the GUI and the application controller.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Initialization function that sets up window, callbacks, and tray icon. Should be refactored into smaller helper functions in the future."
+    )]
     pub fn new(
         controller: Arc<Mutex<AppController>>,
         state_receiver: mpsc::Receiver<AppState>,
