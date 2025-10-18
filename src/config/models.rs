@@ -180,6 +180,7 @@ pub struct AppConfig {
 
 /// User preferences and settings
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct UserPreferences {
     /// Whether to auto-start on Windows login
     pub auto_start: bool,
@@ -187,6 +188,10 @@ pub struct UserPreferences {
     pub monitoring_interval_ms: u64,
     /// Whether to show tray notifications on HDR changes
     pub show_tray_notifications: bool,
+    /// Whether to minimize to tray when minimize button is clicked (true) or minimize to taskbar (false)
+    pub minimize_to_tray_on_minimize: bool,
+    /// Whether to minimize to tray when close button is clicked (true) or close the application (false)
+    pub minimize_to_tray_on_close: bool,
 }
 
 /// Window state for position and size persistence
@@ -208,6 +213,8 @@ impl Default for UserPreferences {
             auto_start: false,
             monitoring_interval_ms: 1000,
             show_tray_notifications: true,
+            minimize_to_tray_on_minimize: true,
+            minimize_to_tray_on_close: false,
         }
     }
 }
@@ -373,6 +380,8 @@ mod tests {
             auto_start: true,
             monitoring_interval_ms: 2000,
             show_tray_notifications: false,
+            minimize_to_tray_on_minimize: true,
+            minimize_to_tray_on_close: false,
         };
 
         let json = serde_json::to_string(&prefs).unwrap();

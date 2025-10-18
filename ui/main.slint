@@ -26,9 +26,11 @@ component SettingsDialogContent inherits Rectangle {
     in-out property <bool> auto-start: false;
     in-out property <int> monitoring-interval-ms: 1000;
     in-out property <bool> show-tray-notifications: true;
+    in-out property <bool> minimize-to-tray-on-minimize: true;
+    in-out property <bool> minimize-to-tray-on-close: false;
 
     // Callbacks
-    callback save-settings(bool, int, bool);
+    callback save-settings(bool, int, bool, bool, bool);
     callback cancel-settings();
 
     background: Palette.background;
@@ -100,6 +102,24 @@ component SettingsDialogContent inherits Rectangle {
                 }
             }
 
+            // Minimize button behavior setting
+            HorizontalLayout {
+                spacing: StyleMetrics.layout-spacing;
+                CheckBox {
+                    text: "Minimize to tray (instead of taskbar)";
+                    checked <=> minimize-to-tray-on-minimize;
+                }
+            }
+
+            // Close button behavior setting
+            HorizontalLayout {
+                spacing: StyleMetrics.layout-spacing;
+                CheckBox {
+                    text: "Close to tray (instead of exiting)";
+                    checked <=> minimize-to-tray-on-close;
+                }
+            }
+
             // Spacer to push buttons to bottom
             Rectangle {
                 vertical-stretch: 1;
@@ -123,7 +143,7 @@ component SettingsDialogContent inherits Rectangle {
                 Button {
                     text: "Save";
                     clicked => {
-                        save-settings(auto-start, monitoring-interval-ms, show-tray-notifications);
+                        save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close);
                     }
                 }
             }
@@ -145,13 +165,15 @@ export component MainWindow inherits Window {
     in-out property <bool> settings-auto-start: false;
     in-out property <int> settings-monitoring-interval-ms: 1000;
     in-out property <bool> settings-show-tray-notifications: true;
+    in-out property <bool> settings-minimize-to-tray-on-minimize: true;
+    in-out property <bool> settings-minimize-to-tray-on-close: false;
 
     // Callbacks
     callback add-application();
     callback remove-application(int);
     callback toggle-enabled(int, bool);
     callback open-settings();
-    callback save-settings(bool, int, bool);
+    callback save-settings(bool, int, bool, bool, bool);
 
     VerticalLayout {
         padding: StyleMetrics.layout-padding;
@@ -322,9 +344,11 @@ export component MainWindow inherits Window {
             auto-start <=> settings-auto-start;
             monitoring-interval-ms <=> settings-monitoring-interval-ms;
             show-tray-notifications <=> settings-show-tray-notifications;
+            minimize-to-tray-on-minimize <=> settings-minimize-to-tray-on-minimize;
+            minimize-to-tray-on-close <=> settings-minimize-to-tray-on-close;
 
-            save-settings(auto-start, monitoring-interval-ms, show-tray-notifications) => {
-                root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications);
+            save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close) => {
+                root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close);
                 settings-dialog.close();
             }
 

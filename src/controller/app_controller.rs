@@ -975,6 +975,8 @@ mod tests {
             auto_start: true,
             monitoring_interval_ms: 2000,
             show_tray_notifications: false,
+            minimize_to_tray_on_minimize: true,
+            minimize_to_tray_on_close: false,
         };
 
         // Update preferences

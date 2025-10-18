@@ -603,13 +603,28 @@ mod tests {
 
         /// Strategy for generating valid `UserPreferences`
         fn user_preferences_strategy() -> impl Strategy<Value = UserPreferences> {
-            (any::<bool>(), 500u64..=2000u64, any::<bool>()).prop_map(
-                |(auto_start, monitoring_interval_ms, show_tray_notifications)| UserPreferences {
-                    auto_start,
-                    monitoring_interval_ms,
-                    show_tray_notifications,
-                },
+            (
+                any::<bool>(),
+                500u64..=2000u64,
+                any::<bool>(),
+                any::<bool>(),
+                any::<bool>(),
             )
+                .prop_map(
+                    |(
+                        auto_start,
+                        monitoring_interval_ms,
+                        show_tray_notifications,
+                        minimize_to_tray_on_minimize,
+                        minimize_to_tray_on_close,
+                    )| UserPreferences {
+                        auto_start,
+                        monitoring_interval_ms,
+                        show_tray_notifications,
+                        minimize_to_tray_on_minimize,
+                        minimize_to_tray_on_close,
+                    },
+                )
         }
 
         /// Strategy for generating valid `WindowState`
@@ -697,6 +712,8 @@ mod tests {
                     auto_start: false,
                     monitoring_interval_ms: interval,
                     show_tray_notifications: false,
+                    minimize_to_tray_on_minimize: true,
+                    minimize_to_tray_on_close: false,
                 };
 
                 let json = serde_json::to_string(&prefs).unwrap();

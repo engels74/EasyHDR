@@ -95,6 +95,12 @@ impl GuiController {
             }
             main_window
                 .set_settings_show_tray_notifications(config.preferences.show_tray_notifications);
+            main_window.set_settings_minimize_to_tray_on_minimize(
+                config.preferences.minimize_to_tray_on_minimize,
+            );
+            main_window.set_settings_minimize_to_tray_on_close(
+                config.preferences.minimize_to_tray_on_close,
+            );
 
             info!("Settings properties initialized from config");
         }
@@ -118,43 +124,64 @@ impl GuiController {
 
         let controller_clone = controller.clone();
         main_window.on_save_settings(
-            move |auto_start, monitoring_interval_ms, show_tray_notifications| {
+            move |auto_start,
+                  monitoring_interval_ms,
+                  show_tray_notifications,
+                  minimize_to_tray_on_minimize,
+                  minimize_to_tray_on_close| {
                 Self::save_settings(
                     &controller_clone,
                     auto_start,
                     monitoring_interval_ms,
                     show_tray_notifications,
+                    minimize_to_tray_on_minimize,
+                    minimize_to_tray_on_close,
                 );
             },
         );
 
         info!("GUI callbacks connected");
 
-        // Set up close request handler to save state and exit the application
+        // Set up close request handler to either minimize to tray or exit based on user preference
         let controller_for_close = controller.clone();
         let window_for_close = main_window.as_weak();
         main_window.window().on_close_requested(move || {
+            use slint::CloseRequestResponse;
             use tracing::info;
-            info!("Window close requested - saving state and exiting application");
 
-            // Save window state before exiting
-            if let Some(window) = window_for_close.upgrade() {
-                info!("Saving window state before exit");
-                Self::save_window_state(&window, &controller_for_close);
+            // Check user preference for close button behavior
+            let should_minimize_to_tray = {
+                let controller_guard = controller_for_close.lock();
+                let config = controller_guard.config.lock();
+                config.preferences.minimize_to_tray_on_close
+            };
+
+            if should_minimize_to_tray {
+                info!("Window close requested - minimizing to tray (user preference)");
+                Self::minimize_to_tray(&controller_for_close, &window_for_close);
+                CloseRequestResponse::KeepWindowShown
+            } else {
+                info!("Window close requested - saving state and exiting application");
+
+                // Save window state before exiting
+                if let Some(window) = window_for_close.upgrade() {
+                    info!("Saving window state before exit");
+                    Self::save_window_state(&window, &controller_for_close);
+                }
+
+                // Exit the application immediately
+                // Note: We use std::process::exit(0) instead of slint::quit_event_loop() because:
+                // 1. quit_event_loop() is asynchronous and doesn't guarantee immediate termination
+                // 2. Background threads (ProcessMonitor, AppController) run infinite loops with no shutdown signal
+                // 3. Returning KeepWindowShown after quit_event_loop() causes the window to hang
+                // 4. The OS will clean up all resources (memory, handles, threads) on process exit
+                // 5. Configuration has already been saved above, so no data loss occurs
+                info!("Exiting application");
+                std::process::exit(0);
             }
-
-            // Exit the application immediately
-            // Note: We use std::process::exit(0) instead of slint::quit_event_loop() because:
-            // 1. quit_event_loop() is asynchronous and doesn't guarantee immediate termination
-            // 2. Background threads (ProcessMonitor, AppController) run infinite loops with no shutdown signal
-            // 3. Returning KeepWindowShown after quit_event_loop() causes the window to hang
-            // 4. The OS will clean up all resources (memory, handles, threads) on process exit
-            // 5. Configuration has already been saved above, so no data loss occurs
-            info!("Exiting application");
-            std::process::exit(0);
         });
 
-        info!("Close request handler configured to exit application");
+        info!("Close request handler configured (behavior controlled by user preference)");
 
         // Create the system tray icon
         let tray_icon = TrayIcon::new(&main_window)?;
@@ -563,19 +590,26 @@ impl GuiController {
     /// Updates user preferences in the configuration and handles auto-start registry
     /// management. Called when the user clicks "Save" in the settings dialog.
     #[cfg(windows)]
+    #[allow(clippy::fn_params_excessive_bools)]
     fn save_settings(
         controller: &Arc<Mutex<AppController>>,
         auto_start: bool,
         monitoring_interval_ms: i32,
         show_tray_notifications: bool,
+        minimize_to_tray_on_minimize: bool,
+        minimize_to_tray_on_close: bool,
     ) {
         use easyhdr::config::models::UserPreferences;
         use easyhdr::utils::AutoStartManager;
         use tracing::{info, warn};
 
         info!(
-            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}",
-            auto_start, monitoring_interval_ms, show_tray_notifications
+            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}, minimize_to_tray_on_minimize={}, minimize_to_tray_on_close={}",
+            auto_start,
+            monitoring_interval_ms,
+            show_tray_notifications,
+            minimize_to_tray_on_minimize,
+            minimize_to_tray_on_close
         );
 
         // Create UserPreferences struct with new values
@@ -588,6 +622,8 @@ impl GuiController {
             auto_start,
             monitoring_interval_ms: monitoring_interval_ms as u64,
             show_tray_notifications,
+            minimize_to_tray_on_minimize,
+            minimize_to_tray_on_close,
         };
 
         // Update preferences in controller (this saves to config file)
@@ -643,11 +679,14 @@ impl GuiController {
 
     /// Stub implementation for non-Windows platforms
     #[cfg(not(windows))]
+    #[allow(clippy::fn_params_excessive_bools)]
     fn save_settings(
         _controller: &Arc<Mutex<AppController>>,
         _auto_start: bool,
         _monitoring_interval_ms: i32,
         _show_tray_notifications: bool,
+        _minimize_to_tray_on_minimize: bool,
+        _minimize_to_tray_on_close: bool,
     ) {
         Self::show_error_dialog("Settings management is only supported on Windows");
     }
@@ -955,8 +994,22 @@ impl GuiController {
 
                     // Detect transition from not-minimized to minimized
                     if is_minimized && !was_minimized {
-                        info!("Window minimize detected - triggering minimize-to-tray");
-                        Self::minimize_to_tray(&controller_handle, &window_weak);
+                        // Check user preference for minimize button behavior
+                        let should_minimize_to_tray = {
+                            let controller_guard = controller_handle.lock();
+                            let config = controller_guard.config.lock();
+                            config.preferences.minimize_to_tray_on_minimize
+                        };
+
+                        if should_minimize_to_tray {
+                            info!("Window minimize detected - triggering minimize-to-tray");
+                            Self::minimize_to_tray(&controller_handle, &window_weak);
+                        } else {
+                            info!(
+                                "Window minimize detected - minimizing to taskbar (user preference)"
+                            );
+                            // Do nothing - let the window minimize to taskbar normally
+                        }
                     }
 
                     window_minimized.set(is_minimized);
