@@ -654,6 +654,8 @@ impl GuiController {
             show_tray_notifications,
             minimize_to_tray_on_minimize,
             minimize_to_tray_on_close,
+            last_update_check_time: 0,
+            cached_latest_version: String::new(),
         };
 
         // Update preferences in controller (this saves to config file)
