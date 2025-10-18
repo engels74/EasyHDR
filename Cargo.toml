@@ -30,6 +30,10 @@ serde_json = "1.0"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 thiserror = "2.0"
 anyhow = "1.0"
+semver = "1.0"
+
+# HTTP client for update checking (blocking API, no async runtime needed)
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 # Logging
 tracing = "0.1"
@@ -59,6 +63,7 @@ tray-icon = "0.21"
 rfd = "0.15"  # File dialogs
 tauri-winrt-notification = "0.7"  # Windows toast notifications
 image = { version = "0.25", default-features = false, features = ["ico"] }  # ICO decoding for tray icons
+open = "5.3"  # Open URLs in default browser
 
 [build-dependencies]
 slint-build = "1.13"

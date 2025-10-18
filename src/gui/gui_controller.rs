@@ -12,6 +12,7 @@
 
 use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
+use easyhdr::utils::UpdateCheckResult;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
 use std::cell::{Cell, RefCell};
@@ -105,6 +106,15 @@ impl GuiController {
             info!("Settings properties initialized from config");
         }
 
+        // Set version and build ID from compile-time environment variables
+        main_window.set_app_version(env!("CARGO_PKG_VERSION").into());
+        main_window.set_build_id(env!("GIT_COMMIT_SHA").into());
+        info!(
+            "Version display initialized: v{} ({})",
+            env!("CARGO_PKG_VERSION"),
+            env!("GIT_COMMIT_SHA")
+        );
+
         // Set up callbacks
         let controller_clone = controller.clone();
         let window_weak = main_window.as_weak();
@@ -139,6 +149,12 @@ impl GuiController {
                 );
             },
         );
+
+        let controller_clone = controller.clone();
+        let window_weak = main_window.as_weak();
+        main_window.on_check_for_updates(move || {
+            Self::check_for_updates(&controller_clone, &window_weak);
+        });
 
         info!("GUI callbacks connected");
 
@@ -186,6 +202,16 @@ impl GuiController {
         // Create the system tray icon
         let tray_icon = TrayIcon::new(&main_window)?;
         info!("System tray icon created");
+
+        // Perform automatic update check on startup (in background)
+        let controller_clone = controller.clone();
+        let window_weak = main_window.as_weak();
+        std::thread::spawn(move || {
+            // Wait a bit to let the UI fully initialize
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            info!("Performing automatic update check on startup");
+            Self::check_for_updates(&controller_clone, &window_weak);
+        });
 
         Ok(Self {
             main_window,
@@ -689,6 +715,189 @@ impl GuiController {
         _minimize_to_tray_on_close: bool,
     ) {
         Self::show_error_dialog("Settings management is only supported on Windows");
+    }
+
+    /// Check for application updates from GitHub
+    ///
+    /// This method:
+    /// - Checks rate limiting (minimum 60 seconds between checks)
+    /// - Spawns a background thread to avoid blocking the UI
+    /// - Shows a notification if an update is available
+    /// - Updates the cached version and last check time in config
+    /// - Fails silently on network errors
+    fn check_for_updates(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
+        use easyhdr::utils::UpdateChecker;
+        use semver::Version;
+        use tracing::{info, warn};
+
+        info!("Manual update check requested");
+
+        // Check rate limiting
+        let (should_check, last_check_time) = {
+            let controller_guard = controller.lock();
+            let config = controller_guard.config.lock();
+            let last_check = config.preferences.last_update_check_time;
+            drop(config);
+            drop(controller_guard);
+
+            let checker = UpdateChecker::new(
+                "engels74",
+                "EasyHDR",
+                Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
+                60, // Minimum 60 seconds between checks
+            );
+
+            (checker.should_check(last_check), last_check)
+        };
+
+        if !should_check {
+            info!(
+                "Update check rate limited (last check: {})",
+                last_check_time
+            );
+            Self::show_info_notification(
+                "Update Check",
+                "Please wait at least 60 seconds between update checks",
+            );
+            return;
+        }
+
+        // Set checking state in UI
+        if let Some(window) = window.upgrade() {
+            window.set_checking_for_updates(true);
+        }
+
+        // Spawn background thread to check for updates
+        let controller_clone = controller.clone();
+        let window_weak = window.clone();
+        std::thread::spawn(move || {
+            info!("Starting update check in background thread");
+
+            let checker = UpdateChecker::new(
+                "engels74",
+                "EasyHDR",
+                Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
+                60,
+            );
+
+            // Perform the update check
+            let result = checker.check_for_updates();
+
+            // Update last check time and cache in config
+            {
+                let controller_guard = controller_clone.lock();
+                let mut config = controller_guard.config.lock();
+                config.preferences.last_update_check_time = UpdateChecker::current_timestamp();
+
+                if let Ok(ref check_result) = result {
+                    config.preferences.cached_latest_version =
+                        check_result.latest_version.to_string();
+                }
+
+                // Save config
+                drop(config);
+                drop(controller_guard);
+            }
+
+            // Reset checking state in UI
+            if let Some(window) = window_weak.upgrade() {
+                window.set_checking_for_updates(false);
+            }
+
+            // Handle result
+            match result {
+                Ok(check_result) => {
+                    info!("Update check completed: {:?}", check_result);
+                    Self::handle_update_check_result(&check_result);
+                }
+                Err(e) => {
+                    warn!("Update check failed (failing silently): {}", e);
+                    // Fail silently as per requirements
+                }
+            }
+        });
+    }
+
+    /// Handle the result of an update check
+    ///
+    /// Shows a notification if an update is available, with a button to open the releases page.
+    fn handle_update_check_result(result: &UpdateCheckResult) {
+        use tracing::info;
+
+        if result.update_available {
+            info!(
+                "Update available: {} -> {}",
+                result.current_version, result.latest_version
+            );
+
+            // Show notification with update information
+            let message = format!(
+                "A new version is available!\n\nCurrent: {}\nLatest: {}\n\nClick to view releases",
+                result.current_version, result.latest_version
+            );
+
+            Self::show_update_notification(&message, &result.releases_url);
+        } else {
+            info!("Application is up to date");
+            Self::show_info_notification("Update Check", "You are running the latest version!");
+        }
+    }
+
+    /// Show an update notification with a link to releases
+    #[cfg(windows)]
+    fn show_update_notification(message: &str, releases_url: &str) {
+        use tauri_winrt_notification::{Duration, Toast};
+        use tracing::warn;
+
+        let toast = Toast::new(Toast::POWERSHELL_APP_ID)
+            .title("EasyHDR Update Available")
+            .text1(message)
+            .duration(Duration::Long);
+
+        // Store the URL for opening when clicked
+        let url = releases_url.to_string();
+
+        if let Err(e) = toast.show() {
+            warn!("Failed to show update notification: {}", e);
+        } else {
+            // Open the releases page in the default browser
+            // Note: This is a simplified implementation. In a production app,
+            // you might want to handle the notification click event properly.
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if let Err(e) = open::that(&url) {
+                    warn!("Failed to open releases URL: {}", e);
+                }
+            });
+        }
+    }
+
+    /// Show an update notification (stub for non-Windows)
+    #[cfg(not(windows))]
+    fn show_update_notification(_message: &str, _releases_url: &str) {
+        // No-op on non-Windows platforms
+    }
+
+    /// Show an info notification
+    #[cfg(windows)]
+    fn show_info_notification(title: &str, message: &str) {
+        use tauri_winrt_notification::{Duration, Toast};
+        use tracing::warn;
+
+        let toast = Toast::new(Toast::POWERSHELL_APP_ID)
+            .title(title)
+            .text1(message)
+            .duration(Duration::Short);
+
+        if let Err(e) = toast.show() {
+            warn!("Failed to show info notification: {}", e);
+        }
+    }
+
+    /// Show an info notification (stub for non-Windows)
+    #[cfg(not(windows))]
+    fn show_info_notification(_title: &str, _message: &str) {
+        // No-op on non-Windows platforms
     }
 
     /// Release GUI resources when window is hidden

@@ -349,12 +349,18 @@ export component MainWindow inherits Window {
     in-out property <bool> settings-minimize-to-tray-on-minimize: true;
     in-out property <bool> settings-minimize-to-tray-on-close: false;
 
+    // Version and update check properties
+    in-out property <string> app-version: "0.1.0";
+    in-out property <string> build-id: "unknown";
+    in-out property <bool> checking-for-updates: false;
+
     // Callbacks
     callback add-application();
     callback remove-application(int);
     callback toggle-enabled(int, bool);
     callback open-settings();
     callback save-settings(bool, int, bool, bool, bool);
+    callback check-for-updates();
 
     // Modern background with subtle gradient
     background: DesignTokens.surface-secondary;
@@ -640,6 +646,61 @@ export component MainWindow inherits Window {
                         font-family: DesignTokens.font-family-primary;
                         font-size: DesignTokens.font-size-sm;
                         color: DesignTokens.text-secondary;
+                    }
+                }
+            }
+
+            // Version display and update check button (lower right corner)
+            HorizontalLayout {
+                spacing: DesignTokens.space-md;
+
+                // Spacer to push version info to the right
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                // Version display
+                Text {
+                    text: "v" + app-version + " (" + build-id + ")";
+                    font-family: DesignTokens.font-family-primary;
+                    font-size: DesignTokens.font-size-xs;
+                    color: DesignTokens.text-tertiary;
+                    vertical-alignment: center;
+                }
+
+                // Update check button (small, minimal)
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: DesignTokens.radius-sm;
+                    background: update-check-touch.has-hover ?
+                        DesignTokens.surface-tertiary :
+                        Colors.transparent;
+                    border-width: 1px;
+                    border-color: update-check-touch.has-hover ?
+                        DesignTokens.border-medium :
+                        Colors.transparent;
+
+                    animate background, border-color {
+                        duration: 150ms;
+                        easing: ease-in-out;
+                    }
+
+                    update-check-touch := TouchArea {
+                        enabled: !checking-for-updates;
+                        clicked => {
+                            check-for-updates();
+                        }
+                    }
+
+                    // Refresh icon (Unicode character)
+                    Text {
+                        text: checking-for-updates ? "⏳" : "🔄";
+                        font-family: DesignTokens.font-family-primary;
+                        font-size: DesignTokens.font-size-sm;
+                        color: DesignTokens.text-secondary;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
                 }
             }

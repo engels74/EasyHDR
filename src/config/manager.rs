@@ -623,6 +623,8 @@ mod tests {
                         show_tray_notifications,
                         minimize_to_tray_on_minimize,
                         minimize_to_tray_on_close,
+                        last_update_check_time: 0,
+                        cached_latest_version: String::new(),
                     },
                 )
         }
@@ -714,6 +716,8 @@ mod tests {
                     show_tray_notifications: false,
                     minimize_to_tray_on_minimize: true,
                     minimize_to_tray_on_close: false,
+                    last_update_check_time: 0,
+                    cached_latest_version: String::new(),
                 };
 
                 let json = serde_json::to_string(&prefs).unwrap();
