@@ -15,29 +15,21 @@
     reason = "Windows API types use SCREAMING_SNAKE_CASE naming conventions"
 )]
 
-// Import LUID from windows-rs on Windows, or define a stub for non-Windows platforms
+// Import LUID from windows-rs on Windows for internal use
 #[cfg(windows)]
-pub use windows::Win32::Foundation::LUID;
+use windows::Win32::Foundation::LUID as WinLUID;
 
-// Implement Hash and Eq for Windows LUID to enable use in hash-based collections
-// The windows-rs LUID type only implements PartialEq, but we need Eq and Hash
-// for DisplayTarget to be used in HashSet/HashMap
-#[cfg(windows)]
-impl Eq for LUID {}
-
-#[cfg(windows)]
-impl std::hash::Hash for LUID {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.LowPart.hash(state);
-        self.HighPart.hash(state);
-    }
-}
-
-/// Locally Unique Identifier (LUID) structure for non-Windows platforms
+/// Locally Unique Identifier (LUID) structure
 ///
-/// This is a stub implementation for testing on non-Windows platforms.
-/// On Windows, the real LUID from windows-rs is used instead.
-#[cfg(not(windows))]
+/// This is a newtype wrapper around the Windows `LUID` type that implements
+/// `Eq` and `Hash` to enable use in hash-based collections like `HashSet` and `HashMap`.
+///
+/// The `windows-rs` `LUID` type only implements `PartialEq`, but we need `Eq` and `Hash`
+/// for `DisplayTarget` to be used in hash-based collections. Rust's orphan rules prevent
+/// implementing foreign traits on foreign types, so we use the newtype pattern.
+///
+/// On Windows, this wraps `windows::Win32::Foundation::LUID`.
+/// On non-Windows platforms, this is a standalone struct for testing.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct LUID {
@@ -45,6 +37,28 @@ pub struct LUID {
     pub LowPart: u32,
     /// High-order 32 bits
     pub HighPart: i32,
+}
+
+// Conversion from windows-rs LUID to our LUID (Windows only)
+#[cfg(windows)]
+impl From<WinLUID> for LUID {
+    fn from(luid: WinLUID) -> Self {
+        Self {
+            LowPart: luid.LowPart,
+            HighPart: luid.HighPart,
+        }
+    }
+}
+
+// Conversion from our LUID to windows-rs LUID (Windows only)
+#[cfg(windows)]
+impl From<LUID> for WinLUID {
+    fn from(luid: LUID) -> Self {
+        Self {
+            LowPart: luid.LowPart,
+            HighPart: luid.HighPart,
+        }
+    }
 }
 
 /// `DISPLAYCONFIG_DEVICE_INFO_TYPE` enumeration values
@@ -170,6 +184,9 @@ impl DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_ADVANCED_COLOR_STATE,
                 size: std::mem::size_of::<Self>() as u32,
+                #[cfg(windows)]
+                adapterId: adapter_id.into(),
+                #[cfg(not(windows))]
                 adapterId: adapter_id,
                 id: target_id,
             },
@@ -307,6 +324,9 @@ impl DISPLAYCONFIG_SET_HDR_STATE {
             header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
                 type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_SET_HDR_STATE,
                 size: std::mem::size_of::<Self>() as u32,
+                #[cfg(windows)]
+                adapterId: adapter_id.into(),
+                #[cfg(not(windows))]
                 adapterId: adapter_id,
                 id: target_id,
             },
