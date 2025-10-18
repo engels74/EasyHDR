@@ -18,7 +18,9 @@ path = "src/main.rs"
 
 [dependencies]
 # GUI
-slint = { version = "1.13", features = ["unstable-winit-030"] }
+# Use Skia renderer for better font rendering quality on Windows
+# The default FemtoVG renderer has poor font rasterization (see: https://github.com/slint-ui/slint/issues/6365)
+slint = { version = "1.13", features = ["renderer-skia"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
