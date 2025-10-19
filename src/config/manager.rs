@@ -767,8 +767,27 @@ mod tests {
         // Save initial config
         ConfigManager::save(&config).unwrap();
 
+        // Verify the saved JSON contains the expected fields (Windows file system sync check)
+        let config_path = ConfigManager::get_config_path();
+        let saved_json =
+            fs::read_to_string(&config_path).expect("Should be able to read saved config");
+        assert!(
+            saved_json.contains("1234567890"),
+            "First save should include last_update_check_time in JSON"
+        );
+
         // Simulate GUI settings save: load config, modify UI settings, save
         let mut loaded_config = ConfigManager::load().unwrap();
+
+        // Verify the loaded config has the correct metadata (Windows caching check)
+        assert_eq!(
+            loaded_config.preferences.last_update_check_time, 1_234_567_890,
+            "First load should preserve last_update_check_time"
+        );
+        assert_eq!(
+            loaded_config.preferences.cached_latest_version, "1.2.3",
+            "First load should preserve cached_latest_version"
+        );
 
         // Modify only UI-controlled fields (simulating partial update pattern)
         loaded_config.preferences.auto_start = true;
@@ -776,8 +795,22 @@ mod tests {
         loaded_config.preferences.show_tray_notifications = false;
         // Note: last_update_check_time and cached_latest_version are NOT modified
 
+        // Remove config file before second save to prevent Windows file system caching issues
+        // This ensures the new save creates a fresh file rather than potentially being cached
+        if config_path.exists() {
+            fs::remove_file(&config_path).unwrap();
+        }
+
         // Save the modified config
         ConfigManager::save(&loaded_config).unwrap();
+
+        // Verify the second save also includes metadata (Windows file system sync check)
+        let saved_json = fs::read_to_string(&config_path)
+            .expect("Should be able to read saved config after second save");
+        assert!(
+            saved_json.contains("1234567890"),
+            "Second save should preserve last_update_check_time in JSON"
+        );
 
         // Load again and verify update metadata was preserved
         let final_config = ConfigManager::load().unwrap();
