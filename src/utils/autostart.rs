@@ -70,7 +70,9 @@ impl AutoStartManager {
             EasyHdrError::ConfigError(format!("Failed to determine application location: {e}"))
         })?;
 
-        let exe_path_str = exe_path.to_string_lossy();
+        // Quote the path to handle spaces (e.g., "C:\Program Files\EasyHDR\easyhdr.exe")
+        // This respects Windows shell parsing rules per Platform Fit & OS Contracts guidelines
+        let quoted_path = format!("\"{}\"", exe_path.to_string_lossy());
 
         // Open the registry key with write permissions
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -84,15 +86,15 @@ impl AutoStartManager {
             }
         };
 
-        // Set the registry value
-        if let Err(e) = run_key.set_value(APP_NAME, &exe_path_str.as_ref()) {
+        // Set the registry value with quoted path
+        if let Err(e) = run_key.set_value(APP_NAME, &quoted_path) {
             error!("Failed to set registry value {APP_NAME}: {e}");
             return Err(EasyHdrError::ConfigError(format!(
                 "Failed to enable auto-start. Please check your permissions: {e}"
             )));
         }
 
-        info!("Auto-start enabled: {APP_NAME} -> {exe_path_str}");
+        info!("Auto-start enabled: {APP_NAME} -> {quoted_path}");
         Ok(())
     }
 
@@ -229,6 +231,47 @@ mod tests {
         // Verify it's enabled
         let is_enabled = AutoStartManager::is_enabled().expect("Failed to check auto-start status");
         assert!(is_enabled, "Auto-start should be enabled");
+
+        // Cleanup
+        let _ = AutoStartManager::disable();
+    }
+
+    /// Test that paths with spaces are correctly quoted in the registry
+    ///
+    /// This test verifies that executable paths containing spaces (e.g., from Program Files)
+    /// are properly quoted when written to the registry, preventing silent boot failures.
+    #[test]
+    #[cfg(windows)]
+    fn test_autostart_handles_paths_with_spaces() {
+        use winreg::RegKey;
+        use winreg::enums::HKEY_CURRENT_USER;
+
+        // Cleanup: ensure auto-start is disabled before we start
+        let _ = AutoStartManager::disable();
+
+        // Enable auto-start (this will use the current executable path)
+        AutoStartManager::enable().expect("Failed to enable auto-start");
+
+        // Read the registry value directly to verify it's quoted
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let run_key = hkcu
+            .open_subkey(RUN_KEY_PATH)
+            .expect("Failed to open registry key");
+        let registry_value: String = run_key
+            .get_value(APP_NAME)
+            .expect("Failed to read registry value");
+
+        // Verify the path is quoted
+        assert!(
+            registry_value.starts_with('"') && registry_value.ends_with('"'),
+            "Registry value should be quoted, got: {registry_value}"
+        );
+
+        // Verify the quoted path contains the executable name
+        assert!(
+            registry_value.contains("easyhdr") || registry_value.contains("autostart"),
+            "Registry value should contain executable name, got: {registry_value}"
+        );
 
         // Cleanup
         let _ = AutoStartManager::disable();
