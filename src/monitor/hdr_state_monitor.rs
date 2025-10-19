@@ -262,9 +262,9 @@ impl HdrStateMonitor {
             )
             .map_err(|e| {
                 error!("Failed to create hidden window for HDR state monitoring: {e}");
-                EasyHdrError::ProcessMonitorError(format!(
+                EasyHdrError::ProcessMonitorError(crate::error::StringError::new(format!(
                     "Failed to create hidden window for HDR state monitoring: {e}"
-                ))
+                )))
             })?;
 
             if hwnd.0.is_null() {

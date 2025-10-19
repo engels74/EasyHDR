@@ -149,7 +149,7 @@ impl WindowsVersion {
 
             if rtl_get_version_ptr.is_none() {
                 return Err(crate::error::EasyHdrError::HdrControlFailed(
-                    "RtlGetVersion not found in ntdll.dll".to_string(),
+                    crate::error::StringError::new("RtlGetVersion not found in ntdll.dll"),
                 ));
             }
 
@@ -169,9 +169,11 @@ impl WindowsVersion {
             let status = rtl_get_version(&raw mut version_info);
 
             if status != 0 {
-                return Err(crate::error::EasyHdrError::HdrControlFailed(format!(
-                    "RtlGetVersion failed with status: {status}",
-                )));
+                return Err(crate::error::EasyHdrError::HdrControlFailed(
+                    crate::error::StringError::new(format!(
+                        "RtlGetVersion failed with status: {status}",
+                    )),
+                ));
             }
 
             Ok(version_info.dwBuildNumber)

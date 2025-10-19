@@ -36,8 +36,8 @@ impl AutoStartManager {
             Ok(key) => key,
             Err(e) => {
                 error!("Failed to open registry key {RUN_KEY_PATH}: {e}");
-                return Err(EasyHdrError::ConfigError(format!(
-                    "Failed to access Windows auto-start registry: {e}"
+                return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                    format!("Failed to access Windows auto-start registry: {e}"),
                 )));
             }
         };
@@ -54,8 +54,8 @@ impl AutoStartManager {
             }
             Err(e) => {
                 error!("Failed to read registry value {APP_NAME}: {e}");
-                Err(EasyHdrError::ConfigError(format!(
-                    "Failed to check auto-start status: {e}"
+                Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                    format!("Failed to check auto-start status: {e}"),
                 )))
             }
         }
@@ -67,7 +67,9 @@ impl AutoStartManager {
         // Get the current executable path
         let exe_path = std::env::current_exe().map_err(|e| {
             error!("Failed to get current executable path: {e}");
-            EasyHdrError::ConfigError(format!("Failed to determine application location: {e}"))
+            EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                "Failed to determine application location: {e}"
+            )))
         })?;
 
         // Quote the path to handle spaces (e.g., "C:\Program Files\EasyHDR\easyhdr.exe")
@@ -80,8 +82,10 @@ impl AutoStartManager {
             Ok(key) => key,
             Err(e) => {
                 error!("Failed to open registry key {RUN_KEY_PATH} for writing: {e}");
-                return Err(EasyHdrError::ConfigError(format!(
-                    "Failed to access Windows auto-start registry. Please check your permissions: {e}"
+                return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                    format!(
+                        "Failed to access Windows auto-start registry. Please check your permissions: {e}"
+                    ),
                 )));
             }
         };
@@ -89,8 +93,8 @@ impl AutoStartManager {
         // Set the registry value with quoted path
         if let Err(e) = run_key.set_value(APP_NAME, &quoted_path) {
             error!("Failed to set registry value {APP_NAME}: {e}");
-            return Err(EasyHdrError::ConfigError(format!(
-                "Failed to enable auto-start. Please check your permissions: {e}"
+            return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                format!("Failed to enable auto-start. Please check your permissions: {e}"),
             )));
         }
 
@@ -107,8 +111,10 @@ impl AutoStartManager {
             Ok(key) => key,
             Err(e) => {
                 error!("Failed to open registry key {RUN_KEY_PATH} for writing: {e}");
-                return Err(EasyHdrError::ConfigError(format!(
-                    "Failed to access Windows auto-start registry. Please check your permissions: {e}"
+                return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                    format!(
+                        "Failed to access Windows auto-start registry. Please check your permissions: {e}"
+                    ),
                 )));
             }
         };
@@ -126,8 +132,8 @@ impl AutoStartManager {
             }
             Err(e) => {
                 error!("Failed to delete registry value {APP_NAME}: {e}");
-                Err(EasyHdrError::ConfigError(format!(
-                    "Failed to disable auto-start. Please check your permissions: {e}"
+                Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                    format!("Failed to disable auto-start. Please check your permissions: {e}"),
                 )))
             }
         }

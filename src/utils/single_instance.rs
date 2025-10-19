@@ -38,9 +38,9 @@ impl SingleInstanceGuard {
                 // Mutex already exists - another instance is running
                 error!("Another instance of EasyHDR is already running");
                 let _ = CloseHandle(existing_handle);
-                Err(EasyHdrError::ConfigError(
-                    "Another instance of EasyHDR is already running".to_string(),
-                ))
+                Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                    "Another instance of EasyHDR is already running",
+                )))
             } else {
                 // Mutex doesn't exist, create it
                 let mutex_handle = CreateMutexW(None, true, &mutex_name)?;
