@@ -32,6 +32,8 @@ jobs:
         run: cargo miri test --lib config error -- --test-threads=1
         env:
           MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check
+        # --test-threads=1 is used for Miri to ensure deterministic execution and better UB detection
+        # This is a Miri-specific requirement, not related to test isolation
         # No continue-on-error: These tests should pass and will fail CI if UB is detected
 
   miri-full:
@@ -54,6 +56,8 @@ jobs:
         env:
           MIRIFLAGS: -Zmiri-disable-isolation
         continue-on-error: true
+        # --test-threads=1 is used for Miri to ensure deterministic execution and better UB detection
+        # This is a Miri-specific requirement, not related to test isolation
         # Continue-on-error: Windows FFI calls will fail on Linux Miri
         # but this still validates pure Rust code in other modules
 
@@ -62,4 +66,5 @@ jobs:
         env:
           MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check
         continue-on-error: true
+        # --test-threads=1 is used for Miri to ensure deterministic execution and better UB detection
         # Strict mode catches additional provenance and alignment issues

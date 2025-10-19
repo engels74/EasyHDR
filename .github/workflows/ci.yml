@@ -37,8 +37,18 @@ jobs:
       - name: Build release executable
         run: cargo build --release --verbose
 
-      - name: Run tests
-        run: cargo test --release -- --test-threads=1
+      - name: Run unit tests (parallel)
+        run: cargo test --lib --release
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Run integration tests (sequential - Windows API global state)
+        run: |
+          cargo test --test integration_tests --release -- --test-threads=1
+          cargo test --test version_detection_tests --release -- --test-threads=1
+          cargo test --test memory_usage_test --release -- --test-threads=1
+          cargo test --test startup_time_test --release -- --test-threads=1
+          cargo test --test cpu_usage_test --release -- --test-threads=1
         env:
           RUST_BACKTRACE: 1
 
