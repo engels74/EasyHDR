@@ -264,8 +264,14 @@ impl AppController {
                 if is_monitored {
                     info!("Monitored application stopped: {}", process_name);
 
-                    // Decrement active process count
-                    let prev_count = self.active_process_count.fetch_sub(1, Ordering::SeqCst);
+                    // Decrement active process count using checked atomic pattern to prevent underflow
+                    // Uses fetch_update with saturating_sub to ensure count never wraps to usize::MAX
+                    let prev_count = self
+                        .active_process_count
+                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                            Some(count.saturating_sub(1))
+                        })
+                        .expect("fetch_update with Some(_) never fails");
                     debug!(
                         "Active process count: {} -> {}",
                         prev_count,
@@ -746,6 +752,60 @@ mod tests {
         // Should have sent a state update
         let state = state_rx.try_recv().unwrap();
         assert!(!state.hdr_enabled);
+    }
+
+    #[test]
+    fn test_handle_process_stopped_when_count_is_zero() {
+        // Create a config with one monitored app
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp {
+            id: Uuid::new_v4(),
+            display_name: "Test App".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app.exe"),
+            process_name: "app".to_string(),
+            enabled: true,
+            icon_data: None,
+        });
+
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
+        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
+
+        // Initial count should be 0
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+
+        // Send a spurious ProcessEvent::Stopped when count is already 0
+        // This should NOT cause underflow (wrapping to usize::MAX)
+        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+
+        // Count should remain 0 (saturating_sub prevents underflow)
+        assert_eq!(
+            controller.active_process_count.load(Ordering::SeqCst),
+            0,
+            "Count should remain 0 and not wrap to usize::MAX"
+        );
+
+        // Send another spurious stop event to verify idempotency
+        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+
+        // Count should still be 0
+        assert_eq!(
+            controller.active_process_count.load(Ordering::SeqCst),
+            0,
+            "Multiple spurious stops should not corrupt state"
+        );
+
+        // Verify that normal operation still works after spurious events
+        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        assert_eq!(
+            controller.active_process_count.load(Ordering::SeqCst),
+            1,
+            "Normal increment should work after spurious stops"
+        );
     }
 
     #[test]
