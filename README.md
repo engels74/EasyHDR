@@ -47,12 +47,7 @@ Configuration is stored at `%APPDATA%\EasyHDR\config.json` and saved automatical
 - `tray-icon` - System tray integration
 - `rfd` - Native file dialogs
 - `tauri-winrt-notification` - Toast notifications
-- `image` - Icon extraction
-
-**Utilities:**
-- `uuid` - Unique identifiers
-- `thiserror` - Error handling
-- `once_cell` - Lazy initialization
+- `reqwest` - Update checking
 
 ## Development
 
