@@ -262,7 +262,7 @@ impl Default for WindowState {
             x: 100,
             y: 100,
             width: 600,
-            height: 500,
+            height: 600,
         }
     }
 }
@@ -477,7 +477,7 @@ mod tests {
         assert_eq!(window_state.x, 100);
         assert_eq!(window_state.y, 100);
         assert_eq!(window_state.width, 600);
-        assert_eq!(window_state.height, 500);
+        assert_eq!(window_state.height, 600);
     }
 
     #[test]
