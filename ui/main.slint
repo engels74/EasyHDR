@@ -151,9 +151,10 @@ component SettingsDialogContent inherits Rectangle {
     in-out property <bool> show-tray-notifications: true;
     in-out property <bool> minimize-to-tray-on-minimize: true;
     in-out property <bool> minimize-to-tray-on-close: false;
+    in-out property <bool> start-minimized-to-tray: false;
 
     // Callbacks
-    callback save-settings(bool, int, bool, bool, bool);
+    callback save-settings(bool, int, bool, bool, bool, bool);
     callback cancel-settings();
 
     // Modern card-like design with layered shadows
@@ -199,6 +200,12 @@ component SettingsDialogContent inherits Rectangle {
                     StyledCheckBox {
                         text: "Auto-start on Windows login";
                         checked <=> auto-start;
+                    }
+
+                    // Start minimized to tray setting
+                    StyledCheckBox {
+                        text: "Start minimized to tray on launch";
+                        checked <=> start-minimized-to-tray;
                     }
 
                     // Minimize button behavior setting
@@ -323,7 +330,7 @@ component SettingsDialogContent inherits Rectangle {
                     text: "Save";
                     primary: true;
                     clicked => {
-                        save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close);
+                        save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray);
                     }
                 }
             }
@@ -348,6 +355,7 @@ export component MainWindow inherits Window {
     in-out property <bool> settings-show-tray-notifications: true;
     in-out property <bool> settings-minimize-to-tray-on-minimize: true;
     in-out property <bool> settings-minimize-to-tray-on-close: false;
+    in-out property <bool> settings-start-minimized-to-tray: false;
 
     // Version and update check properties
     in-out property <string> app-version: "0.1.0";
@@ -359,7 +367,7 @@ export component MainWindow inherits Window {
     callback remove-application(int);
     callback toggle-enabled(int, bool);
     callback open-settings();
-    callback save-settings(bool, int, bool, bool, bool);
+    callback save-settings(bool, int, bool, bool, bool, bool);
     callback check-for-updates();
 
     // Modern background with subtle gradient
@@ -721,9 +729,10 @@ export component MainWindow inherits Window {
             show-tray-notifications <=> settings-show-tray-notifications;
             minimize-to-tray-on-minimize <=> settings-minimize-to-tray-on-minimize;
             minimize-to-tray-on-close <=> settings-minimize-to-tray-on-close;
+            start-minimized-to-tray <=> settings-start-minimized-to-tray;
 
-            save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close) => {
-                root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close);
+            save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray) => {
+                root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray);
                 settings-dialog.close();
             }
 

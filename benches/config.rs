@@ -17,6 +17,7 @@ fn create_large_config() -> AppConfig {
             show_tray_notifications: true,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
+            start_minimized_to_tray: false,
             last_update_check_time: 0,
             cached_latest_version: String::new(),
         },

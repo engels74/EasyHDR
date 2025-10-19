@@ -208,6 +208,9 @@ pub struct UserPreferences {
     pub minimize_to_tray_on_minimize: bool,
     /// Whether to minimize to tray when close button is clicked (true) or close the application (false)
     pub minimize_to_tray_on_close: bool,
+    /// Whether to start minimized to tray on application launch (true) or show main window (false)
+    #[serde(default)]
+    pub start_minimized_to_tray: bool,
     /// Timestamp of the last update check (Unix timestamp in seconds, 0 if never checked)
     #[serde(default)]
     pub last_update_check_time: u64,
@@ -237,6 +240,7 @@ impl Default for UserPreferences {
             show_tray_notifications: true,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
+            start_minimized_to_tray: false,
             last_update_check_time: 0,
             cached_latest_version: String::new(),
         }
@@ -406,6 +410,7 @@ mod tests {
             show_tray_notifications: false,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
+            start_minimized_to_tray: true,
             last_update_check_time: 1_234_567_890,
             cached_latest_version: "1.2.3".to_string(),
         };
@@ -421,6 +426,10 @@ mod tests {
         assert_eq!(
             prefs.show_tray_notifications,
             deserialized.show_tray_notifications
+        );
+        assert_eq!(
+            prefs.start_minimized_to_tray,
+            deserialized.start_minimized_to_tray
         );
     }
 

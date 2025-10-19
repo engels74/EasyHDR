@@ -107,6 +107,8 @@ impl GuiController {
             main_window.set_settings_minimize_to_tray_on_close(
                 config.preferences.minimize_to_tray_on_close,
             );
+            main_window
+                .set_settings_start_minimized_to_tray(config.preferences.start_minimized_to_tray);
 
             info!("Settings properties initialized from config");
         }
@@ -143,7 +145,8 @@ impl GuiController {
                   monitoring_interval_ms,
                   show_tray_notifications,
                   minimize_to_tray_on_minimize,
-                  minimize_to_tray_on_close| {
+                  minimize_to_tray_on_close,
+                  start_minimized_to_tray| {
                 Self::save_settings(
                     &controller_clone,
                     auto_start,
@@ -151,6 +154,7 @@ impl GuiController {
                     show_tray_notifications,
                     minimize_to_tray_on_minimize,
                     minimize_to_tray_on_close,
+                    start_minimized_to_tray,
                 );
             },
         );
@@ -634,17 +638,19 @@ impl GuiController {
         show_tray_notifications: bool,
         minimize_to_tray_on_minimize: bool,
         minimize_to_tray_on_close: bool,
+        start_minimized_to_tray: bool,
     ) {
         use easyhdr::utils::AutoStartManager;
         use tracing::{info, warn};
 
         info!(
-            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}, minimize_to_tray_on_minimize={}, minimize_to_tray_on_close={}",
+            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}, minimize_to_tray_on_minimize={}, minimize_to_tray_on_close={}, start_minimized_to_tray={}",
             auto_start,
             monitoring_interval_ms,
             show_tray_notifications,
             minimize_to_tray_on_minimize,
-            minimize_to_tray_on_close
+            minimize_to_tray_on_close,
+            start_minimized_to_tray
         );
 
         // Apply partial update pattern: mutate existing preferences to preserve update metadata
@@ -664,6 +670,7 @@ impl GuiController {
             config.preferences.show_tray_notifications = show_tray_notifications;
             config.preferences.minimize_to_tray_on_minimize = minimize_to_tray_on_minimize;
             config.preferences.minimize_to_tray_on_close = minimize_to_tray_on_close;
+            config.preferences.start_minimized_to_tray = start_minimized_to_tray;
             // last_update_check_time and cached_latest_version are intentionally NOT modified
         }
 
@@ -729,6 +736,7 @@ impl GuiController {
         _show_tray_notifications: bool,
         _minimize_to_tray_on_minimize: bool,
         _minimize_to_tray_on_close: bool,
+        _start_minimized_to_tray: bool,
     ) {
         Self::show_error_dialog("Settings management is only supported on Windows");
     }
@@ -1183,6 +1191,10 @@ impl GuiController {
     /// and update the GUI accordingly. The state synchronization thread receives
     /// updates via the `state_receiver` channel and uses `window.as_weak()` for
     /// thread-safe GUI updates.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "GUI event loop setup requires sequential initialization of state sync thread, timer-driven UI pump, minimize-to-tray detection, and conditional window display based on start_minimized_to_tray setting"
+    )]
     pub fn run(self) -> Result<()> {
         use easyhdr::error::EasyHdrError;
         use tracing::{debug, info, warn};
@@ -1291,15 +1303,28 @@ impl GuiController {
             info!("State synchronization thread stopped");
         });
 
-        // Show the window explicitly before starting the event loop
-        // Note: run_event_loop_until_quit() doesn't automatically show the window (unlike run())
-        info!("Showing main window");
-        self.main_window.show().map_err(|e| {
-            use tracing::error;
-            error!("Failed to show main window: {}", e);
-            // Preserve error chain by wrapping the source error
-            EasyHdrError::ConfigError(Box::new(e))
-        })?;
+        // Check if we should start minimized to tray or show the window
+        let start_minimized = {
+            let controller_guard = self.controller_handle.lock();
+            let config = controller_guard.config.lock();
+            config.preferences.start_minimized_to_tray
+        };
+
+        if start_minimized {
+            info!("Starting minimized to tray (user preference)");
+            // Window is already hidden by default, no need to explicitly hide
+            // The tray icon is already created and visible
+        } else {
+            // Show the window explicitly before starting the event loop
+            // Note: run_event_loop_until_quit() doesn't automatically show the window (unlike run())
+            info!("Showing main window");
+            self.main_window.show().map_err(|e| {
+                use tracing::error;
+                error!("Failed to show main window: {}", e);
+                // Preserve error chain by wrapping the source error
+                EasyHdrError::ConfigError(Box::new(e))
+            })?;
+        }
 
         // Run the Slint event loop on the main thread
         // Use run_event_loop_until_quit() instead of run() to keep the event loop running
