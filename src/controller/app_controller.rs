@@ -61,7 +61,8 @@ impl AppController {
         let hdr_controller = HdrController::new().map_err(|e| {
             use tracing::error;
             error!("Failed to initialize HDR controller: {e}");
-            EasyHdrError::HdrControlFailed(format!("Failed to initialize HDR controller: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
 
         // Detect the actual current HDR state at startup
@@ -337,10 +338,8 @@ impl AppController {
         let results = self.hdr_controller.set_hdr_global(enable).map_err(|e| {
             use tracing::error;
             error!("Failed to set HDR state globally: {e}");
-            EasyHdrError::HdrControlFailed(format!(
-                "Failed to {} HDR globally: {e}",
-                if enable { "enable" } else { "disable" }
-            ))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
 
         // Log results for each display
@@ -564,7 +563,8 @@ impl AppController {
         let displays = self.hdr_controller.refresh_displays().map_err(|e| {
             use tracing::error;
             error!("Failed to refresh display list: {e}");
-            EasyHdrError::HdrControlFailed(format!("Failed to refresh display list: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
         info!(
             "Display list refreshed: {} display(s) found ({} HDR-capable)",

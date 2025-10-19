@@ -167,9 +167,11 @@ impl HdrController {
                     error!(
                         "Windows API error - GetDisplayConfigBufferSizes failed with code: {result}"
                     );
-                    return Err(EasyHdrError::HdrControlFailed(format!(
-                        "Failed to get display config buffer sizes: error code {result}"
-                    )));
+                    return Err(EasyHdrError::HdrControlFailed(
+                        crate::error::StringError::new(format!(
+                            "Failed to get display config buffer sizes: error code {result}"
+                        )),
+                    ));
                 }
             }
 
@@ -197,9 +199,11 @@ impl HdrController {
                 );
                 if result != 0 {
                     error!("Windows API error - QueryDisplayConfig failed with code: {result}");
-                    return Err(EasyHdrError::HdrControlFailed(format!(
-                        "Failed to query display config: error code {result}"
-                    )));
+                    return Err(EasyHdrError::HdrControlFailed(
+                        crate::error::StringError::new(format!(
+                            "Failed to query display config: error code {result}"
+                        )),
+                    ));
                 }
             }
 
@@ -449,9 +453,11 @@ impl HdrController {
                     "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info) failed for adapter {:?}, target {}: error code {result}",
                     target.adapter_id, target.target_id
                 );
-                return Err(EasyHdrError::HdrControlFailed(format!(
-                    "Failed to get advanced color info (legacy): error code {result}",
-                )));
+                return Err(EasyHdrError::HdrControlFailed(
+                    crate::error::StringError::new(format!(
+                        "Failed to get advanced color info (legacy): error code {result}",
+                    )),
+                ));
             }
         }
 
@@ -612,9 +618,11 @@ impl HdrController {
                     "Windows API error - DisplayConfigGetDeviceInfo (legacy advanced color info for HDR enabled check) failed for adapter {:?}, target {}: error code {result}",
                     target.adapter_id, target.target_id
                 );
-                return Err(EasyHdrError::HdrControlFailed(format!(
-                    "Failed to get advanced color info (legacy): error code {result}",
-                )));
+                return Err(EasyHdrError::HdrControlFailed(
+                    crate::error::StringError::new(format!(
+                        "Failed to get advanced color info (legacy): error code {result}",
+                    )),
+                ));
             }
         }
 
@@ -685,9 +693,11 @@ impl HdrController {
                                 "Windows API error - DisplayConfigSetDeviceInfo (set HDR state 24H2+) failed for adapter {:?}, target {}: error code {result}",
                                 target.adapter_id, target.target_id
                             );
-                            return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to set HDR state (24H2+): error code {result}",
-                            )));
+                            return Err(EasyHdrError::HdrControlFailed(
+                                crate::error::StringError::new(format!(
+                                    "Failed to set HDR state (24H2+): error code {result}",
+                                )),
+                            ));
                         }
                     }
 
@@ -729,9 +739,11 @@ impl HdrController {
                                 "Windows API error - DisplayConfigSetDeviceInfo (set advanced color state) failed for adapter {:?}, target {}: error code {result}",
                                 target.adapter_id, target.target_id
                             );
-                            return Err(EasyHdrError::HdrControlFailed(format!(
-                                "Failed to set advanced color state: error code {result}",
-                            )));
+                            return Err(EasyHdrError::HdrControlFailed(
+                                crate::error::StringError::new(format!(
+                                    "Failed to set advanced color state: error code {result}",
+                                )),
+                            ));
                         }
                     }
 

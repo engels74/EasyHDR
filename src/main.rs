@@ -216,10 +216,12 @@ fn verify_windows_version() -> Result<()> {
         );
 
         if build_number < MIN_WINDOWS_BUILD {
-            return Err(EasyHdrError::ConfigError(format!(
-                "Windows build {build_number} is too old. Minimum required: {MIN_WINDOWS_BUILD}"
-            ))
-            .into());
+            return Err(
+                EasyHdrError::ConfigError(easyhdr::error::StringError::new(format!(
+                    "Windows build {build_number} is too old. Minimum required: {MIN_WINDOWS_BUILD}"
+                )))
+                .into(),
+            );
         }
 
         Ok(())
@@ -228,7 +230,10 @@ fn verify_windows_version() -> Result<()> {
     #[cfg(not(windows))]
     {
         // On non-Windows platforms, return an error
-        Err(EasyHdrError::ConfigError("EasyHDR is a Windows-only application".to_string()).into())
+        Err(EasyHdrError::ConfigError(easyhdr::error::StringError::new(
+            "EasyHDR is a Windows-only application",
+        ))
+        .into())
     }
 }
 
@@ -287,7 +292,8 @@ fn get_windows_build_number() -> Result<u32> {
         // Load ntdll.dll
         let ntdll_name = HSTRING::from("ntdll.dll");
         let ntdll = LoadLibraryW(&ntdll_name).map_err(|e| {
-            EasyHdrError::HdrControlFailed(format!("Failed to load ntdll.dll: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
 
         // Get RtlGetVersion function pointer
@@ -295,10 +301,12 @@ fn get_windows_build_number() -> Result<u32> {
         let rtl_get_version_ptr = GetProcAddress(ntdll, proc_name);
 
         if rtl_get_version_ptr.is_none() {
-            return Err(EasyHdrError::HdrControlFailed(
-                "RtlGetVersion not found in ntdll.dll".to_string(),
-            )
-            .into());
+            return Err(
+                EasyHdrError::HdrControlFailed(easyhdr::error::StringError::new(
+                    "RtlGetVersion not found in ntdll.dll",
+                ))
+                .into(),
+            );
         }
 
         let rtl_get_version: RtlGetVersionFn = transmute(rtl_get_version_ptr);
@@ -317,10 +325,12 @@ fn get_windows_build_number() -> Result<u32> {
         let status = rtl_get_version(&raw mut version_info);
 
         if status != 0 {
-            return Err(EasyHdrError::HdrControlFailed(format!(
-                "RtlGetVersion failed with status: {status}"
-            ))
-            .into());
+            return Err(
+                EasyHdrError::HdrControlFailed(easyhdr::error::StringError::new(format!(
+                    "RtlGetVersion failed with status: {status}"
+                )))
+                .into(),
+            );
         }
 
         Ok(version_info.dwBuildNumber)

@@ -131,9 +131,8 @@ impl ProcessMonitor {
                 CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).map_err(|e| {
                     use tracing::error;
                     error!("Windows API error - CreateToolhelp32Snapshot failed: {e}");
-                    EasyHdrError::ProcessMonitorError(format!(
-                        "Failed to create process snapshot: {e}"
-                    ))
+                    // Preserve error chain by wrapping the source error
+                    EasyHdrError::ProcessMonitorError(Box::new(e))
                 })?
             };
 
@@ -204,7 +203,7 @@ impl ProcessMonitor {
         {
             // Non-Windows platforms not supported
             Err(EasyHdrError::ProcessMonitorError(
-                "Process monitoring is only supported on Windows".to_string(),
+                crate::error::StringError::new("Process monitoring is only supported on Windows"),
             ))
         }
     }

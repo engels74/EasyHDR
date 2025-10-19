@@ -2,8 +2,23 @@
 //!
 //! This module defines all error types used throughout the application,
 //! providing clear error messages and proper error propagation.
+//!
+//! Error variants use `#[source]` to preserve error chains for better
+//! observability and debugging (Rust-Bible: Error Handling & Observability).
 
 use thiserror::Error;
+
+/// Simple error type for wrapping string messages while implementing `std::error::Error`
+#[derive(Debug, Error)]
+#[error("{0}")]
+pub struct StringError(pub String);
+
+impl StringError {
+    /// Create a new `StringError` from a string message
+    pub fn new(msg: impl Into<String>) -> Box<Self> {
+        Box::new(Self(msg.into()))
+    }
+}
 
 /// Main error type for `EasyHDR` application
 #[derive(Debug, Error)]
@@ -13,20 +28,24 @@ pub enum EasyHdrError {
     HdrNotSupported,
 
     /// Failed to control HDR settings
+    /// Preserves the underlying error source for full error chain transparency
     #[error("Failed to control HDR: {0}")]
-    HdrControlFailed(String),
+    HdrControlFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// Display driver error
+    /// Preserves the underlying error source for full error chain transparency
     #[error("Display driver error: {0}")]
-    DriverError(String),
+    DriverError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// Process monitoring error
+    /// Preserves the underlying error source for full error chain transparency
     #[error("Process monitoring error: {0}")]
-    ProcessMonitorError(String),
+    ProcessMonitorError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// Configuration error
+    /// Preserves the underlying error source for full error chain transparency
     #[error("Configuration error: {0}")]
-    ConfigError(String),
+    ConfigError(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// Windows API error
     #[cfg(windows)]

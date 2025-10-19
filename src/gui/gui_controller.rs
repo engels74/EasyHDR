@@ -74,7 +74,8 @@ impl GuiController {
         let main_window = MainWindow::new().map_err(|e| {
             use tracing::error;
             error!("Failed to create main window: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to create main window: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::ConfigError(Box::new(e))
         })?;
 
         info!("Main window created successfully");
@@ -1296,7 +1297,8 @@ impl GuiController {
         self.main_window.show().map_err(|e| {
             use tracing::error;
             error!("Failed to show main window: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to show main window: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::ConfigError(Box::new(e))
         })?;
 
         // Run the Slint event loop on the main thread
@@ -1307,7 +1309,8 @@ impl GuiController {
         slint::run_event_loop_until_quit().map_err(|e| {
             use tracing::error;
             error!("Failed to run GUI event loop: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to run GUI event loop: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::ConfigError(Box::new(e))
         })?;
 
         info!("GUI event loop stopped");
@@ -1344,7 +1347,7 @@ mod tests {
         );
 
         // Test HDR control failed error
-        let error = EasyHdrError::HdrControlFailed("test error".to_string());
+        let error = EasyHdrError::HdrControlFailed(easyhdr::error::StringError::new("test error"));
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("Unable to control HDR"),
@@ -1356,7 +1359,8 @@ mod tests {
         );
 
         // Test driver error
-        let error = EasyHdrError::DriverError("test driver error".to_string());
+        let error =
+            EasyHdrError::DriverError(easyhdr::error::StringError::new("test driver error"));
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("Unable to control HDR"),
@@ -1368,7 +1372,8 @@ mod tests {
         );
 
         // Test configuration error
-        let error = EasyHdrError::ConfigError("test config error".to_string());
+        let error =
+            EasyHdrError::ConfigError(easyhdr::error::StringError::new("test config error"));
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("configuration"),
@@ -1380,7 +1385,9 @@ mod tests {
         );
 
         // Test process monitor error
-        let error = EasyHdrError::ProcessMonitorError("test monitor error".to_string());
+        let error = EasyHdrError::ProcessMonitorError(easyhdr::error::StringError::new(
+            "test monitor error",
+        ));
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("monitor processes"),
@@ -1407,7 +1414,7 @@ mod tests {
         );
 
         // Driver errors should mention updating drivers
-        let error = EasyHdrError::DriverError("test".to_string());
+        let error = EasyHdrError::DriverError(easyhdr::error::StringError::new("test"));
         let message = get_user_friendly_error(&error);
         assert!(
             message.to_lowercase().contains("driver"),
@@ -1415,7 +1422,7 @@ mod tests {
         );
 
         // Config errors should mention settings persistence
-        let error = EasyHdrError::ConfigError("test".to_string());
+        let error = EasyHdrError::ConfigError(easyhdr::error::StringError::new("test"));
         let message = get_user_friendly_error(&error);
         assert!(
             message.to_lowercase().contains("settings")
@@ -1431,10 +1438,10 @@ mod tests {
 
         let errors = vec![
             EasyHdrError::HdrNotSupported,
-            EasyHdrError::HdrControlFailed("test".to_string()),
-            EasyHdrError::DriverError("test".to_string()),
-            EasyHdrError::ConfigError("test".to_string()),
-            EasyHdrError::ProcessMonitorError("test".to_string()),
+            EasyHdrError::HdrControlFailed(easyhdr::error::StringError::new("test")),
+            EasyHdrError::DriverError(easyhdr::error::StringError::new("test")),
+            EasyHdrError::ConfigError(easyhdr::error::StringError::new("test")),
+            EasyHdrError::ProcessMonitorError(easyhdr::error::StringError::new("test")),
         ];
 
         for error in errors {
@@ -1509,7 +1516,7 @@ mod tests {
         );
 
         // Driver error message
-        let error = EasyHdrError::DriverError("test".to_string());
+        let error = EasyHdrError::DriverError(easyhdr::error::StringError::new("test"));
         let message = get_user_friendly_error(&error);
         assert!(
             message.contains("Unable to control HDR"),

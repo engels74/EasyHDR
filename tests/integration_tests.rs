@@ -135,7 +135,7 @@ fn test_user_friendly_error_messages() {
     let message = get_user_friendly_error(&error);
     assert!(message.contains("display doesn't support HDR"));
 
-    let error = EasyHdrError::ConfigError("test".to_string());
+    let error = EasyHdrError::ConfigError(easyhdr::error::StringError::new("test"));
     let message = get_user_friendly_error(&error);
     assert!(message.contains("configuration"));
 }

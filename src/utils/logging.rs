@@ -33,7 +33,8 @@ pub fn init_logging() -> Result<()> {
         .filename_suffix("log")
         .build(log_dir)
         .map_err(|e| {
-            crate::error::EasyHdrError::ConfigError(format!("Failed to create log appender: {e}"))
+            // Preserve error chain by wrapping the source error
+            crate::error::EasyHdrError::ConfigError(Box::new(e))
         })?;
 
     // Build the subscriber with file output
@@ -50,7 +51,7 @@ pub fn init_logging() -> Result<()> {
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)
-        .map_err(|e| crate::error::EasyHdrError::ConfigError(e.to_string()))?;
+        .map_err(|e| crate::error::EasyHdrError::ConfigError(Box::new(e)))?;
 
     tracing::info!("EasyHDR v{} started", env!("CARGO_PKG_VERSION"));
 
@@ -77,13 +78,17 @@ fn rotate_logs_on_startup(log_path: &PathBuf) -> Result<()> {
     }
 
     // Get the parent directory for constructing numbered log paths
-    let log_dir = log_path
-        .parent()
-        .ok_or_else(|| crate::error::EasyHdrError::ConfigError("Invalid log path".to_string()))?;
+    let log_dir = log_path.parent().ok_or_else(|| {
+        crate::error::EasyHdrError::ConfigError(crate::error::StringError::new("Invalid log path"))
+    })?;
 
     let log_name = log_path
         .file_name()
-        .ok_or_else(|| crate::error::EasyHdrError::ConfigError("Invalid log filename".to_string()))?
+        .ok_or_else(|| {
+            crate::error::EasyHdrError::ConfigError(crate::error::StringError::new(
+                "Invalid log filename",
+            ))
+        })?
         .to_string_lossy();
 
     // Delete the oldest log file (app.log.9) if it exists

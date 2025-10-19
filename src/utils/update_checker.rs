@@ -130,28 +130,30 @@ impl UpdateChecker {
             .build()
             .map_err(|e| {
                 warn!("Failed to create HTTP client: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to create HTTP client: {e}"))
+                // Preserve error chain by wrapping the source error
+                EasyHdrError::ConfigError(Box::new(e))
             })?;
 
         // Fetch the latest release
         let response = client.get(&api_url).send().map_err(|e| {
             warn!("Failed to fetch latest release: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to fetch latest release: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::ConfigError(Box::new(e))
         })?;
 
         // Check HTTP status
         if !response.status().is_success() {
             warn!("GitHub API returned error status: {}", response.status());
-            return Err(EasyHdrError::ConfigError(format!(
-                "GitHub API returned error status: {}",
-                response.status()
+            return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                format!("GitHub API returned error status: {}", response.status()),
             )));
         }
 
         // Parse JSON response
         let release: GitHubRelease = response.json().map_err(|e| {
             warn!("Failed to parse GitHub API response: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to parse GitHub API response: {e}"))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::ConfigError(Box::new(e))
         })?;
 
         debug!("Fetched release: {:?}", release);
@@ -159,18 +161,17 @@ impl UpdateChecker {
         // Skip prereleases
         if release.prerelease {
             info!("Latest release is a prerelease, skipping");
-            return Err(EasyHdrError::ConfigError(
-                "Latest release is a prerelease".to_string(),
-            ));
+            return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                "Latest release is a prerelease",
+            )));
         }
 
         // Parse version from tag name (strip leading 'v' if present)
         let tag_name = release.tag_name.trim_start_matches('v');
         let latest_version = Version::parse(tag_name).map_err(|e| {
             warn!("Failed to parse version from tag '{}': {}", tag_name, e);
-            EasyHdrError::ConfigError(format!(
-                "Failed to parse version from tag '{tag_name}': {e}"
-            ))
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::ConfigError(Box::new(e))
         })?;
 
         info!(

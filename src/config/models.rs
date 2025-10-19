@@ -72,16 +72,14 @@ impl MonitoredApp {
 
         // Validate that the path exists and is a file
         if !exe_path.exists() {
-            return Err(EasyHdrError::ConfigError(format!(
-                "Executable path does not exist: {}",
-                exe_path.display()
+            return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                format!("Executable path does not exist: {}", exe_path.display()),
             )));
         }
 
         if !exe_path.is_file() {
-            return Err(EasyHdrError::ConfigError(format!(
-                "Path is not a file: {}",
-                exe_path.display()
+            return Err(EasyHdrError::ConfigError(crate::error::StringError::new(
+                format!("Path is not a file: {}", exe_path.display()),
             )));
         }
 
@@ -93,10 +91,10 @@ impl MonitoredApp {
             .file_stem()
             .and_then(|s| s.to_str())
             .ok_or_else(|| {
-                EasyHdrError::ConfigError(format!(
+                EasyHdrError::ConfigError(crate::error::StringError::new(format!(
                     "Failed to extract filename from path: {}",
                     exe_path.display()
-                ))
+                )))
             })?
             .to_lowercase();
 

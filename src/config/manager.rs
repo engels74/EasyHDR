@@ -29,7 +29,7 @@ impl ConfigManager {
         let config_path = Self::get_config_path();
         let config_dir = config_path.parent().ok_or_else(|| {
             error!("Invalid config path - no parent directory");
-            EasyHdrError::ConfigError("Invalid config path".to_string())
+            EasyHdrError::ConfigError(crate::error::StringError::new("Invalid config path"))
         })?;
 
         std::fs::create_dir_all(config_dir).map_err(|e| {
@@ -88,7 +88,7 @@ impl ConfigManager {
 
         let config_dir = config_path.parent().ok_or_else(|| {
             error!("Invalid config path - no parent directory");
-            EasyHdrError::ConfigError("Invalid config path".to_string())
+            EasyHdrError::ConfigError(crate::error::StringError::new("Invalid config path"))
         })?;
 
         // Atomic write: write to temp file, then rename
