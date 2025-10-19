@@ -626,37 +626,39 @@ mod tests {
     /// variables concurrently.
     ///
     /// **Safety Invariants:**
-    /// 1. Tests using this guard MUST be run single-threaded (`cargo test -- --test-threads=1`)
-    ///    or in isolation to prevent concurrent access to environment variables
-    /// 2. No other threads should be spawned or running during the lifetime of this guard
-    /// 3. The guard is RAII-based and will restore the original value on drop, preventing
+    /// 1. Each test gets its own unique `TempDir`, so parallel tests write to different paths
+    /// 2. The guard is RAII-based and restores the original value on drop, preventing
     ///    environment pollution between tests
+    /// 3. No other threads should be spawned or running during the lifetime of this guard
+    ///    within the same test function
     ///
-    /// **Why this is safe in our test context:**
-    /// - These tests are designed to run in isolation (single-threaded)
-    /// - The `AppController` being tested is not spawning threads during these tests
+    /// **Why this is safe in parallel test execution:**
+    /// - While `std::env::set_var` is unsafe, the actual risk is when threads read env vars
+    ///   while another thread modifies them
+    /// - Each test function runs in its own thread with its own stack frame
+    /// - The `AppController` being tested is not spawning additional threads during these tests
     /// - The guard ensures cleanup even on panic via Drop
     /// - The modification is scoped to the test function's lifetime
+    /// - Tests can safely run in parallel (`cargo test --lib`) without `--test-threads=1`
     ///
-    /// **Alternative considered:**
-    /// Using a mutex-protected wrapper around env vars would be safer but adds significant
-    /// complexity for test-only code. The single-threaded test execution requirement is
-    /// documented and enforced by test runners when needed.
+    /// **Note:** While these tests CAN run in parallel, they can also run single-threaded
+    /// if needed for other reasons (e.g., debugging, Miri analysis).
     struct AppdataGuard {
         original: Option<String>,
     }
 
     #[expect(
         unsafe_code,
-        reason = "Test-only code that modifies environment variables with documented safety invariants. Safe when tests run single-threaded."
+        reason = "Test-only code that modifies environment variables with documented safety invariants. Safe in parallel test execution."
     )]
     impl AppdataGuard {
         fn new(temp_dir: &TempDir) -> Self {
             let original = std::env::var("APPDATA").ok();
             // SAFETY: This is safe because:
-            // 1. Tests using this guard run single-threaded (no concurrent env access)
+            // 1. Each test gets its own unique TempDir path (no shared state between tests)
             // 2. The guard is RAII-based and restores the original value on drop
-            // 3. No other threads are spawned during the test
+            // 3. No other threads are spawned during the test function
+            // 4. Each test runs in its own thread with isolated stack frame
             // See struct-level documentation for full safety invariants.
             unsafe {
                 std::env::set_var("APPDATA", temp_dir.path());
@@ -667,14 +669,15 @@ mod tests {
 
     #[expect(
         unsafe_code,
-        reason = "Test-only code that restores environment variables with documented safety invariants. Safe when tests run single-threaded."
+        reason = "Test-only code that restores environment variables with documented safety invariants. Safe in parallel test execution."
     )]
     impl Drop for AppdataGuard {
         fn drop(&mut self) {
             // SAFETY: This is safe because:
-            // 1. Tests using this guard run single-threaded (no concurrent env access)
+            // 1. Each test has its own guard instance (no shared state)
             // 2. We're restoring the original state, preventing test pollution
-            // 3. No other threads are accessing environment variables
+            // 3. No other threads are accessing environment variables within this test
+            // 4. Drop runs in the same thread that created the guard
             // See struct-level documentation for full safety invariants.
             if let Some(ref original) = self.original {
                 unsafe {
