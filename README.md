@@ -21,7 +21,8 @@ The application uses Windows Display Configuration APIs to control HDR state, wi
 ## Installation
 
 **Requirements:**
-- Windows 10 21H2 (Build 19044) or later
+- Windows 10: 21H2 (Build 19044) or later
+- Windows 11: 21H2 (Build 22000) or later
 - HDR-capable display
 
 **Steps:**
