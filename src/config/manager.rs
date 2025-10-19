@@ -386,6 +386,13 @@ mod tests {
 
         for (i, malformed_json) in test_cases.iter().enumerate() {
             let config_path = config_dir.join("config.json");
+
+            // Remove the file if it exists to ensure clean state between iterations
+            // This prevents Windows file system caching issues
+            if config_path.exists() {
+                fs::remove_file(&config_path).unwrap();
+            }
+
             fs::write(&config_path, malformed_json).unwrap();
 
             let result = ConfigManager::load();
