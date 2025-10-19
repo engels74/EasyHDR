@@ -129,8 +129,14 @@ mod tests {
     use crate::config::models::MonitoredApp;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::Mutex;
     use tempfile::TempDir;
     use uuid::Uuid;
+
+    // Global mutex to serialize tests that modify the APPDATA environment variable.
+    // This prevents race conditions when multiple tests run in parallel and try to
+    // set different APPDATA values.
+    static APPDATA_LOCK: Mutex<()> = Mutex::new(());
 
     /// Helper function to create a temporary test directory using tempfile
     /// Returns a `TempDir` that automatically cleans up when dropped
@@ -167,6 +173,9 @@ mod tests {
     /// if needed for other reasons (e.g., debugging, Miri analysis).
     struct AppdataGuard {
         original: Option<String>,
+        // Lock guard must be held for the lifetime of this struct to ensure exclusive
+        // access to APPDATA environment variable across parallel tests
+        _lock: std::sync::MutexGuard<'static, ()>,
     }
 
     #[expect(
@@ -175,17 +184,23 @@ mod tests {
     )]
     impl AppdataGuard {
         fn new(temp_dir: &TempDir) -> Self {
+            // Acquire lock to serialize APPDATA modifications across parallel tests
+            let lock = APPDATA_LOCK.lock().unwrap();
+
             let original = std::env::var("APPDATA").ok();
             // SAFETY: This is safe because:
             // 1. Each test gets its own unique TempDir path (no shared state between tests)
             // 2. The guard is RAII-based and restores the original value on drop
-            // 3. No other threads are spawned during the test function
+            // 3. The APPDATA_LOCK mutex ensures tests modify APPDATA serially, not concurrently
             // 4. Each test runs in its own thread with isolated stack frame
             // See struct-level documentation for full safety invariants.
             unsafe {
                 std::env::set_var("APPDATA", temp_dir.path());
             }
-            Self { original }
+            Self {
+                original,
+                _lock: lock,
+            }
         }
     }
 
