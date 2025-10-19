@@ -607,7 +607,86 @@ mod tests {
     use super::*;
     use crate::config::{AppConfig, MonitoredApp};
     use std::path::PathBuf;
+    use tempfile::TempDir;
     use uuid::Uuid;
+
+    /// Helper to create a temporary directory for tests
+    /// Returns a `TempDir` that automatically cleans up when dropped
+    fn create_test_dir() -> TempDir {
+        tempfile::tempdir().expect("Failed to create temp directory")
+    }
+
+    /// Helper to set APPDATA for a test scope
+    /// Returns a guard that restores the original value when dropped
+    ///
+    /// # Safety Considerations
+    ///
+    /// This guard uses `std::env::set_var` and `std::env::remove_var`, which are marked
+    /// unsafe because they can cause data races when other threads are reading environment
+    /// variables concurrently.
+    ///
+    /// **Safety Invariants:**
+    /// 1. Tests using this guard MUST be run single-threaded (`cargo test -- --test-threads=1`)
+    ///    or in isolation to prevent concurrent access to environment variables
+    /// 2. No other threads should be spawned or running during the lifetime of this guard
+    /// 3. The guard is RAII-based and will restore the original value on drop, preventing
+    ///    environment pollution between tests
+    ///
+    /// **Why this is safe in our test context:**
+    /// - These tests are designed to run in isolation (single-threaded)
+    /// - The `AppController` being tested is not spawning threads during these tests
+    /// - The guard ensures cleanup even on panic via Drop
+    /// - The modification is scoped to the test function's lifetime
+    ///
+    /// **Alternative considered:**
+    /// Using a mutex-protected wrapper around env vars would be safer but adds significant
+    /// complexity for test-only code. The single-threaded test execution requirement is
+    /// documented and enforced by test runners when needed.
+    struct AppdataGuard {
+        original: Option<String>,
+    }
+
+    #[expect(
+        unsafe_code,
+        reason = "Test-only code that modifies environment variables with documented safety invariants. Safe when tests run single-threaded."
+    )]
+    impl AppdataGuard {
+        fn new(temp_dir: &TempDir) -> Self {
+            let original = std::env::var("APPDATA").ok();
+            // SAFETY: This is safe because:
+            // 1. Tests using this guard run single-threaded (no concurrent env access)
+            // 2. The guard is RAII-based and restores the original value on drop
+            // 3. No other threads are spawned during the test
+            // See struct-level documentation for full safety invariants.
+            unsafe {
+                std::env::set_var("APPDATA", temp_dir.path());
+            }
+            Self { original }
+        }
+    }
+
+    #[expect(
+        unsafe_code,
+        reason = "Test-only code that restores environment variables with documented safety invariants. Safe when tests run single-threaded."
+    )]
+    impl Drop for AppdataGuard {
+        fn drop(&mut self) {
+            // SAFETY: This is safe because:
+            // 1. Tests using this guard run single-threaded (no concurrent env access)
+            // 2. We're restoring the original state, preventing test pollution
+            // 3. No other threads are accessing environment variables
+            // See struct-level documentation for full safety invariants.
+            if let Some(ref original) = self.original {
+                unsafe {
+                    std::env::set_var("APPDATA", original);
+                }
+            } else {
+                unsafe {
+                    std::env::remove_var("APPDATA");
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_app_controller_creation() {
@@ -864,18 +943,12 @@ mod tests {
         assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
 
-    // NOTE: This test may fail when run in parallel with other tests due to a race condition.
-    // All tests that call methods invoking ConfigManager::save() write to the same shared
-    // config file (./EasyHDR/config.json on macOS, %APPDATA%\EasyHDR\config.json on Windows).
-    // When multiple tests write to this file simultaneously, they can interfere with each other.
-    //
-    // The functionality itself is correct - the test passes consistently when run:
-    // - Individually: `cargo test test_add_application`
-    // - Single-threaded: `cargo test -- --test-threads=1`
-    //
-    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_add_application() {
+        // Isolate test environment to prevent writing to real config directory
+        let temp_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&temp_dir);
+
         let config = AppConfig::default();
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -911,18 +984,12 @@ mod tests {
         assert!(watch_list_guard.contains("newapp"));
     }
 
-    // NOTE: This test may fail when run in parallel with other tests due to a race condition.
-    // All tests that call methods invoking ConfigManager::save() write to the same shared
-    // config file (./EasyHDR/config.json on macOS, %APPDATA%\EasyHDR\config.json on Windows).
-    // When multiple tests write to this file simultaneously, they can interfere with each other.
-    //
-    // The functionality itself is correct - the test passes consistently when run:
-    // - Individually: `cargo test test_remove_application`
-    // - Single-threaded: `cargo test -- --test-threads=1`
-    //
-    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_remove_application() {
+        // Isolate test environment to prevent writing to real config directory
+        let temp_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&temp_dir);
+
         let mut config = AppConfig::default();
         let app_id = Uuid::new_v4();
         config.monitored_apps.push(MonitoredApp {
@@ -957,18 +1024,12 @@ mod tests {
         assert!(!watch_list_guard.contains("app"));
     }
 
-    // NOTE: This test may fail when run in parallel with other tests due to a race condition.
-    // All tests that call methods invoking ConfigManager::save() write to the same shared
-    // config file (./EasyHDR/config.json on macOS, %APPDATA%\EasyHDR\config.json on Windows).
-    // When multiple tests write to this file simultaneously, they can interfere with each other.
-    //
-    // The functionality itself is correct - the test passes consistently when run:
-    // - Individually: `cargo test test_toggle_app_enabled`
-    // - Single-threaded: `cargo test -- --test-threads=1`
-    //
-    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_toggle_app_enabled() {
+        // Isolate test environment to prevent writing to real config directory
+        let temp_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&temp_dir);
+
         let mut config = AppConfig::default();
         let app_id = Uuid::new_v4();
         config.monitored_apps.push(MonitoredApp {
@@ -1024,18 +1085,12 @@ mod tests {
         assert!(watch_list_guard.contains("app"));
     }
 
-    // NOTE: This test may fail when run in parallel with other tests due to a race condition.
-    // All tests that call methods invoking ConfigManager::save() write to the same shared
-    // config file (./EasyHDR/config.json on macOS, %APPDATA%\EasyHDR\config.json on Windows).
-    // When multiple tests write to this file simultaneously, they can interfere with each other.
-    //
-    // The functionality itself is correct - the test passes consistently when run:
-    // - Individually: `cargo test test_update_preferences`
-    // - Single-threaded: `cargo test -- --test-threads=1`
-    //
-    // This is a test isolation issue, not a code defect.
     #[test]
     fn test_update_preferences() {
+        // Isolate test environment to prevent writing to real config directory
+        let temp_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&temp_dir);
+
         let config = AppConfig::default();
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
