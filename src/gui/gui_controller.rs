@@ -648,7 +648,7 @@ impl GuiController {
         );
 
         // Apply partial update pattern: mutate existing preferences to preserve update metadata
-        let mut controller_guard = controller.lock();
+        let controller_guard = controller.lock();
         {
             let mut config = controller_guard.config.lock();
 

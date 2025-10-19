@@ -63,22 +63,30 @@ impl TrayIcon {
         // Append items to menu
         tray_menu.append(&open_item).map_err(|e| {
             error!("Failed to add Open menu item to tray: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add Open menu item: {e}"))
+            EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                "Failed to add Open menu item: {e}"
+            )))
         })?;
 
         tray_menu.append(&status_item).map_err(|e| {
             error!("Failed to add Status menu item to tray: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add Status menu item: {e}"))
+            EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                "Failed to add Status menu item: {e}"
+            )))
         })?;
 
         tray_menu.append(&separator).map_err(|e| {
             error!("Failed to add separator to tray menu: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add separator: {e}"))
+            EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                "Failed to add separator: {e}"
+            )))
         })?;
 
         tray_menu.append(&exit_item).map_err(|e| {
             error!("Failed to add Exit menu item to tray: {}", e);
-            EasyHdrError::ConfigError(format!("Failed to add Exit menu item: {e}"))
+            EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                "Failed to add Exit menu item: {e}"
+            )))
         })?;
 
         debug!("Tray menu created with 4 items");
@@ -94,7 +102,9 @@ impl TrayIcon {
             .build()
             .map_err(|e| {
                 error!("Failed to build tray icon: {}", e);
-                EasyHdrError::ConfigError(format!("Failed to build tray icon: {e}"))
+                EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                    "Failed to build tray icon: {e}"
+                )))
             })?;
 
         info!("System tray icon created successfully");
@@ -146,11 +156,17 @@ impl TrayIcon {
         // Decode the ICO file using the image crate
         match ImageReader::new(Cursor::new(icon_data))
             .with_guessed_format()
-            .map_err(|e| EasyHdrError::ConfigError(format!("Failed to guess icon format: {e}")))
+            .map_err(|e| {
+                EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                    "Failed to guess icon format: {e}"
+                )))
+            })
             .and_then(|reader| {
-                reader
-                    .decode()
-                    .map_err(|e| EasyHdrError::ConfigError(format!("Failed to decode icon: {e}")))
+                reader.decode().map_err(|e| {
+                    EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                        "Failed to decode icon: {e}"
+                    )))
+                })
             }) {
             Ok(img) => {
                 // Convert to RGBA8
@@ -168,7 +184,9 @@ impl TrayIcon {
                 // Create Icon from RGBA data
                 Icon::from_rgba(rgba_data, width, height).map_err(|e| {
                     warn!("Failed to create icon from RGBA data: {e}");
-                    EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {e}"))
+                    EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                        "Failed to create icon from RGBA: {e}"
+                    )))
                 })
             }
             Err(e) => {
@@ -228,7 +246,9 @@ impl TrayIcon {
         )]
         Icon::from_rgba(rgba, ICON_SIZE as u32, ICON_SIZE as u32).map_err(|e| {
             error!("Failed to create tray icon from RGBA data: {e}");
-            EasyHdrError::ConfigError(format!("Failed to create icon from RGBA: {e}"))
+            EasyHdrError::ConfigError(crate::error::StringError::new(format!(
+                "Failed to create icon from RGBA: {e}"
+            )))
         })
     }
 
