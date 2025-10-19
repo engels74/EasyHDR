@@ -204,6 +204,9 @@ pub struct UserPreferences {
     pub monitoring_interval_ms: u64,
     /// Whether to show tray notifications on HDR changes
     pub show_tray_notifications: bool,
+    /// Whether to show notifications when application updates are available
+    #[serde(default = "default_show_update_notifications")]
+    pub show_update_notifications: bool,
     /// Whether to minimize to tray when minimize button is clicked (true) or minimize to taskbar (false)
     pub minimize_to_tray_on_minimize: bool,
     /// Whether to minimize to tray when close button is clicked (true) or close the application (false)
@@ -217,6 +220,11 @@ pub struct UserPreferences {
     /// Cached latest version from the last update check (empty if never checked or failed)
     #[serde(default)]
     pub cached_latest_version: String,
+}
+
+/// Default value for `show_update_notifications` field (true for backwards compatibility)
+fn default_show_update_notifications() -> bool {
+    true
 }
 
 /// Window state for position and size persistence
@@ -238,6 +246,7 @@ impl Default for UserPreferences {
             auto_start: false,
             monitoring_interval_ms: 1000,
             show_tray_notifications: true,
+            show_update_notifications: true,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
             start_minimized_to_tray: false,
@@ -408,6 +417,7 @@ mod tests {
             auto_start: true,
             monitoring_interval_ms: 2000,
             show_tray_notifications: false,
+            show_update_notifications: true,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
             start_minimized_to_tray: true,

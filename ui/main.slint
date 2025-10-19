@@ -149,12 +149,13 @@ component SettingsDialogContent inherits Rectangle {
     in-out property <bool> auto-start: false;
     in-out property <int> monitoring-interval-ms: 1000;
     in-out property <bool> show-tray-notifications: true;
+    in-out property <bool> show-update-notifications: true;
     in-out property <bool> minimize-to-tray-on-minimize: true;
     in-out property <bool> minimize-to-tray-on-close: false;
     in-out property <bool> start-minimized-to-tray: false;
 
     // Callbacks
-    callback save-settings(bool, int, bool, bool, bool, bool);
+    callback save-settings(bool, int, bool, bool, bool, bool, bool);
     callback cancel-settings();
 
     // Modern card-like design with layered shadows
@@ -299,10 +300,21 @@ component SettingsDialogContent inherits Rectangle {
                     color: DesignTokens.text-primary;
                 }
 
-                // Tray notifications setting
-                StyledCheckBox {
-                    text: "Show tray notifications on HDR changes";
-                    checked <=> show-tray-notifications;
+                // Settings in this category
+                VerticalLayout {
+                    spacing: DesignTokens.space-md;
+
+                    // Tray notifications setting
+                    StyledCheckBox {
+                        text: "Show tray notifications on HDR changes";
+                        checked <=> show-tray-notifications;
+                    }
+
+                    // Update notifications setting
+                    StyledCheckBox {
+                        text: "Show notifications when updates are available";
+                        checked <=> show-update-notifications;
+                    }
                 }
             }
 
@@ -330,7 +342,7 @@ component SettingsDialogContent inherits Rectangle {
                     text: "Save";
                     primary: true;
                     clicked => {
-                        save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray);
+                        save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, show-update-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray);
                     }
                 }
             }
@@ -353,6 +365,7 @@ export component MainWindow inherits Window {
     in-out property <bool> settings-auto-start: false;
     in-out property <int> settings-monitoring-interval-ms: 1000;
     in-out property <bool> settings-show-tray-notifications: true;
+    in-out property <bool> settings-show-update-notifications: true;
     in-out property <bool> settings-minimize-to-tray-on-minimize: true;
     in-out property <bool> settings-minimize-to-tray-on-close: false;
     in-out property <bool> settings-start-minimized-to-tray: false;
@@ -367,7 +380,7 @@ export component MainWindow inherits Window {
     callback remove-application(int);
     callback toggle-enabled(int, bool);
     callback open-settings();
-    callback save-settings(bool, int, bool, bool, bool, bool);
+    callback save-settings(bool, int, bool, bool, bool, bool, bool);
     callback check-for-updates();
 
     // Modern background with subtle gradient
@@ -727,12 +740,13 @@ export component MainWindow inherits Window {
             auto-start <=> settings-auto-start;
             monitoring-interval-ms <=> settings-monitoring-interval-ms;
             show-tray-notifications <=> settings-show-tray-notifications;
+            show-update-notifications <=> settings-show-update-notifications;
             minimize-to-tray-on-minimize <=> settings-minimize-to-tray-on-minimize;
             minimize-to-tray-on-close <=> settings-minimize-to-tray-on-close;
             start-minimized-to-tray <=> settings-start-minimized-to-tray;
 
-            save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray) => {
-                root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray);
+            save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, show-update-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray) => {
+                root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, show-update-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray);
                 settings-dialog.close();
             }
 

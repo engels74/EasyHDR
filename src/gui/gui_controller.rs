@@ -101,6 +101,9 @@ impl GuiController {
             }
             main_window
                 .set_settings_show_tray_notifications(config.preferences.show_tray_notifications);
+            main_window.set_settings_show_update_notifications(
+                config.preferences.show_update_notifications,
+            );
             main_window.set_settings_minimize_to_tray_on_minimize(
                 config.preferences.minimize_to_tray_on_minimize,
             );
@@ -144,6 +147,7 @@ impl GuiController {
             move |auto_start,
                   monitoring_interval_ms,
                   show_tray_notifications,
+                  show_update_notifications,
                   minimize_to_tray_on_minimize,
                   minimize_to_tray_on_close,
                   start_minimized_to_tray| {
@@ -152,6 +156,7 @@ impl GuiController {
                     auto_start,
                     monitoring_interval_ms,
                     show_tray_notifications,
+                    show_update_notifications,
                     minimize_to_tray_on_minimize,
                     minimize_to_tray_on_close,
                     start_minimized_to_tray,
@@ -630,12 +635,13 @@ impl GuiController {
     /// (`last_update_check_time`, `cached_latest_version`) as per Rust-Bible
     /// "State Persistence & I/O Discipline" guidelines.
     #[cfg(windows)]
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     fn save_settings(
         controller: &Arc<Mutex<AppController>>,
         auto_start: bool,
         monitoring_interval_ms: i32,
         show_tray_notifications: bool,
+        show_update_notifications: bool,
         minimize_to_tray_on_minimize: bool,
         minimize_to_tray_on_close: bool,
         start_minimized_to_tray: bool,
@@ -644,10 +650,11 @@ impl GuiController {
         use tracing::{info, warn};
 
         info!(
-            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}, minimize_to_tray_on_minimize={}, minimize_to_tray_on_close={}, start_minimized_to_tray={}",
+            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}, show_update_notifications={}, minimize_to_tray_on_minimize={}, minimize_to_tray_on_close={}, start_minimized_to_tray={}",
             auto_start,
             monitoring_interval_ms,
             show_tray_notifications,
+            show_update_notifications,
             minimize_to_tray_on_minimize,
             minimize_to_tray_on_close,
             start_minimized_to_tray
@@ -668,6 +675,7 @@ impl GuiController {
                 config.preferences.monitoring_interval_ms = monitoring_interval_ms as u64;
             }
             config.preferences.show_tray_notifications = show_tray_notifications;
+            config.preferences.show_update_notifications = show_update_notifications;
             config.preferences.minimize_to_tray_on_minimize = minimize_to_tray_on_minimize;
             config.preferences.minimize_to_tray_on_close = minimize_to_tray_on_close;
             config.preferences.start_minimized_to_tray = start_minimized_to_tray;
@@ -728,12 +736,13 @@ impl GuiController {
 
     /// Stub implementation for non-Windows platforms
     #[cfg(not(windows))]
-    #[allow(clippy::fn_params_excessive_bools)]
+    #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
     fn save_settings(
         _controller: &Arc<Mutex<AppController>>,
         _auto_start: bool,
         _monitoring_interval_ms: i32,
         _show_tray_notifications: bool,
+        _show_update_notifications: bool,
         _minimize_to_tray_on_minimize: bool,
         _minimize_to_tray_on_close: bool,
         _start_minimized_to_tray: bool,
@@ -839,7 +848,7 @@ impl GuiController {
             match result {
                 Ok(check_result) => {
                     info!("Update check completed: {:?}", check_result);
-                    Self::handle_update_check_result(&check_result);
+                    Self::handle_update_check_result(&controller_clone, &check_result);
                 }
                 Err(e) => {
                     warn!("Update check failed (failing silently): {}", e);
@@ -851,9 +860,19 @@ impl GuiController {
 
     /// Handle the result of an update check
     ///
-    /// Shows a notification if an update is available, with a button to open the releases page.
-    fn handle_update_check_result(result: &UpdateCheckResult) {
+    /// Shows a notification if an update is available and the user has enabled update notifications.
+    fn handle_update_check_result(
+        controller: &Arc<Mutex<AppController>>,
+        result: &UpdateCheckResult,
+    ) {
         use tracing::info;
+
+        // Check if update notifications are enabled
+        let show_notifications = {
+            let controller_guard = controller.lock();
+            let config = controller_guard.config.lock();
+            config.preferences.show_update_notifications
+        };
 
         if result.update_available {
             info!(
@@ -861,16 +880,24 @@ impl GuiController {
                 result.current_version, result.latest_version
             );
 
-            // Show notification with update information
-            let message = format!(
-                "A new version is available!\n\nCurrent: {}\nLatest: {}\n\nClick to view releases",
-                result.current_version, result.latest_version
-            );
+            // Only show notification if user has enabled update notifications
+            if show_notifications {
+                // Show notification with update information
+                let message = format!(
+                    "A new version is available!\n\nCurrent: {}\nLatest: {}\n\nClick to view releases",
+                    result.current_version, result.latest_version
+                );
 
-            Self::show_update_notification(&message, &result.releases_url);
+                Self::show_update_notification(&message, &result.releases_url);
+            } else {
+                info!("Update notification suppressed (user preference)");
+            }
         } else {
             info!("Application is up to date");
-            Self::show_info_notification("Update Check", "You are running the latest version!");
+            // Only show "up to date" notification if user has enabled update notifications
+            if show_notifications {
+                Self::show_info_notification("Update Check", "You are running the latest version!");
+            }
         }
     }
 
