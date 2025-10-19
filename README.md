@@ -8,6 +8,7 @@
   <a href="https://github.com/engels74/EasyHDR/releases"><img src="https://img.shields.io/github/v/tag/engels74/EasyHDR?sort=semver" alt="GitHub tag (SemVer)"></a>
   <a href="https://github.com/engels74/EasyHDR/blob/main/LICENSE"><img src="https://img.shields.io/github/license/engels74/EasyHDR" alt="License"></a>
   <a href="https://github.com/engels74/EasyHDR/stargazers"><img src="https://img.shields.io/github/stars/engels74/EasyHDR.svg" alt="GitHub Stars"></a>
+  <a href="https://deepwiki.com/engels74/EasyHDR"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 A lightweight Windows utility that automatically enables HDR when you launch configured applications and disables it when you close them.
