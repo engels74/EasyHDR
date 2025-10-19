@@ -728,4 +728,61 @@ mod tests {
             }
         }
     }
+
+    /// Test that saving UI settings preserves update check metadata
+    ///
+    /// This test verifies the fix for Phase 2 of the remediation plan:
+    /// When GUI settings (`auto_start`, `monitoring_interval`, etc.) are saved,
+    /// the update check metadata (`last_update_check_time`, `cached_latest_version`)
+    /// should be preserved, not zeroed out.
+    ///
+    /// This ensures rate limiting for update checks continues to work correctly
+    /// after settings changes.
+    #[test]
+    fn test_settings_save_preserves_update_metadata() {
+        let test_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&test_dir);
+
+        // Create initial config with update check metadata
+        let mut config = AppConfig::default();
+        config.preferences.last_update_check_time = 1_234_567_890;
+        config.preferences.cached_latest_version = "1.2.3".to_string();
+        config.preferences.auto_start = false;
+        config.preferences.monitoring_interval_ms = 1000;
+
+        // Save initial config
+        ConfigManager::save(&config).unwrap();
+
+        // Simulate GUI settings save: load config, modify UI settings, save
+        let mut loaded_config = ConfigManager::load().unwrap();
+
+        // Modify only UI-controlled fields (simulating partial update pattern)
+        loaded_config.preferences.auto_start = true;
+        loaded_config.preferences.monitoring_interval_ms = 1500;
+        loaded_config.preferences.show_tray_notifications = false;
+        // Note: last_update_check_time and cached_latest_version are NOT modified
+
+        // Save the modified config
+        ConfigManager::save(&loaded_config).unwrap();
+
+        // Load again and verify update metadata was preserved
+        let final_config = ConfigManager::load().unwrap();
+
+        // Verify UI settings were updated
+        assert!(final_config.preferences.auto_start);
+        assert_eq!(final_config.preferences.monitoring_interval_ms, 1500);
+        assert!(!final_config.preferences.show_tray_notifications);
+
+        // Verify update check metadata was preserved (this is the critical assertion)
+        assert_eq!(
+            final_config.preferences.last_update_check_time, 1_234_567_890,
+            "last_update_check_time should be preserved across settings saves"
+        );
+        assert_eq!(
+            final_config.preferences.cached_latest_version, "1.2.3",
+            "cached_latest_version should be preserved across settings saves"
+        );
+
+        // TempDir and AppdataGuard automatically clean up when dropped
+    }
 }

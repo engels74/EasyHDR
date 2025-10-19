@@ -620,6 +620,10 @@ impl GuiController {
     ///
     /// Updates user preferences in the configuration and handles auto-start registry
     /// management. Called when the user clicks "Save" in the settings dialog.
+    ///
+    /// Uses partial update pattern to preserve update check metadata fields
+    /// (`last_update_check_time`, `cached_latest_version`) as per Rust-Bible
+    /// "State Persistence & I/O Discipline" guidelines.
     #[cfg(windows)]
     #[allow(clippy::fn_params_excessive_bools)]
     fn save_settings(
@@ -630,7 +634,6 @@ impl GuiController {
         minimize_to_tray_on_minimize: bool,
         minimize_to_tray_on_close: bool,
     ) {
-        use easyhdr::config::models::UserPreferences;
         use easyhdr::utils::AutoStartManager;
         use tracing::{info, warn};
 
@@ -643,35 +646,40 @@ impl GuiController {
             minimize_to_tray_on_close
         );
 
-        // Create UserPreferences struct with new values
-        // The UI uses i32 for the slider, but we validate it's non-negative before saving
-        #[expect(
-            clippy::cast_sign_loss,
-            reason = "monitoring_interval_ms is validated to be non-negative by UI constraints"
-        )]
-        let prefs = UserPreferences {
-            auto_start,
-            monitoring_interval_ms: monitoring_interval_ms as u64,
-            show_tray_notifications,
-            minimize_to_tray_on_minimize,
-            minimize_to_tray_on_close,
-            last_update_check_time: 0,
-            cached_latest_version: String::new(),
-        };
-
-        // Update preferences in controller (this saves to config file)
+        // Apply partial update pattern: mutate existing preferences to preserve update metadata
         let mut controller_guard = controller.lock();
-        match controller_guard.update_preferences(prefs) {
-            Ok(()) => {
-                info!("Preferences updated successfully");
+        {
+            let mut config = controller_guard.config.lock();
+
+            // Update only the UI-controlled fields, preserving update check metadata
+            config.preferences.auto_start = auto_start;
+            #[expect(
+                clippy::cast_sign_loss,
+                reason = "monitoring_interval_ms is validated to be non-negative by UI constraints"
+            )]
+            {
+                config.preferences.monitoring_interval_ms = monitoring_interval_ms as u64;
             }
-            Err(e) => {
-                warn!("Failed to update preferences: {}", e);
-                drop(controller_guard);
-                Self::show_error_dialog_from_error(&e);
-                return;
-            }
+            config.preferences.show_tray_notifications = show_tray_notifications;
+            config.preferences.minimize_to_tray_on_minimize = minimize_to_tray_on_minimize;
+            config.preferences.minimize_to_tray_on_close = minimize_to_tray_on_close;
+            // last_update_check_time and cached_latest_version are intentionally NOT modified
         }
+
+        // Save configuration to disk
+        let config = controller_guard.config.lock();
+        if let Err(e) = easyhdr::config::ConfigManager::save(&config) {
+            warn!(
+                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
+                 Changes will be lost on application restart.",
+                e
+            );
+            drop(config);
+            drop(controller_guard);
+            Self::show_error_dialog_from_error(&e);
+            return;
+        }
+        drop(config);
         drop(controller_guard);
 
         // Handle auto-start registry management
@@ -790,7 +798,7 @@ impl GuiController {
             // Perform the update check
             let result = checker.check_for_updates();
 
-            // Update last check time and cache in config
+            // Update last check time and cache in config, then persist immediately
             {
                 let controller_guard = controller_clone.lock();
                 let mut config = controller_guard.config.lock();
@@ -801,7 +809,14 @@ impl GuiController {
                         check_result.latest_version.to_string();
                 }
 
-                // Save config
+                // Persist update check metadata immediately to disk
+                if let Err(e) = easyhdr::config::ConfigManager::save(&config) {
+                    warn!(
+                        "Failed to save update check metadata to disk: {}. \
+                         Rate limiting may not work correctly until next successful save.",
+                        e
+                    );
+                }
                 drop(config);
                 drop(controller_guard);
             }
