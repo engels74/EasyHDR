@@ -43,6 +43,7 @@ jobs:
   cargo-geiger:
     name: Cargo Geiger (Unsafe Code Check)
     runs-on: ubuntu-latest
+    continue-on-error: true  # Informational only - unsafe code is expected in Windows APIs and low-level dependencies
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
