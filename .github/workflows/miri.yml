@@ -30,7 +30,9 @@ jobs:
           cache: true
 
       - name: Run Miri on portable code (config, error modules)
-        run: cargo miri test --lib config error -- --test-threads=1
+        run: |
+          cargo miri test --lib config -- --test-threads=1
+          cargo miri test --lib error -- --test-threads=1
         env:
           MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check
         # --test-threads=1 is used for Miri to ensure deterministic execution and better UB detection
