@@ -8,6 +8,7 @@ name: Miri
   pull_request:
     branches:
       - '**'
+  workflow_dispatch:
 
 permissions:
   contents: read
