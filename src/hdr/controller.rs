@@ -7,7 +7,6 @@ use crate::error::Result;
 use crate::hdr::WindowsVersion;
 use crate::hdr::windows_api::LUID;
 use smallvec::SmallVec;
-use tracing::{debug, info, warn};
 
 #[cfg(windows)]
 use crate::hdr::windows_api::{
