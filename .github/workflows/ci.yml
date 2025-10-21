@@ -74,9 +74,75 @@ jobs:
           path: ./artifacts
 
       - name: VirusTotal Scan
+        id: vt_scan
         uses: crazy-max/ghaction-virustotal@v4
         with:
           vt_api_key: ${{ secrets.VT_API_KEY }}
           files: |
             ./artifacts/easyhdr.exe
           request_rate: 4
+
+      - name: Display VirusTotal Results
+        if: always()
+        run: |
+          echo "## VirusTotal Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Parse the analysis output (format: filename=url)
+          ANALYSIS="${{ steps.vt_scan.outputs.analysis }}"
+
+          if [ -n "$ANALYSIS" ]; then
+            # Split by comma if multiple files
+            IFS=',' read -ra RESULTS <<< "$ANALYSIS"
+
+            for result in "${RESULTS[@]}"; do
+              # Extract filename and URL
+              FILENAME=$(echo "$result" | cut -d'=' -f1)
+              VT_URL=$(echo "$result" | cut -d'=' -f2-)
+
+              echo "### 🔍 $FILENAME" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**VirusTotal Analysis:** [$VT_URL]($VT_URL)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              # Also output to logs for easy copying
+              echo "::notice title=VirusTotal Scan Complete::$FILENAME scanned - View results at $VT_URL"
+            done
+          else
+            echo "⚠️ No scan results available" >> $GITHUB_STEP_SUMMARY
+            echo "::warning::VirusTotal scan did not return analysis results"
+          fi
+
+      - name: Save VirusTotal URL to artifact
+        if: steps.vt_scan.outputs.analysis != ''
+        run: |
+          mkdir -p ./vt-results
+          echo "${{ steps.vt_scan.outputs.analysis }}" > ./vt-results/scan-url.txt
+
+          # Parse and create a markdown file with clickable link
+          ANALYSIS="${{ steps.vt_scan.outputs.analysis }}"
+          IFS=',' read -ra RESULTS <<< "$ANALYSIS"
+
+          echo "# VirusTotal Scan Results" > ./vt-results/RESULTS.md
+          echo "" >> ./vt-results/RESULTS.md
+          echo "Scan Date: $(date -u)" >> ./vt-results/RESULTS.md
+          echo "Commit: ${{ github.sha }}" >> ./vt-results/RESULTS.md
+          echo "" >> ./vt-results/RESULTS.md
+
+          for result in "${RESULTS[@]}"; do
+            FILENAME=$(echo "$result" | cut -d'=' -f1)
+            VT_URL=$(echo "$result" | cut -d'=' -f2-)
+            echo "## $FILENAME" >> ./vt-results/RESULTS.md
+            echo "" >> ./vt-results/RESULTS.md
+            echo "**View Analysis:** $VT_URL" >> ./vt-results/RESULTS.md
+            echo "" >> ./vt-results/RESULTS.md
+          done
+
+      - name: Upload VirusTotal results artifact
+        if: steps.vt_scan.outputs.analysis != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: virustotal-results-${{ github.sha }}
+          path: ./vt-results/
+          retention-days: 90
+          if-no-files-found: warn
