@@ -1125,7 +1125,10 @@ mod tests {
         // On non-Windows, icon should be None
         #[cfg(not(windows))]
         {
-            assert!(app.icon_data.is_none(), "Icon should not be loaded on non-Windows platforms");
+            assert!(
+                app.icon_data.is_none(),
+                "Icon should not be loaded on non-Windows platforms"
+            );
         }
     }
 

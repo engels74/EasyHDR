@@ -392,6 +392,7 @@ export component MainWindow inherits Window {
 
     // Callbacks
     callback add-application();
+    callback add-uwp-application();
     callback remove-application(int);
     callback toggle-enabled(int, bool);
     callback open-settings();
@@ -635,6 +636,13 @@ export component MainWindow inherits Window {
                     primary: true;
                     clicked => {
                         add-application();
+                    }
+                }
+                StyledButton {
+                    text: "Add UWP Application";
+                    primary: true;
+                    clicked => {
+                        add-uwp-application();
                     }
                 }
                 StyledButton {

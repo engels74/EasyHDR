@@ -134,6 +134,12 @@ impl GuiController {
         });
 
         let controller_clone = controller.clone();
+        let window_weak = main_window.as_weak();
+        main_window.on_add_uwp_application(move || {
+            Self::show_uwp_picker(&controller_clone, &window_weak);
+        });
+
+        let controller_clone = controller.clone();
         main_window.on_remove_application(move |index| {
             Self::remove_app_at_index(&controller_clone, index);
         });
@@ -349,6 +355,34 @@ impl GuiController {
         _window: &slint::Weak<MainWindow>,
     ) {
         Self::show_error_dialog("File picker is only supported on Windows");
+    }
+
+    /// Show UWP package picker dialog for adding UWP applications
+    ///
+    /// Opens a dialog listing all installed UWP applications with their display names
+    /// and publisher information. Users can select one or more UWP apps to add to the
+    /// monitored app list.
+    ///
+    /// This is a stub implementation that will be completed in tasks 10.2 and 10.3.
+    #[cfg(windows)]
+    fn show_uwp_picker(_controller: &Arc<Mutex<AppController>>, _window: &slint::Weak<MainWindow>) {
+        use tracing::info;
+
+        info!("UWP picker button clicked (stub implementation)");
+
+        // TODO: Task 10.2 - Implement UWP package picker dialog UI
+        // TODO: Task 10.3 - Wire UWP picker to enumerate_packages and add selected apps
+        Self::show_error_dialog(
+            "UWP application picker is not yet implemented.\n\n\
+             This feature will be available in the next update.\n\n\
+             (Tasks 10.2 and 10.3 pending)",
+        );
+    }
+
+    /// Stub implementation for non-Windows platforms
+    #[cfg(not(windows))]
+    fn show_uwp_picker(_controller: &Arc<Mutex<AppController>>, _window: &slint::Weak<MainWindow>) {
+        Self::show_error_dialog("UWP application picker is only supported on Windows");
     }
 
     /// Collect application list items for UI consumption
