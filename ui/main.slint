@@ -1,7 +1,7 @@
 // Main window UI definition for EasyHDR
 // Enhanced with modern, elegant visual design
 
-import { Button, ListView, CheckBox, Palette, StyleMetrics, Slider } from "std-widgets.slint";
+import { Button, ListView, CheckBox, Palette, StyleMetrics, Slider, ScrollView } from "std-widgets.slint";
 
 // Modern color constants for enhanced visual design
 global DesignTokens {
@@ -169,7 +169,7 @@ component SettingsDialogContent inherits Rectangle {
 
         VerticalLayout {
             padding: DesignTokens.space-2xl;
-            spacing: DesignTokens.space-xl;
+            spacing: 0px;
 
             // Title with modern typography
             Text {
@@ -180,9 +180,22 @@ component SettingsDialogContent inherits Rectangle {
                 color: DesignTokens.text-primary;
             }
 
-            // Category 1: System Integration
-            VerticalLayout {
-                spacing: DesignTokens.space-md;
+            // Spacing after title
+            Rectangle {
+                height: DesignTokens.space-xl;
+            }
+
+            // Scrollable settings content
+            ScrollView {
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    spacing: DesignTokens.space-xl;
+                    padding-right: DesignTokens.space-sm;
+
+                    // Category 1: System Integration
+                    VerticalLayout {
+                        spacing: DesignTokens.space-md;
 
                 // Section header
                 Text {
@@ -317,10 +330,12 @@ component SettingsDialogContent inherits Rectangle {
                     }
                 }
             }
+                }
+            }
 
-            // Spacer to push buttons to bottom
+            // Spacing before buttons
             Rectangle {
-                vertical-stretch: 1;
+                height: DesignTokens.space-xl;
             }
 
             // Dialog buttons with modern spacing
@@ -731,9 +746,9 @@ export component MainWindow inherits Window {
     // Settings dialog popup
     settings-dialog := PopupWindow {
         x: (parent.width - 500px) / 2;
-        y: (parent.height - 400px) / 2;
+        y: (parent.height - 500px) / 2;
         width: 500px;
-        height: 400px;
+        height: 500px;
         close-policy: PopupClosePolicy.no-auto-close;
 
         SettingsDialogContent {
