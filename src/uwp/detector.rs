@@ -219,8 +219,8 @@ pub unsafe fn detect_uwp_process(_h_process: ()) -> Result<Option<String>> {
 
 #[cfg(not(windows))]
 pub fn extract_package_family_name(_full_name: &str) -> Result<String> {
-    Err(crate::EasyHdrError::Other(
-        "UWP detection only available on Windows".into(),
+    Err(crate::EasyHdrError::UwpProcessDetectionError(
+        crate::error::StringError::new("UWP detection only available on Windows"),
     ))
 }
 
