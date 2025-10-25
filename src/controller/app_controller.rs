@@ -6,7 +6,7 @@
 use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
 use crate::error::{EasyHdrError, Result};
 use crate::hdr::HdrController;
-use crate::monitor::{HdrStateEvent, ProcessEvent};
+use crate::monitor::{AppIdentifier, HdrStateEvent, ProcessEvent};
 use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -218,25 +218,25 @@ impl AppController {
         use tracing::{debug, error, info};
 
         match event {
-            ProcessEvent::Started(process_name) => {
-                debug!("Process started event: {}", process_name);
+            ProcessEvent::Started(app_id) => {
+                debug!("Process started event: {:?}", app_id);
 
-                // Check if this process is in our monitored list and enabled
+                // Check if this app is in our monitored list and enabled
                 let config = self.config.lock();
-                let is_monitored = config
-                    .monitored_apps
-                    .iter()
-                    .any(|app| {
-                        if let MonitoredApp::Win32(win32_app) = app {
-                            win32_app.enabled && win32_app.process_name.eq_ignore_ascii_case(&process_name)
-                        } else {
-                            false // UWP apps are not matched by process name
-                        }
-                    });
+                let is_monitored = config.monitored_apps.iter().any(|app| match (&app_id, app) {
+                    (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
+                        win32_app.enabled
+                            && win32_app.process_name.eq_ignore_ascii_case(process_name)
+                    }
+                    (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
+                        uwp_app.enabled && uwp_app.package_family_name == *package_family_name
+                    }
+                    _ => false, // Mismatched types (Win32 vs UWP)
+                });
                 drop(config); // Release lock early
 
                 if is_monitored {
-                    info!("Monitored application started: {}", process_name);
+                    info!("Monitored application started: {:?}", app_id);
 
                     // Increment active process count
                     let prev_count = self.active_process_count.fetch_add(1, Ordering::SeqCst);
@@ -257,25 +257,25 @@ impl AppController {
                 }
             }
 
-            ProcessEvent::Stopped(process_name) => {
-                debug!("Process stopped event: {}", process_name);
+            ProcessEvent::Stopped(app_id) => {
+                debug!("Process stopped event: {:?}", app_id);
 
-                // Check if this process is in our monitored list and enabled
+                // Check if this app is in our monitored list and enabled
                 let config = self.config.lock();
-                let is_monitored = config
-                    .monitored_apps
-                    .iter()
-                    .any(|app| {
-                        if let MonitoredApp::Win32(win32_app) = app {
-                            win32_app.enabled && win32_app.process_name.eq_ignore_ascii_case(&process_name)
-                        } else {
-                            false // UWP apps are not matched by process name
-                        }
-                    });
+                let is_monitored = config.monitored_apps.iter().any(|app| match (&app_id, app) {
+                    (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
+                        win32_app.enabled
+                            && win32_app.process_name.eq_ignore_ascii_case(process_name)
+                    }
+                    (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
+                        uwp_app.enabled && uwp_app.package_family_name == *package_family_name
+                    }
+                    _ => false, // Mismatched types (Win32 vs UWP)
+                });
                 drop(config); // Release lock early
 
                 if is_monitored {
-                    info!("Monitored application stopped: {}", process_name);
+                    info!("Monitored application stopped: {:?}", app_id);
 
                     // Decrement active process count using checked atomic pattern to prevent underflow
                     // Uses fetch_update with saturating_sub to ensure count never wraps to usize::MAX
@@ -763,7 +763,9 @@ mod tests {
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
 
         // Handle a started event for the monitored app
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
 
         // Count should be incremented to 1
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
@@ -795,7 +797,9 @@ mod tests {
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Handle a started event with different case
-        controller.handle_process_event(ProcessEvent::Started("APP".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "APP".to_string(),
+        )));
 
         // Count should be incremented (case-insensitive match)
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
@@ -823,7 +827,9 @@ mod tests {
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Handle a started event for the disabled app
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
 
         // Count should remain 0 (disabled apps are ignored)
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
@@ -851,7 +857,9 @@ mod tests {
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start the app first
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
 
         // Clear the state update from start
@@ -861,7 +869,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(600));
 
         // Stop the app
-        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
 
         // Count should be decremented to 0
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
@@ -897,7 +907,9 @@ mod tests {
 
         // Send a spurious ProcessEvent::Stopped when count is already 0
         // This should NOT cause underflow (wrapping to usize::MAX)
-        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
 
         // Count should remain 0 (saturating_sub prevents underflow)
         assert_eq!(
@@ -907,7 +919,9 @@ mod tests {
         );
 
         // Send another spurious stop event to verify idempotency
-        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
 
         // Count should still be 0
         assert_eq!(
@@ -917,7 +931,9 @@ mod tests {
         );
 
         // Verify that normal operation still works after spurious events
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(
             controller.active_process_count.load(Ordering::SeqCst),
             1,
@@ -955,12 +971,16 @@ mod tests {
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start first app
-        controller.handle_process_event(ProcessEvent::Started("app1".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app1".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Start second app
-        controller.handle_process_event(ProcessEvent::Started("app2".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app2".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 2);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
@@ -968,7 +988,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(600));
 
         // Stop first app - HDR should remain on
-        controller.handle_process_event(ProcessEvent::Stopped("app1".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app1".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
@@ -976,7 +998,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(600));
 
         // Stop second app - HDR should turn off
-        controller.handle_process_event(ProcessEvent::Stopped("app2".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app2".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
         assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
@@ -1237,7 +1261,9 @@ mod tests {
 
         // Send a process started event
         event_tx
-            .send(ProcessEvent::Started("app".to_string()))
+            .send(ProcessEvent::Started(AppIdentifier::Win32(
+                "app".to_string(),
+            )))
             .unwrap();
 
         // Wait a bit for the event to be processed
@@ -1319,10 +1345,14 @@ mod tests {
 
         // Send multiple events
         event_tx
-            .send(ProcessEvent::Started("app1".to_string()))
+            .send(ProcessEvent::Started(AppIdentifier::Win32(
+                "app1".to_string(),
+            )))
             .unwrap();
         event_tx
-            .send(ProcessEvent::Started("app2".to_string()))
+            .send(ProcessEvent::Started(AppIdentifier::Win32(
+                "app2".to_string(),
+            )))
             .unwrap();
 
         // Wait for events to be processed
@@ -1370,7 +1400,9 @@ mod tests {
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start the app - HDR should turn on
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
@@ -1381,7 +1413,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Stop the app - HDR should NOT turn off due to debouncing
-        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
         // HDR should still be on because we're within the debounce window
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
@@ -1395,7 +1429,9 @@ mod tests {
 
         // Now test that after the debounce period expires, HDR can be toggled again
         // First, restart the app to get the count back to 1
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         // HDR should still be on (it never turned off)
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
@@ -1404,7 +1440,9 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(600));
 
         // Stop the app - HDR should turn off now (debounce period has passed)
-        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
         assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
@@ -1433,7 +1471,9 @@ mod tests {
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
 
         // Start the app - HDR should turn on immediately
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
@@ -1441,13 +1481,17 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(600));
 
         // Stop the app - HDR should turn off
-        controller.handle_process_event(ProcessEvent::Stopped("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
         assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Immediately start the app again (within what would be a debounce window if it applied to enable)
         // HDR should turn on immediately regardless of timing
-        controller.handle_process_event(ProcessEvent::Started("app".to_string()));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app".to_string(),
+        )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
     }

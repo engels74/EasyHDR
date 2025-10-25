@@ -21,13 +21,26 @@ use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES};
 
 use crate::error::{EasyHdrError, Result};
 
+/// Identifier for a monitored application
+///
+/// Distinguishes between Win32 desktop applications and UWP applications.
+/// Win32 apps are identified by their process name (lowercase, no extension),
+/// while UWP apps are identified by their package family name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AppIdentifier {
+    /// Win32 application identified by process name (lowercase, no extension)
+    Win32(String),
+    /// UWP application identified by package family name
+    Uwp(String),
+}
+
 /// Events emitted by the process monitor
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessEvent {
     /// A monitored process has started
-    Started(String),
+    Started(AppIdentifier),
     /// A monitored process has stopped
-    Stopped(String),
+    Stopped(AppIdentifier),
 }
 
 /// Process monitor that polls for running processes
@@ -45,9 +58,9 @@ pub struct ProcessMonitor {
     event_sender: mpsc::SyncSender<ProcessEvent>,
     /// Polling interval
     interval: Duration,
-    /// Previous snapshot of running processes
+    /// Previous snapshot of running processes (identified by AppIdentifier)
     #[cfg_attr(not(windows), allow(dead_code))]
-    running_processes: HashSet<String>,
+    running_processes: HashSet<AppIdentifier>,
     /// Estimated process count for capacity pre-allocation
     #[cfg_attr(not(windows), allow(dead_code))]
     estimated_process_count: usize,
@@ -139,7 +152,7 @@ impl ProcessMonitor {
             // Ensure snapshot handle is closed when we're done
             let _guard = SnapshotGuard(snapshot);
 
-            // Build a set of currently running process names
+            // Build a set of currently running process identifiers
             // Pre-allocate capacity based on previous snapshot size to avoid rehashing
             let capacity = self
                 .running_processes
@@ -170,7 +183,8 @@ impl ProcessMonitor {
                     // Extract filename without extension and convert to lowercase
                     let name_lower = extract_filename_without_extension(&name);
                     debug!("Found process: {}", name_lower);
-                    current_processes.insert(name_lower);
+                    // For now, all processes are Win32 (UWP detection will be added in future task)
+                    current_processes.insert(AppIdentifier::Win32(name_lower));
                 }
 
                 // Get the next process
@@ -213,7 +227,7 @@ impl ProcessMonitor {
     /// Compares the current process snapshot with the previous one to identify
     /// which monitored processes have started or stopped, then sends appropriate events.
     #[cfg_attr(not(windows), allow(dead_code))]
-    fn detect_changes(&mut self, current: HashSet<String>) {
+    fn detect_changes(&mut self, current: HashSet<AppIdentifier>) {
         use tracing::info;
 
         // Clone watch list to minimize lock hold time
@@ -223,34 +237,46 @@ impl ProcessMonitor {
         }; // Lock is released here
 
         // Find started processes
-        for process in current.difference(&self.running_processes) {
-            if watch_list.contains(process) {
-                info!("Detected process started: {}", process);
-                if let Err(e) = self
-                    .event_sender
-                    .send(ProcessEvent::Started(process.clone()))
-                {
+        for app_id in current.difference(&self.running_processes) {
+            // Check if this app identifier is monitored
+            let is_monitored = match app_id {
+                AppIdentifier::Win32(process_name) => watch_list.contains(process_name),
+                AppIdentifier::Uwp(_package_family_name) => {
+                    // UWP apps are not yet supported in watch list (will be added in future task)
+                    false
+                }
+            };
+
+            if is_monitored {
+                info!("Detected process started: {:?}", app_id);
+                if let Err(e) = self.event_sender.send(ProcessEvent::Started(app_id.clone())) {
                     use tracing::error;
                     error!(
-                        "Failed to send ProcessEvent::Started for '{}': {}",
-                        process, e
+                        "Failed to send ProcessEvent::Started for '{:?}': {}",
+                        app_id, e
                     );
                 }
             }
         }
 
         // Find stopped processes
-        for process in self.running_processes.difference(&current) {
-            if watch_list.contains(process) {
-                info!("Detected process stopped: {}", process);
-                if let Err(e) = self
-                    .event_sender
-                    .send(ProcessEvent::Stopped(process.clone()))
-                {
+        for app_id in self.running_processes.difference(&current) {
+            // Check if this app identifier is monitored
+            let is_monitored = match app_id {
+                AppIdentifier::Win32(process_name) => watch_list.contains(process_name),
+                AppIdentifier::Uwp(_package_family_name) => {
+                    // UWP apps are not yet supported in watch list (will be added in future task)
+                    false
+                }
+            };
+
+            if is_monitored {
+                info!("Detected process stopped: {:?}", app_id);
+                if let Err(e) = self.event_sender.send(ProcessEvent::Stopped(app_id.clone())) {
                     use tracing::error;
                     error!(
-                        "Failed to send ProcessEvent::Stopped for '{}': {}",
-                        process, e
+                        "Failed to send ProcessEvent::Stopped for '{:?}': {}",
+                        app_id, e
                     );
                 }
             }
@@ -404,16 +430,17 @@ mod tests {
 
         // Current state: notepad started
         let mut current = HashSet::new();
-        current.insert("notepad".to_string());
-        current.insert("explorer".to_string()); // Not monitored
+        current.insert(AppIdentifier::Win32("notepad".to_string()));
+        current.insert(AppIdentifier::Win32("explorer".to_string())); // Not monitored
 
         monitor.detect_changes(current);
 
         // Should receive Started event for notepad
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
-            ProcessEvent::Started(name) => assert_eq!(name, "notepad"),
+            ProcessEvent::Started(AppIdentifier::Win32(name)) => assert_eq!(name, "notepad"),
             ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
+            _ => panic!("Expected Win32 Started event"),
         }
 
         // Should not receive event for explorer (not monitored)
@@ -430,21 +457,22 @@ mod tests {
 
         // Initial state: notepad running
         let mut initial = HashSet::new();
-        initial.insert("notepad".to_string());
-        initial.insert("explorer".to_string());
+        initial.insert(AppIdentifier::Win32("notepad".to_string()));
+        initial.insert(AppIdentifier::Win32("explorer".to_string()));
         monitor.running_processes = initial;
 
         // Current state: notepad stopped
         let mut current = HashSet::new();
-        current.insert("explorer".to_string());
+        current.insert(AppIdentifier::Win32("explorer".to_string()));
 
         monitor.detect_changes(current);
 
         // Should receive Stopped event for notepad
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
-            ProcessEvent::Stopped(name) => assert_eq!(name, "notepad"),
+            ProcessEvent::Stopped(AppIdentifier::Win32(name)) => assert_eq!(name, "notepad"),
             ProcessEvent::Started(_) => panic!("Expected Stopped event, got Started"),
+            _ => panic!("Expected Win32 Stopped event"),
         }
     }
 
@@ -461,15 +489,16 @@ mod tests {
 
         // Current state: process name is already lowercase (as it should be from extraction)
         let mut current = HashSet::new();
-        current.insert("notepad".to_string());
+        current.insert(AppIdentifier::Win32("notepad".to_string()));
 
         monitor.detect_changes(current);
 
         // Should receive Started event
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
-            ProcessEvent::Started(name) => assert_eq!(name, "notepad"),
+            ProcessEvent::Started(AppIdentifier::Win32(name)) => assert_eq!(name, "notepad"),
             ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
+            _ => panic!("Expected Win32 Started event"),
         }
     }
 
@@ -490,9 +519,9 @@ mod tests {
 
         // Current state: multiple processes started
         let mut current = HashSet::new();
-        current.insert("notepad".to_string());
-        current.insert("game".to_string());
-        current.insert("explorer".to_string()); // Not monitored
+        current.insert(AppIdentifier::Win32("notepad".to_string()));
+        current.insert(AppIdentifier::Win32("game".to_string()));
+        current.insert(AppIdentifier::Win32("explorer".to_string())); // Not monitored
 
         monitor.detect_changes(current);
 
@@ -501,10 +530,11 @@ mod tests {
         for _ in 0..2 {
             let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
             match event {
-                ProcessEvent::Started(name) => {
+                ProcessEvent::Started(AppIdentifier::Win32(name)) => {
                     received.insert(name);
                 }
                 ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
+                _ => panic!("Expected Win32 Started event"),
             }
         }
 
@@ -600,19 +630,20 @@ mod tests {
 
         // Transition: process starts
         let mut current = HashSet::new();
-        current.insert("game".to_string());
+        current.insert(AppIdentifier::Win32("game".to_string()));
 
         monitor.detect_changes(current);
 
         // Verify Started event is sent
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
-            ProcessEvent::Started(name) => {
+            ProcessEvent::Started(AppIdentifier::Win32(name)) => {
                 assert_eq!(name, "game");
             }
             ProcessEvent::Stopped(_) => {
                 panic!("Expected Started event for state transition, got Stopped")
             }
+            _ => panic!("Expected Win32 Started event"),
         }
     }
 
@@ -625,7 +656,7 @@ mod tests {
 
         // Initial state: process running
         let mut initial = HashSet::new();
-        initial.insert("game".to_string());
+        initial.insert(AppIdentifier::Win32("game".to_string()));
         monitor.running_processes = initial;
 
         // Transition: process stops
@@ -636,12 +667,13 @@ mod tests {
         // Verify Stopped event is sent
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
-            ProcessEvent::Stopped(name) => {
+            ProcessEvent::Stopped(AppIdentifier::Win32(name)) => {
                 assert_eq!(name, "game");
             }
             ProcessEvent::Started(_) => {
                 panic!("Expected Stopped event for state transition, got Started")
             }
+            _ => panic!("Expected Win32 Stopped event"),
         }
     }
 
@@ -658,14 +690,14 @@ mod tests {
 
         // Initial state: app1 and app2 running
         let mut initial = HashSet::new();
-        initial.insert("app1".to_string());
-        initial.insert("app2".to_string());
+        initial.insert(AppIdentifier::Win32("app1".to_string()));
+        initial.insert(AppIdentifier::Win32("app2".to_string()));
         monitor.running_processes = initial;
 
         // New state: app2 and app3 running (app1 stopped, app3 started)
         let mut current = HashSet::new();
-        current.insert("app2".to_string());
-        current.insert("app3".to_string());
+        current.insert(AppIdentifier::Win32("app2".to_string()));
+        current.insert(AppIdentifier::Win32("app3".to_string()));
 
         monitor.detect_changes(current);
 
@@ -676,8 +708,9 @@ mod tests {
         for _ in 0..2 {
             let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
             match event {
-                ProcessEvent::Started(name) => started.push(name),
-                ProcessEvent::Stopped(name) => stopped.push(name),
+                ProcessEvent::Started(AppIdentifier::Win32(name)) => started.push(name),
+                ProcessEvent::Stopped(AppIdentifier::Win32(name)) => stopped.push(name),
+                _ => panic!("Expected Win32 event"),
             }
         }
 
@@ -696,7 +729,7 @@ mod tests {
 
         // Initial state: game running
         let mut initial = HashSet::new();
-        initial.insert("game".to_string());
+        initial.insert(AppIdentifier::Win32("game".to_string()));
         monitor.running_processes = initial.clone();
 
         // Current state: same as before (no change)
@@ -718,18 +751,19 @@ mod tests {
 
         // Start multiple processes, only one monitored
         let mut current = HashSet::new();
-        current.insert("game".to_string()); // Monitored
-        current.insert("notepad".to_string()); // Not monitored
-        current.insert("explorer".to_string()); // Not monitored
-        current.insert("chrome".to_string()); // Not monitored
+        current.insert(AppIdentifier::Win32("game".to_string())); // Monitored
+        current.insert(AppIdentifier::Win32("notepad".to_string())); // Not monitored
+        current.insert(AppIdentifier::Win32("explorer".to_string())); // Not monitored
+        current.insert(AppIdentifier::Win32("chrome".to_string())); // Not monitored
 
         monitor.detect_changes(current);
 
         // Should only receive one event for "game"
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
-            ProcessEvent::Started(name) => assert_eq!(name, "game"),
+            ProcessEvent::Started(AppIdentifier::Win32(name)) => assert_eq!(name, "game"),
             ProcessEvent::Stopped(_) => panic!("Expected Started event for game, got Stopped"),
+            _ => panic!("Expected Win32 Started event"),
         }
 
         // No more events should be received
@@ -748,8 +782,8 @@ mod tests {
 
         // Start some processes
         let mut current = HashSet::new();
-        current.insert("game".to_string());
-        current.insert("notepad".to_string());
+        current.insert(AppIdentifier::Win32("game".to_string()));
+        current.insert(AppIdentifier::Win32("notepad".to_string()));
 
         monitor.detect_changes(current);
 
