@@ -209,9 +209,13 @@ impl ProcessMonitor {
                                 }
                             }
                             Err(e) => {
-                                // UWP detection failed - log error but continue
+                                // UWP detection failed - log error with context but continue
                                 // This is non-fatal; we'll treat it as Win32 fallback
-                                warn!("UWP detection failed for PID {}: {}", pid, e);
+                                // Use anyhow::Context to add process ID to error chain
+                                use anyhow::Context;
+                                let contextualized_error = anyhow::Error::from(e)
+                                    .context(format!("Failed to detect UWP package for process ID {}", pid));
+                                warn!("{:#}", contextualized_error);
 
                                 // Fallback to Win32 detection
                                 let process_name = extract_process_name(&entry.szExeFile);
