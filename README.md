@@ -47,7 +47,7 @@ The application uses Windows Display Configuration APIs to control HDR state, wi
 1. Download the latest release from the [Releases](https://github.com/engels74/EasyHDR/releases) page
 2. Extract `easyhdr.exe` to a folder of your choice
 3. Run `easyhdr.exe`
-4. On first launch, Windows Defender SmartScreen will appear—click "More info" then "Run anyway"
+4. On first launch, Windows Defender SmartScreen will appear - click "More info" then "Run anyway"
 5. Click "Add Application" and select the `.exe` files you want to monitor
 6. Minimize to system tray
 
