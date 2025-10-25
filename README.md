@@ -60,9 +60,6 @@ Configuration is stored at `%APPDATA%\EasyHDR\config.json` and saved automatical
   <a href="assets/readme/gif/02-add-application.gif">
     <img src="assets/readme/gif/02-add-application.gif" alt="Adding Applications" width="280"/>
   </a>
-  <a href="assets/readme/gif/03-settings-window.gif">
-    <img src="assets/readme/gif/03-settings-window.gif" alt="Settings Window" width="280"/>
-  </a>
 </p>
 
 <p align="center">
@@ -70,8 +67,8 @@ Configuration is stored at `%APPDATA%\EasyHDR\config.json` and saved automatical
 </p>
 
 <p align="center">
-  <sub><strong>Launch:</strong> Bypassing SmartScreen warning (unsigned app; VirusTotal scans available for verification)</sub><br>
-  <sub><strong>Add Application:</strong> Adding applications to monitor | <strong>Settings:</strong> Configuring preferences</sub>
+  <sub><strong>Launch:</strong> Bypassing SmartScreen warning (unsigned app)</sub><br>
+  <sub><strong>Add Application:</strong> Adding applications to monitor</sub>
 </p>
 
 ## Dependencies
