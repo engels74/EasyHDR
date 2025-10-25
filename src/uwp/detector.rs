@@ -81,11 +81,65 @@ use crate::Result;
     reason = "Windows FFI for UWP package detection via GetPackageFullName"
 )]
 pub unsafe fn detect_uwp_process(
-    _h_process: windows::Win32::Foundation::HANDLE,
+    h_process: windows::Win32::Foundation::HANDLE,
 ) -> Result<Option<String>> {
-    // TODO: Implement in task 4.1
-    // For now, return None (treat all processes as Win32)
-    Ok(None)
+    use windows::Win32::Storage::Packaging::Appx::GetPackageFullName;
+
+    // First call to get required buffer length
+    let mut length: u32 = 0;
+    let result = unsafe { GetPackageFullName(h_process, &mut length, None) };
+
+    // APPMODEL_ERROR_NO_PACKAGE (15700) means this is a Win32 app, not a UWP app
+    const APPMODEL_ERROR_NO_PACKAGE: i32 = 15700;
+    const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+
+    if result == APPMODEL_ERROR_NO_PACKAGE {
+        // This is a Win32 application, not a UWP app
+        return Ok(None);
+    }
+
+    if result != ERROR_INSUFFICIENT_BUFFER {
+        // Unexpected error
+        return Err(crate::EasyHdrError::UwpProcessDetectionError(
+            crate::error::StringError::new(format!(
+                "GetPackageFullName failed with error code {result}"
+            )),
+        ));
+    }
+
+    // Allocate buffer for package full name
+    // length includes the null terminator
+    let mut buffer = vec![0u16; length as usize];
+
+    // Second call to retrieve the actual package full name
+    let result = unsafe { GetPackageFullName(h_process, &mut length, Some(buffer.as_mut_ptr())) };
+
+    if result != 0 {
+        // ERROR_SUCCESS is 0
+        return Err(crate::EasyHdrError::UwpProcessDetectionError(
+            crate::error::StringError::new(format!(
+                "GetPackageFullName (second call) failed with error code {result}"
+            )),
+        ));
+    }
+
+    // Convert UTF-16 buffer to Rust String
+    // Find the null terminator
+    let null_pos = buffer
+        .iter()
+        .position(|&c| c == 0)
+        .unwrap_or(buffer.len());
+
+    let full_name = String::from_utf16(&buffer[..null_pos]).map_err(|e| {
+        crate::EasyHdrError::UwpProcessDetectionError(crate::error::StringError::new(format!(
+            "Failed to convert package full name from UTF-16: {e}"
+        )))
+    })?;
+
+    // Extract package family name from full name
+    let family_name = extract_package_family_name(&full_name)?;
+
+    Ok(Some(family_name))
 }
 
 /// Extract package family name from package full name
@@ -121,12 +175,41 @@ pub unsafe fn detect_uwp_process(
 /// # }
 /// ```
 #[cfg(windows)]
-pub fn extract_package_family_name(_full_name: &str) -> Result<String> {
-    // TODO: Implement in task 4.2
-    // For now, return error indicating not implemented
-    Err(crate::EasyHdrError::Other(
-        "extract_package_family_name not yet implemented".into(),
-    ))
+pub fn extract_package_family_name(full_name: &str) -> Result<String> {
+    // Package full name format: Name_Version_Architecture_ResourceId_PublisherId
+    // Package family name format: Name_PublisherId
+    //
+    // Example:
+    // Full:   Microsoft.WindowsCalculator_10.2103.8.0_x64__8wekyb3d8bbwe
+    // Family: Microsoft.WindowsCalculator_8wekyb3d8bbwe
+    //
+    // Strategy: Split by '_' and take first component (Name) and last component (PublisherId)
+
+    let parts: Vec<&str> = full_name.split('_').collect();
+
+    // We expect at least 5 parts: Name, Version, Architecture, ResourceId, PublisherId
+    // ResourceId can be empty (represented by two consecutive underscores)
+    if parts.len() < 5 {
+        return Err(crate::EasyHdrError::PackageFamilyNameExtractionError(
+            full_name.to_string(),
+        ));
+    }
+
+    // First part is the Name
+    let name = parts[0];
+
+    // Last part is the PublisherId
+    let publisher_id = parts[parts.len() - 1];
+
+    // Validate that both parts are non-empty
+    if name.is_empty() || publisher_id.is_empty() {
+        return Err(crate::EasyHdrError::InvalidPackageFamilyName(
+            full_name.to_string(),
+        ));
+    }
+
+    // Construct family name: Name_PublisherId
+    Ok(format!("{name}_{publisher_id}"))
 }
 
 #[cfg(not(windows))]
@@ -139,4 +222,150 @@ pub fn extract_package_family_name(_full_name: &str) -> Result<String> {
     Err(crate::EasyHdrError::Other(
         "UWP detection only available on Windows".into(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_valid() {
+        // Test with a typical Windows Calculator package name
+        let full_name = "Microsoft.WindowsCalculator_10.2103.8.0_x64__8wekyb3d8bbwe";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_with_empty_resource_id() {
+        // Test with empty ResourceId (two consecutive underscores)
+        let full_name = "Microsoft.WindowsStore_12011.1001.1.0_x64__8wekyb3d8bbwe";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Microsoft.WindowsStore_8wekyb3d8bbwe");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_different_architecture() {
+        // Test with ARM64 architecture
+        let full_name = "Microsoft.Photos_2023.11110.8002.0_arm64__8wekyb3d8bbwe";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Microsoft.Photos_8wekyb3d8bbwe");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_neutral_architecture() {
+        // Test with neutral architecture
+        let full_name = "Microsoft.DesktopAppInstaller_1.21.3133.0_neutral__8wekyb3d8bbwe";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_too_few_parts() {
+        // Test with malformed package name (too few parts)
+        let full_name = "Microsoft.WindowsCalculator_10.2103.8.0";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::EasyHdrError::PackageFamilyNameExtractionError(_)
+        ));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_empty_name() {
+        // Test with empty name component
+        let full_name = "_10.2103.8.0_x64__8wekyb3d8bbwe";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::EasyHdrError::InvalidPackageFamilyName(_)
+        ));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_empty_publisher_id() {
+        // Test with empty publisher ID
+        let full_name = "Microsoft.WindowsCalculator_10.2103.8.0_x64__";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::EasyHdrError::InvalidPackageFamilyName(_)
+        ));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_single_underscore() {
+        // Test with only one underscore (invalid format)
+        let full_name = "Microsoft.WindowsCalculator";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::EasyHdrError::PackageFamilyNameExtractionError(_)
+        ));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_extra_underscores() {
+        // Test with more than 5 parts (should still work - take first and last)
+        let full_name = "Microsoft.WindowsCalculator_10.2103.8.0_x64_extra_part__8wekyb3d8bbwe";
+        let result = extract_package_family_name(full_name);
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_extract_package_family_name_real_world_examples() {
+        // Test with real-world package names
+        let test_cases = vec![
+            (
+                "Microsoft.MicrosoftEdge_44.19041.1266.0_neutral__8wekyb3d8bbwe",
+                "Microsoft.MicrosoftEdge_8wekyb3d8bbwe",
+            ),
+            (
+                "Microsoft.Xbox.TCUI_1.24.10001.0_x64__8wekyb3d8bbwe",
+                "Microsoft.Xbox.TCUI_8wekyb3d8bbwe",
+            ),
+            (
+                "Microsoft.WindowsTerminal_1.18.3181.0_x64__8wekyb3d8bbwe",
+                "Microsoft.WindowsTerminal_8wekyb3d8bbwe",
+            ),
+        ];
+
+        for (full_name, expected_family_name) in test_cases {
+            let result = extract_package_family_name(full_name);
+            assert!(result.is_ok(), "Failed for: {full_name}");
+            assert_eq!(
+                result.unwrap(),
+                expected_family_name,
+                "Mismatch for: {full_name}"
+            );
+        }
+    }
 }
