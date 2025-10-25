@@ -38,20 +38,29 @@
 //! # Example Usage
 //!
 //! ```no_run
-//! use easyhdr::monitor::{ProcessMonitor, ProcessEvent};
+//! use easyhdr::monitor::{ProcessMonitor, ProcessEvent, AppIdentifier};
+//! use easyhdr::config::{MonitoredApp, Win32App};
 //! use std::sync::mpsc;
 //! use std::time::Duration;
+//! use std::path::PathBuf;
+//! use uuid::Uuid;
 //!
 //! // Create event channel
 //! let (tx, rx) = mpsc::sync_channel(32);
 //!
 //! // Create process monitor with 1-second polling interval
-//! let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+//! let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 //!
-//! // Set up watch list (process names to monitor)
+//! // Set up watch list with monitored applications
 //! let watch_list = vec![
-//!     "cyberpunk2077".to_string(),
-//!     "witcher3".to_string(),
+//!     MonitoredApp::Win32(Win32App {
+//!         id: Uuid::new_v4(),
+//!         display_name: "Cyberpunk 2077".to_string(),
+//!         exe_path: PathBuf::from("C:\\Games\\Cyberpunk2077.exe"),
+//!         process_name: "cyberpunk2077".to_string(),
+//!         enabled: true,
+//!         icon_data: None,
+//!     }),
 //! ];
 //! monitor.update_watch_list(watch_list);
 //!
@@ -61,11 +70,17 @@
 //! // Receive events
 //! loop {
 //!     match rx.recv() {
-//!         Ok(ProcessEvent::Started(name)) => {
-//!             println!("Process started: {}", name);
+//!         Ok(ProcessEvent::Started(app_id)) => {
+//!             match app_id {
+//!                 AppIdentifier::Win32(name) => println!("Win32 app started: {}", name),
+//!                 AppIdentifier::Uwp(family_name) => println!("UWP app started: {}", family_name),
+//!             }
 //!         }
-//!         Ok(ProcessEvent::Stopped(name)) => {
-//!             println!("Process stopped: {}", name);
+//!         Ok(ProcessEvent::Stopped(app_id)) => {
+//!             match app_id {
+//!                 AppIdentifier::Win32(name) => println!("Win32 app stopped: {}", name),
+//!                 AppIdentifier::Uwp(family_name) => println!("UWP app stopped: {}", family_name),
+//!             }
 //!         }
 //!         Err(_) => break,
 //!     }
@@ -76,8 +91,6 @@
 //!
 //! - **Process name collisions**: Multiple applications with the same executable name
 //!   (e.g., "game.exe") cannot be distinguished.
-//! - **UWP applications**: Universal Windows Platform apps may not be detected reliably
-//!   as they use different process models.
 
 pub mod hdr_state_monitor;
 pub mod process_monitor;

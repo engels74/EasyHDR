@@ -235,7 +235,14 @@ impl AppController {
                 drop(config); // Release lock early
 
                 if is_monitored {
-                    info!("Monitored application started: {:?}", app_id);
+                    match &app_id {
+                        AppIdentifier::Win32(process_name) => {
+                            info!("Monitored Win32 application started: {}", process_name);
+                        }
+                        AppIdentifier::Uwp(package_family_name) => {
+                            info!("Monitored UWP application started: {}", package_family_name);
+                        }
+                    }
 
                     // Increment active process count
                     let prev_count = self.active_process_count.fetch_add(1, Ordering::SeqCst);
@@ -274,7 +281,14 @@ impl AppController {
                 drop(config); // Release lock early
 
                 if is_monitored {
-                    info!("Monitored application stopped: {:?}", app_id);
+                    match &app_id {
+                        AppIdentifier::Win32(process_name) => {
+                            info!("Monitored Win32 application stopped: {}", process_name);
+                        }
+                        AppIdentifier::Uwp(package_family_name) => {
+                            info!("Monitored UWP application stopped: {}", package_family_name);
+                        }
+                    }
 
                     // Decrement active process count using checked atomic pattern to prevent underflow
                     // Uses fetch_update with saturating_sub to ensure count never wraps to usize::MAX
@@ -1523,5 +1537,377 @@ mod tests {
         )));
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+    }
+
+    // ========================================================================================
+    // UWP Application Tests
+    // ========================================================================================
+
+    /// Helper function to create a test UwpApp
+    fn create_test_uwp_app(
+        package_family_name: &str,
+        display_name: &str,
+        app_id: &str,
+    ) -> MonitoredApp {
+        use crate::config::models::UwpApp;
+        MonitoredApp::Uwp(UwpApp {
+            id: Uuid::new_v4(),
+            display_name: display_name.to_string(),
+            package_family_name: package_family_name.to_string(),
+            app_id: app_id.to_string(),
+            enabled: true,
+            icon_data: None,
+        })
+    }
+
+    /// Test that AppController correctly handles UWP application started event.
+    /// Verifies requirement 3.1: UWP app starts and HDR enables.
+    #[test]
+    fn test_handle_uwp_app_started() {
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(create_test_uwp_app(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            "Calculator",
+            "App",
+        ));
+
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, state_rx) = mpsc::sync_channel(32);
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
+
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
+
+        // Initial count should be 0
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+
+        // Handle a started event for the UWP app
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+
+        // Count should be incremented to 1
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+
+        // HDR should be enabled
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        // Should have sent a state update
+        let state = state_rx.try_recv().unwrap();
+        assert!(state.hdr_enabled);
+    }
+
+    /// Test that AppController correctly handles UWP application stopped event.
+    /// Verifies requirement 3.2: Last UWP app stops and HDR disables after debounce.
+    #[test]
+    fn test_handle_uwp_app_stopped() {
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(create_test_uwp_app(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            "Calculator",
+            "App",
+        ));
+
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, state_rx) = mpsc::sync_channel(32);
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
+
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
+
+        // Start the UWP app first
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        // Clear the state update from start
+        let _ = state_rx.try_recv();
+
+        // Wait for debounce period to pass
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop the UWP app
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+
+        // Count should be decremented to 0
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+
+        // HDR should be disabled
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
+
+        // Should have sent a state update
+        let state = state_rx.try_recv().unwrap();
+        assert!(!state.hdr_enabled);
+    }
+
+    /// Test that AppController handles both Win32 and UWP apps running simultaneously.
+    /// Verifies requirement 3.3: Both Win32 and UWP monitored apps running maintains HDR enabled.
+    #[test]
+    fn test_handle_mixed_win32_and_uwp_apps_simultaneously() {
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "Notepad".to_string(),
+            exe_path: PathBuf::from("C:\\Windows\\notepad.exe"),
+            process_name: "notepad".to_string(),
+            enabled: true,
+            icon_data: None,
+        }));
+        config.monitored_apps.push(create_test_uwp_app(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            "Calculator",
+            "App",
+        ));
+
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
+
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
+
+        // Start Win32 app
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "notepad".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        // Start UWP app while Win32 app is running
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 2);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        // Wait for debounce period
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop Win32 app - HDR should remain on because UWP app is still running
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "notepad".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert!(
+            controller.current_hdr_state.load(Ordering::SeqCst),
+            "HDR should remain enabled when UWP app is still running"
+        );
+
+        // Wait for debounce period
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop UWP app - HDR should turn off
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
+    }
+
+    /// Test that the last monitored application stops regardless of type.
+    /// Verifies requirement 3.4: Last app stops (regardless of Win32/UWP) disables HDR after debounce.
+    #[test]
+    fn test_last_app_stops_regardless_of_type() {
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "Notepad".to_string(),
+            exe_path: PathBuf::from("C:\\Windows\\notepad.exe"),
+            process_name: "notepad".to_string(),
+            enabled: true,
+            icon_data: None,
+        }));
+        config.monitored_apps.push(create_test_uwp_app(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            "Calculator",
+            "App",
+        ));
+
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
+
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
+
+        // Scenario 1: Start UWP app, then Win32 app, then stop UWP app (Win32 is last)
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "notepad".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 2);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop UWP app - HDR should remain on
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop Win32 app (last app) - HDR should turn off
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "notepad".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
+
+        // Wait to reset state
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Scenario 2: Start Win32 app, then UWP app, then stop Win32 app (UWP is last)
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "notepad".to_string(),
+        )));
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 2);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop Win32 app - HDR should remain on
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "notepad".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Stop UWP app (last app) - HDR should turn off
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
+    }
+
+    /// Test that counter-based logic works identically for Win32 and UWP apps.
+    /// Verifies requirement 3.5: AppController uses same counter-based logic for both app types.
+    #[test]
+    fn test_counter_based_logic_works_for_both_app_types() {
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "App 1".to_string(),
+            exe_path: PathBuf::from("C:\\test\\app1.exe"),
+            process_name: "app1".to_string(),
+            enabled: true,
+            icon_data: None,
+        }));
+        config.monitored_apps.push(create_test_uwp_app(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            "Calculator",
+            "App",
+        ));
+
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
+
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
+
+        // Test that both app types increment the counter
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Win32(
+            "app1".to_string(),
+        )));
+        assert_eq!(
+            controller.active_process_count.load(Ordering::SeqCst),
+            1,
+            "Win32 app should increment counter"
+        );
+
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(
+            controller.active_process_count.load(Ordering::SeqCst),
+            2,
+            "UWP app should increment counter"
+        );
+
+        // Verify HDR is on with both apps running
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        // Test that both app types decrement the counter
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Win32(
+            "app1".to_string(),
+        )));
+        assert_eq!(
+            controller.active_process_count.load(Ordering::SeqCst),
+            1,
+            "Win32 app should decrement counter"
+        );
+
+        // HDR should still be on
+        assert!(controller.current_hdr_state.load(Ordering::SeqCst));
+
+        std::thread::sleep(std::time::Duration::from_millis(600));
+
+        controller.handle_process_event(ProcessEvent::Stopped(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+        assert_eq!(
+            controller.active_process_count.load(Ordering::SeqCst),
+            0,
+            "UWP app should decrement counter"
+        );
+
+        // HDR should be off now
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
+    }
+
+    /// Test that disabled UWP apps are ignored by the AppController.
+    #[test]
+    fn test_disabled_uwp_app_ignored() {
+        let mut config = AppConfig::default();
+        let mut uwp_app = create_test_uwp_app(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+            "Calculator",
+            "App",
+        );
+        // Disable the app
+        if let MonitoredApp::Uwp(ref mut app) = uwp_app {
+            app.enabled = false;
+        }
+        config.monitored_apps.push(uwp_app);
+
+        let (_event_tx, event_rx) = mpsc::sync_channel(32);
+        let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+        let (state_tx, _state_rx) = mpsc::sync_channel(32);
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
+
+        let mut controller =
+            AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
+
+        // Handle a started event for the disabled UWP app
+        controller.handle_process_event(ProcessEvent::Started(AppIdentifier::Uwp(
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+        )));
+
+        // Count should remain 0 (disabled apps are ignored)
+        assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 0);
+        // HDR should remain off
+        assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
 }
