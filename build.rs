@@ -55,8 +55,8 @@ fn main() {
         );
         // FileDescription: Brief name shown in Windows Task Manager
         res.set("FileDescription", "EasyHDR");
-        res.set("CompanyName", "EasyHDR Contributors");
-        res.set("LegalCopyright", "Copyright © 2024 EasyHDR Contributors");
+        res.set("CompanyName", "engels74");
+        res.set("LegalCopyright", "Copyright © 2025 engels74");
         res.set("OriginalFilename", "easyhdr.exe");
         res.set("FileVersion", env!("CARGO_PKG_VERSION"));
         res.set("ProductVersion", env!("CARGO_PKG_VERSION"));
