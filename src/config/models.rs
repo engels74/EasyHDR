@@ -1295,3 +1295,201 @@ mod tests {
         assert!(matches!(config.monitored_apps[1], MonitoredApp::Uwp(_)));
     }
 }
+
+// Property-based tests using proptest
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    // Strategy for generating valid Win32App instances
+    fn win32_app_strategy() -> impl Strategy<Value = Win32App> {
+        (
+            any::<[u8; 16]>(), // UUID bytes
+            "[a-zA-Z0-9 ]{1,50}", // display_name
+            "[a-zA-Z0-9_\\-]{1,20}", // filename
+            any::<bool>(), // enabled
+        )
+            .prop_map(|(uuid_bytes, display_name, filename, enabled)| {
+                let id = Uuid::from_bytes(uuid_bytes);
+                let process_name = filename.to_lowercase();
+                let exe_path = PathBuf::from(format!("C:\\Program Files\\{}\\{}.exe", display_name, filename));
+
+                Win32App {
+                    id,
+                    display_name,
+                    exe_path,
+                    process_name,
+                    enabled,
+                    icon_data: None,
+                }
+            })
+    }
+
+    // Strategy for generating valid UwpApp instances
+    fn uwp_app_strategy() -> impl Strategy<Value = UwpApp> {
+        (
+            any::<[u8; 16]>(), // UUID bytes
+            "[a-zA-Z0-9 ]{1,50}", // display_name
+            "[A-Za-z0-9\\.]{1,30}", // package name
+            "[a-hj-km-np-tv-z0-9A-HJ-KM-NP-TV-Z]{13}", // publisher ID (13 chars, Base-32 Crockford variant)
+            "[A-Za-z]{1,10}", // app_id
+            any::<bool>(), // enabled
+        )
+            .prop_map(|(uuid_bytes, display_name, package_name, publisher_id, app_id, enabled)| {
+                let id = Uuid::from_bytes(uuid_bytes);
+                let package_family_name = format!("{}_{}", package_name, publisher_id);
+
+                UwpApp {
+                    id,
+                    display_name,
+                    package_family_name,
+                    app_id,
+                    enabled,
+                    icon_data: None,
+                }
+            })
+    }
+
+    proptest! {
+        /// Property test: Win32App serialization is reversible
+        ///
+        /// This test verifies that any Win32App instance can be serialized to JSON
+        /// and then deserialized back to an equivalent instance, preserving all
+        /// non-skipped fields (icon_data is intentionally skipped).
+        #[test]
+        fn prop_win32_app_serialization_roundtrip(app in win32_app_strategy()) {
+            // Serialize to JSON
+            let json = serde_json::to_string(&app)
+                .expect("Win32App serialization should succeed");
+
+            // Deserialize back
+            let deserialized: Win32App = serde_json::from_str(&json)
+                .expect("Win32App deserialization should succeed");
+
+            // Verify all fields except icon_data (which is skipped)
+            prop_assert_eq!(app.id, deserialized.id);
+            prop_assert_eq!(app.display_name, deserialized.display_name);
+            prop_assert_eq!(app.exe_path, deserialized.exe_path);
+            prop_assert_eq!(app.process_name, deserialized.process_name);
+            prop_assert_eq!(app.enabled, deserialized.enabled);
+
+            // icon_data should always be None after deserialization
+            prop_assert!(deserialized.icon_data.is_none());
+        }
+
+        /// Property test: UwpApp serialization is reversible
+        ///
+        /// This test verifies that any UwpApp instance can be serialized to JSON
+        /// and then deserialized back to an equivalent instance, preserving all
+        /// non-skipped fields (icon_data is intentionally skipped).
+        #[test]
+        fn prop_uwp_app_serialization_roundtrip(app in uwp_app_strategy()) {
+            // Serialize to JSON
+            let json = serde_json::to_string(&app)
+                .expect("UwpApp serialization should succeed");
+
+            // Deserialize back
+            let deserialized: UwpApp = serde_json::from_str(&json)
+                .expect("UwpApp deserialization should succeed");
+
+            // Verify all fields except icon_data (which is skipped)
+            prop_assert_eq!(app.id, deserialized.id);
+            prop_assert_eq!(app.display_name, deserialized.display_name);
+            prop_assert_eq!(app.package_family_name, deserialized.package_family_name);
+            prop_assert_eq!(app.app_id, deserialized.app_id);
+            prop_assert_eq!(app.enabled, deserialized.enabled);
+
+            // icon_data should always be None after deserialization
+            prop_assert!(deserialized.icon_data.is_none());
+        }
+
+        /// Property test: Package family name format validation
+        ///
+        /// This test verifies that package family names follow the expected format:
+        /// - Contains exactly one underscore separator
+        /// - Name part (before underscore) is non-empty
+        /// - Publisher ID part (after underscore) is non-empty
+        /// - Publisher ID consists of 13 Base-32 Crockford variant characters
+        ///   (alphanumeric except no I, L, O, or U; case-insensitive)
+        #[test]
+        fn prop_package_family_name_format(app in uwp_app_strategy()) {
+            let package_family_name = &app.package_family_name;
+
+            // Should contain exactly one underscore
+            let parts: Vec<&str> = package_family_name.split('_').collect();
+            prop_assert_eq!(parts.len(), 2,
+                "Package family name should have exactly one underscore: {}",
+                package_family_name);
+
+            // Name part should be non-empty
+            prop_assert!(!parts[0].is_empty(),
+                "Package name part should not be empty: {}",
+                package_family_name);
+
+            // Publisher ID part should be non-empty
+            prop_assert!(!parts[1].is_empty(),
+                "Publisher ID part should not be empty: {}",
+                package_family_name);
+
+            // Publisher ID should be 13 characters of Base-32 Crockford variant
+            // Allowed: a-h, j-k, m-n, p-t, v-z, 0-9 (case-insensitive)
+            // Excluded: i, l, o, u (to avoid confusion with 1, l, 0, v)
+            let publisher_id = parts[1];
+            prop_assert_eq!(publisher_id.len(), 13,
+                "Publisher ID should be 13 characters: {}",
+                publisher_id);
+
+            // Verify all characters are valid Base-32 Crockford variant
+            let is_valid_char = |c: char| {
+                let c_lower = c.to_ascii_lowercase();
+                matches!(c_lower, 'a'..='h' | 'j'..='k' | 'm'..='n' | 'p'..='t' | 'v'..='z' | '0'..='9')
+            };
+
+            prop_assert!(publisher_id.chars().all(is_valid_char),
+                "Publisher ID should contain only Base-32 Crockford variant characters (a-h, j-k, m-n, p-t, v-z, 0-9, case-insensitive): {}",
+                publisher_id);
+        }
+
+        /// Property test: MonitoredApp enum serialization preserves variant type
+        ///
+        /// This test verifies that when a MonitoredApp is serialized and deserialized,
+        /// the variant type (Win32 or Uwp) is preserved correctly.
+        #[test]
+        fn prop_monitored_app_variant_preservation(
+            is_win32 in any::<bool>(),
+            win32_app in win32_app_strategy(),
+            uwp_app in uwp_app_strategy()
+        ) {
+            let app = if is_win32 {
+                MonitoredApp::Win32(win32_app)
+            } else {
+                MonitoredApp::Uwp(uwp_app)
+            };
+
+            // Serialize to JSON
+            let json = serde_json::to_string(&app)
+                .expect("MonitoredApp serialization should succeed");
+
+            // Verify app_type field is present
+            if is_win32 {
+                prop_assert!(json.contains("\"app_type\":\"win32\""),
+                    "Win32 variant should have app_type field");
+            } else {
+                prop_assert!(json.contains("\"app_type\":\"uwp\""),
+                    "Uwp variant should have app_type field");
+            }
+
+            // Deserialize back
+            let deserialized: MonitoredApp = serde_json::from_str(&json)
+                .expect("MonitoredApp deserialization should succeed");
+
+            // Verify variant type is preserved
+            match (app, deserialized) {
+                (MonitoredApp::Win32(_), MonitoredApp::Win32(_)) => {},
+                (MonitoredApp::Uwp(_), MonitoredApp::Uwp(_)) => {},
+                _ => prop_assert!(false, "Variant type should be preserved"),
+            }
+        }
+    }
+}

@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e6bc6241e328fef981042c64e5be240bd71af30ced478351f977ef4645ae2174 # shrinks to app = UwpApp { id: 00000000-0000-0000-0000-000000000000, display_name: "a", package_family_name: "A_aa0a00aa0a0aa", app_id: "a", enabled: false, icon_data: None }

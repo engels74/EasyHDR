@@ -23,16 +23,16 @@
 //! # Example Usage
 //!
 //! ```no_run
-//! use easyhdr::config::{ConfigManager, MonitoredApp};
+//! use easyhdr::config::{ConfigManager, MonitoredApp, Win32App};
 //! use std::path::PathBuf;
 //!
 //! // Load configuration (creates default if missing)
 //! let mut config = ConfigManager::load()?;
 //!
-//! // Add a monitored application
+//! // Add a monitored Win32 application
 //! let game_path = PathBuf::from(r"C:\Games\Cyberpunk2077\bin\x64\Cyberpunk2077.exe");
-//! let app = MonitoredApp::from_exe_path(game_path)?;
-//! config.monitored_apps.push(app);
+//! let win32_app = Win32App::from_exe_path(game_path)?;
+//! config.monitored_apps.push(MonitoredApp::Win32(win32_app));
 //!
 //! // Update preferences
 //! config.preferences.auto_start = true;
@@ -80,4 +80,4 @@ pub mod manager;
 pub mod models;
 
 pub use manager::ConfigManager;
-pub use models::{AppConfig, MonitoredApp, UserPreferences, WindowState};
+pub use models::{AppConfig, MonitoredApp, UserPreferences, UwpApp, Win32App, WindowState};
