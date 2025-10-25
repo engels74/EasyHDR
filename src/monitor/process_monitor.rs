@@ -19,6 +19,9 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 #[cfg(windows)]
 use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES};
 
+#[cfg(windows)]
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+
 use crate::error::{EasyHdrError, Result};
 
 /// Identifier for a monitored application
@@ -175,16 +178,63 @@ impl ProcessMonitor {
 
             // Iterate through all processes
             while has_process {
-                // Extract the process name from szExeFile
-                // szExeFile is a null-terminated wide string
-                let process_name = extract_process_name(&entry.szExeFile);
+                let pid = entry.th32ProcessID;
 
-                if let Some(name) = process_name {
-                    // Extract filename without extension and convert to lowercase
-                    let name_lower = extract_filename_without_extension(&name);
-                    debug!("Found process: {}", name_lower);
-                    // For now, all processes are Win32 (UWP detection will be added in future task)
-                    current_processes.insert(AppIdentifier::Win32(name_lower));
+                // Try to open process handle for UWP detection
+                // Use PROCESS_QUERY_LIMITED_INFORMATION for minimal access rights
+                let handle_result = unsafe {
+                    OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+                };
+
+                match handle_result {
+                    Ok(handle) => {
+                        // Ensure handle is closed when we're done
+                        let _guard = ProcessHandleGuard(handle);
+
+                        // Try UWP detection first
+                        match unsafe { crate::uwp::detect_uwp_process(handle) } {
+                            Ok(Some(family_name)) => {
+                                // UWP app detected
+                                debug!("Found UWP process (PID {}): {}", pid, family_name);
+                                current_processes.insert(AppIdentifier::Uwp(family_name));
+                            }
+                            Ok(None) => {
+                                // Win32 app - extract process name from szExeFile
+                                let process_name = extract_process_name(&entry.szExeFile);
+                                if let Some(name) = process_name {
+                                    let name_lower = extract_filename_without_extension(&name);
+                                    debug!("Found Win32 process (PID {}): {}", pid, name_lower);
+                                    current_processes.insert(AppIdentifier::Win32(name_lower));
+                                }
+                            }
+                            Err(e) => {
+                                // UWP detection failed - log error but continue
+                                // This is non-fatal; we'll treat it as Win32 fallback
+                                warn!("UWP detection failed for PID {}: {}", pid, e);
+
+                                // Fallback to Win32 detection
+                                let process_name = extract_process_name(&entry.szExeFile);
+                                if let Some(name) = process_name {
+                                    let name_lower = extract_filename_without_extension(&name);
+                                    debug!("Fallback to Win32 for PID {}: {}", pid, name_lower);
+                                    current_processes.insert(AppIdentifier::Win32(name_lower));
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // Failed to open process handle - this is common for system processes
+                        // or processes with higher privileges. Log at debug level and continue.
+                        debug!("Failed to open process handle for PID {}: {}", pid, e);
+
+                        // Fallback to Win32 detection using process name
+                        let process_name = extract_process_name(&entry.szExeFile);
+                        if let Some(name) = process_name {
+                            let name_lower = extract_filename_without_extension(&name);
+                            debug!("Fallback to Win32 for PID {} (no handle): {}", pid, name_lower);
+                            current_processes.insert(AppIdentifier::Win32(name_lower));
+                        }
+                    }
                 }
 
                 // Get the next process
@@ -308,6 +358,32 @@ impl Drop for SnapshotGuard {
     #[expect(
         unsafe_code,
         reason = "Windows FFI for CloseHandle to release snapshot handle"
+    )]
+    fn drop(&mut self) {
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
+}
+
+/// RAII guard for Windows process handle
+///
+/// Ensures the process handle is properly closed when the guard goes out of scope.
+#[cfg(windows)]
+struct ProcessHandleGuard(windows::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+impl Drop for ProcessHandleGuard {
+    /// Closes the process handle
+    ///
+    /// # Safety
+    ///
+    /// Handle from `OpenProcess` (valid or error; only valid stored). Guard owns handle
+    /// (closed once, not cloned/shared). `CloseHandle` safe on valid process handles;
+    /// result ignored (no destructor recovery).
+    #[expect(
+        unsafe_code,
+        reason = "Windows FFI for CloseHandle to release process handle"
     )]
     fn drop(&mut self) {
         unsafe {
