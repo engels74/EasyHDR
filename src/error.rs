@@ -59,6 +59,32 @@ pub enum EasyHdrError {
     /// JSON serialization/deserialization error
     #[error("JSON error: {0}")]
     JsonError(#[from] serde_json::Error),
+
+    /// UWP package not found
+    #[error("UWP package not found: {0}")]
+    UwpPackageNotFound(String),
+
+    /// Failed to enumerate UWP packages
+    /// Preserves the underlying error source for full error chain transparency
+    #[error("Failed to enumerate UWP packages: {0}")]
+    UwpEnumerationError(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    /// Invalid package family name
+    #[error("Invalid package family name: {0}")]
+    InvalidPackageFamilyName(String),
+
+    /// Failed to extract package family name from full name
+    #[error("Failed to extract package family name from full name: {0}")]
+    PackageFamilyNameExtractionError(String),
+
+    /// UWP process detection failed
+    /// Preserves the underlying error source for full error chain transparency
+    #[error("UWP process detection failed: {0}")]
+    UwpProcessDetectionError(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    /// UWP icon extraction failed
+    #[error("UWP icon extraction failed: {0}")]
+    UwpIconExtractionError(String),
 }
 
 /// Result type alias for `EasyHDR` operations
@@ -115,6 +141,50 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
                  The application will use default settings."
             )
         }
+        EasyHdrError::UwpPackageNotFound(package) => {
+            format!(
+                "UWP package not found: {package}\n\n\
+                 The application may have been uninstalled.\n\
+                 Please remove it from your monitored apps list."
+            )
+        }
+        EasyHdrError::UwpEnumerationError(_) => {
+            "Failed to enumerate UWP applications.\n\n\
+             Please ensure:\n\
+             - You have permission to access installed applications\n\
+             - Windows Store services are running\n\
+             - Your Windows installation is not corrupted"
+                .to_string()
+        }
+        EasyHdrError::InvalidPackageFamilyName(name) => {
+            format!(
+                "Invalid package family name: {name}\n\n\
+                 The package name format is incorrect.\n\
+                 This may indicate a corrupted configuration file."
+            )
+        }
+        EasyHdrError::PackageFamilyNameExtractionError(full_name) => {
+            format!(
+                "Failed to extract package family name from: {full_name}\n\n\
+                 The package name format is not recognized.\n\
+                 This may indicate an incompatible UWP application."
+            )
+        }
+        EasyHdrError::UwpProcessDetectionError(_) => {
+            "Failed to detect UWP process.\n\n\
+             Process monitoring may not work correctly for UWP applications.\n\
+             Please ensure:\n\
+             - You have permission to query process information\n\
+             - Windows security settings allow process enumeration"
+                .to_string()
+        }
+        EasyHdrError::UwpIconExtractionError(path) => {
+            format!(
+                "Failed to extract UWP icon from: {path}\n\n\
+                 The application will use a placeholder icon.\n\
+                 This does not affect functionality."
+            )
+        }
     }
 }
 
@@ -140,5 +210,115 @@ mod tests {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let error: EasyHdrError = io_error.into();
         assert!(matches!(error, EasyHdrError::IoError(_)));
+    }
+
+    #[test]
+    fn test_uwp_package_not_found_display() {
+        let error = EasyHdrError::UwpPackageNotFound("TestPackage_8wekyb3d8bbwe".to_string());
+        assert_eq!(
+            error.to_string(),
+            "UWP package not found: TestPackage_8wekyb3d8bbwe"
+        );
+    }
+
+    #[test]
+    fn test_uwp_package_not_found_user_friendly() {
+        let error = EasyHdrError::UwpPackageNotFound("TestPackage_8wekyb3d8bbwe".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("UWP package not found"));
+        assert!(message.contains("TestPackage_8wekyb3d8bbwe"));
+        assert!(message.contains("uninstalled"));
+    }
+
+    #[test]
+    fn test_uwp_enumeration_error_display() {
+        let error = EasyHdrError::UwpEnumerationError(StringError::new("test error"));
+        assert_eq!(
+            error.to_string(),
+            "Failed to enumerate UWP packages: test error"
+        );
+    }
+
+    #[test]
+    fn test_uwp_enumeration_error_user_friendly() {
+        let error = EasyHdrError::UwpEnumerationError(StringError::new("test error"));
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Failed to enumerate UWP applications"));
+        assert!(message.contains("permission"));
+    }
+
+    #[test]
+    fn test_invalid_package_family_name_display() {
+        let error = EasyHdrError::InvalidPackageFamilyName("Invalid_Name".to_string());
+        assert_eq!(
+            error.to_string(),
+            "Invalid package family name: Invalid_Name"
+        );
+    }
+
+    #[test]
+    fn test_invalid_package_family_name_user_friendly() {
+        let error = EasyHdrError::InvalidPackageFamilyName("Invalid_Name".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Invalid package family name"));
+        assert!(message.contains("Invalid_Name"));
+        assert!(message.contains("format is incorrect"));
+    }
+
+    #[test]
+    fn test_package_family_name_extraction_error_display() {
+        let error = EasyHdrError::PackageFamilyNameExtractionError(
+            "BadFormat_1.0.0.0_x64".to_string(),
+        );
+        assert_eq!(
+            error.to_string(),
+            "Failed to extract package family name from full name: BadFormat_1.0.0.0_x64"
+        );
+    }
+
+    #[test]
+    fn test_package_family_name_extraction_error_user_friendly() {
+        let error = EasyHdrError::PackageFamilyNameExtractionError(
+            "BadFormat_1.0.0.0_x64".to_string(),
+        );
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Failed to extract package family name"));
+        assert!(message.contains("BadFormat_1.0.0.0_x64"));
+        assert!(message.contains("not recognized"));
+    }
+
+    #[test]
+    fn test_uwp_process_detection_error_display() {
+        let error = EasyHdrError::UwpProcessDetectionError(StringError::new("access denied"));
+        assert_eq!(
+            error.to_string(),
+            "UWP process detection failed: access denied"
+        );
+    }
+
+    #[test]
+    fn test_uwp_process_detection_error_user_friendly() {
+        let error = EasyHdrError::UwpProcessDetectionError(StringError::new("access denied"));
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Failed to detect UWP process"));
+        assert!(message.contains("permission"));
+    }
+
+    #[test]
+    fn test_uwp_icon_extraction_error_display() {
+        let error = EasyHdrError::UwpIconExtractionError("C:\\path\\to\\icon.png".to_string());
+        assert_eq!(
+            error.to_string(),
+            "UWP icon extraction failed: C:\\path\\to\\icon.png"
+        );
+    }
+
+    #[test]
+    fn test_uwp_icon_extraction_error_user_friendly() {
+        let error = EasyHdrError::UwpIconExtractionError("C:\\path\\to\\icon.png".to_string());
+        let message = get_user_friendly_error(&error);
+        assert!(message.contains("Failed to extract UWP icon"));
+        assert!(message.contains("C:\\path\\to\\icon.png"));
+        assert!(message.contains("placeholder icon"));
     }
 }
