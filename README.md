@@ -16,24 +16,16 @@ A lightweight Windows utility that automatically enables HDR when you launch con
 ## Preview
 
 <p align="center">
-  <a href="assets/readme/gif/01-launch-app.gif">
-    <img src="assets/readme/gif/01-launch-app.gif" alt="Application Launch" width="280"/>
+  <a href="assets/readme/png/05-application-added.png">
+    <img src="assets/readme/png/05-application-added.png" alt="Application Added" width="400"/>
   </a>
-  <a href="assets/readme/gif/02-add-application.gif">
-    <img src="assets/readme/gif/02-add-application.gif" alt="Adding Applications" width="280"/>
-  </a>
-  <a href="assets/readme/gif/03-settings-window.gif">
-    <img src="assets/readme/gif/03-settings-window.gif" alt="Settings Window" width="280"/>
+  <a href="assets/readme/png/06-settings-window.png">
+    <img src="assets/readme/png/06-settings-window.png" alt="Settings Window" width="400"/>
   </a>
 </p>
 
 <p align="center">
   <em>Click any preview to view full size</em>
-</p>
-
-<p align="center">
-  <sub><strong>Launch:</strong> SmartScreen warning appears (unsigned application; VirusTotal scans available for every release)</sub><br>
-  <sub><strong>Add Application:</strong> Adding applications to monitor | <strong>Settings:</strong> Configuring preferences</sub>
 </p>
 
 ## How It Works
@@ -53,10 +45,34 @@ The application uses Windows Display Configuration APIs to control HDR state, wi
 1. Download the latest release from the [Releases](https://github.com/engels74/EasyHDR/releases) page
 2. Extract `easyhdr.exe` to a folder of your choice
 3. Run `easyhdr.exe`
-4. Click "Add Application" and select the `.exe` files you want to monitor
-5. Minimize to system tray
+4. On first launch, Windows Defender SmartScreen will appear—click "More info" then "Run anyway"
+5. Click "Add Application" and select the `.exe` files you want to monitor
+6. Minimize to system tray
 
 Configuration is stored at `%APPDATA%\EasyHDR\config.json` and saved automatically.
+
+## First Time Setup
+
+<p align="center">
+  <a href="assets/readme/gif/01-launch-app.gif">
+    <img src="assets/readme/gif/01-launch-app.gif" alt="Launch and SmartScreen" width="280"/>
+  </a>
+  <a href="assets/readme/gif/02-add-application.gif">
+    <img src="assets/readme/gif/02-add-application.gif" alt="Adding Applications" width="280"/>
+  </a>
+  <a href="assets/readme/gif/03-settings-window.gif">
+    <img src="assets/readme/gif/03-settings-window.gif" alt="Settings Window" width="280"/>
+  </a>
+</p>
+
+<p align="center">
+  <em>Click any preview to view full size</em>
+</p>
+
+<p align="center">
+  <sub><strong>Launch:</strong> Bypassing SmartScreen warning (unsigned app; VirusTotal scans available for verification)</sub><br>
+  <sub><strong>Add Application:</strong> Adding applications to monitor | <strong>Settings:</strong> Configuring preferences</sub>
+</p>
 
 ## Dependencies
 
