@@ -16,31 +16,24 @@ A lightweight Windows utility that automatically enables HDR when you launch con
 ## Preview
 
 <p align="center">
-  <img src="assets/readme/gif/01-launch-app.gif" alt="Application Launch"/>
+  <a href="assets/readme/gif/01-launch-app.gif">
+    <img src="assets/readme/gif/01-launch-app.gif" alt="Application Launch" width="280"/>
+  </a>
+  <a href="assets/readme/gif/02-add-application.gif">
+    <img src="assets/readme/gif/02-add-application.gif" alt="Adding Applications" width="280"/>
+  </a>
+  <a href="assets/readme/gif/03-settings-window.gif">
+    <img src="assets/readme/gif/03-settings-window.gif" alt="Settings Window" width="280"/>
+  </a>
 </p>
 
 <p align="center">
-  <em>Initial launch with SmartScreen warning (appears because the application is unsigned; VirusTotal scans are available for every release for verification).</em>
-</p>
-
-<br>
-
-<p align="center">
-  <img src="assets/readme/gif/02-add-application.gif" alt="Adding Applications"/>
+  <em>Click any preview to view full size</em>
 </p>
 
 <p align="center">
-  <em>Adding applications to the monitoring list.</em>
-</p>
-
-<br>
-
-<p align="center">
-  <img src="assets/readme/gif/03-settings-window.gif" alt="Settings Window"/>
-</p>
-
-<p align="center">
-  <em>Configuring application settings and preferences.</em>
+  <sub><strong>Launch:</strong> SmartScreen warning appears (unsigned application; VirusTotal scans available for every release)</sub><br>
+  <sub><strong>Add Application:</strong> Adding applications to monitor | <strong>Settings:</strong> Configuring preferences</sub>
 </p>
 
 ## How It Works
