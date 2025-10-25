@@ -16,6 +16,8 @@ use easyhdr::error::Result;
 use easyhdr::utils::UpdateCheckResult;
 use parking_lot::Mutex;
 use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
+#[cfg(windows)]
+use slint::Model;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::TryRecvError;
@@ -176,6 +178,36 @@ impl GuiController {
         main_window.on_check_for_updates(move || {
             Self::check_for_updates(&controller_clone, &window_weak);
         });
+
+        // UWP picker callbacks
+        #[cfg(windows)]
+        {
+            let controller_clone = controller.clone();
+            let window_weak = main_window.as_weak();
+            main_window.on_uwp_picker_add_selected(move || {
+                Self::uwp_picker_add_selected(&controller_clone, &window_weak);
+            });
+
+            let window_weak = main_window.as_weak();
+            main_window.on_uwp_picker_cancel(move || {
+                Self::uwp_picker_cancel(&window_weak);
+            });
+
+            let window_weak = main_window.as_weak();
+            main_window.on_uwp_picker_toggle_selection(move |index, selected| {
+                Self::uwp_picker_toggle_selection(&window_weak, index, selected);
+            });
+
+            let window_weak = main_window.as_weak();
+            main_window.on_uwp_picker_select_all(move || {
+                Self::uwp_picker_select_all(&window_weak);
+            });
+
+            let window_weak = main_window.as_weak();
+            main_window.on_uwp_picker_deselect_all(move || {
+                Self::uwp_picker_deselect_all(&window_weak);
+            });
+        }
 
         info!("GUI callbacks connected");
 
@@ -362,21 +394,70 @@ impl GuiController {
     /// Opens a dialog listing all installed UWP applications with their display names
     /// and publisher information. Users can select one or more UWP apps to add to the
     /// monitored app list.
-    ///
-    /// This is a stub implementation that will be completed in tasks 10.2 and 10.3.
     #[cfg(windows)]
-    fn show_uwp_picker(_controller: &Arc<Mutex<AppController>>, _window: &slint::Weak<MainWindow>) {
-        use tracing::info;
+    fn show_uwp_picker(_controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
+        use easyhdr::uwp;
+        use tracing::{info, warn};
 
-        info!("UWP picker button clicked (stub implementation)");
+        info!("UWP picker button clicked - enumerating packages");
 
-        // TODO: Task 10.2 - Implement UWP package picker dialog UI
-        // TODO: Task 10.3 - Wire UWP picker to enumerate_packages and add selected apps
-        Self::show_error_dialog(
-            "UWP application picker is not yet implemented.\n\n\
-             This feature will be available in the next update.\n\n\
-             (Tasks 10.2 and 10.3 pending)",
-        );
+        // Get window handle
+        let Some(window) = window.upgrade() else {
+            warn!("Failed to upgrade window weak reference");
+            return;
+        };
+
+        // Set loading state and clear previous data
+        window.set_uwp_picker_loading(true);
+        window.set_uwp_picker_error(slint::SharedString::from(""));
+        window.set_uwp_package_list(slint::ModelRc::new(slint::VecModel::from(Vec::new())));
+
+        // Enumerate packages (blocking operation)
+        match uwp::enumerate_packages() {
+            Ok(packages) => {
+                info!("Successfully enumerated {} UWP packages", packages.len());
+
+                // Convert to Slint model
+                let package_items: Vec<_> = packages
+                    .into_iter()
+                    .map(|pkg| {
+                        // Load icon if available
+                        let icon_data = if let Some(logo_path) = &pkg.logo_path {
+                            uwp::extract_icon(logo_path).ok()
+                        } else {
+                            None
+                        };
+
+                        // Convert icon data to Slint image
+                        let icon = if let Some(data) = icon_data {
+                            Self::convert_icon_to_slint_image(&data)
+                        } else {
+                            slint::Image::default()
+                        };
+
+                        crate::UwpPackageListItem {
+                            display_name: slint::SharedString::from(pkg.display_name),
+                            publisher: slint::SharedString::from(pkg.publisher_display_name),
+                            package_family_name: slint::SharedString::from(pkg.package_family_name),
+                            app_id: slint::SharedString::from(pkg.app_id),
+                            icon,
+                            selected: false,
+                        }
+                    })
+                    .collect();
+
+                window.set_uwp_package_list(slint::ModelRc::new(slint::VecModel::from(package_items)));
+                window.set_uwp_picker_loading(false);
+            }
+            Err(e) => {
+                warn!("Failed to enumerate UWP packages: {}", e);
+                window.set_uwp_picker_error(slint::SharedString::from(format!(
+                    "Failed to load UWP applications: {}",
+                    e
+                )));
+                window.set_uwp_picker_loading(false);
+            }
+        }
     }
 
     /// Stub implementation for non-Windows platforms
@@ -1111,6 +1192,175 @@ impl GuiController {
         Self::release_gui_resources(controller);
 
         info!("Window minimized to tray successfully");
+    }
+
+    /// Handle UWP picker "Add Selected" button click
+    ///
+    /// Adds all selected UWP packages to the monitored app list.
+    #[cfg(windows)]
+    fn uwp_picker_add_selected(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
+        use easyhdr::config::models::UwpApp;
+        use tracing::{info, warn};
+
+        info!("UWP picker: Adding selected packages");
+
+        let Some(window) = window.upgrade() else {
+            warn!("Failed to upgrade window weak reference");
+            return;
+        };
+
+        // Get selected packages
+        let package_list = window.get_uwp_package_list();
+        let selected_packages: Vec<_> = package_list
+            .iter()
+            .filter(|pkg| pkg.selected)
+            .collect();
+
+        if selected_packages.is_empty() {
+            info!("No packages selected");
+            return;
+        }
+
+        info!("Adding {} selected package(s)", selected_packages.len());
+
+        let mut success_count = 0;
+        let mut error_count = 0;
+        let mut error_messages = Vec::new();
+
+        // Add each selected package
+        for pkg in selected_packages {
+            let uwp_app = UwpApp {
+                id: uuid::Uuid::new_v4(),
+                display_name: pkg.display_name.to_string(),
+                package_family_name: pkg.package_family_name.to_string(),
+                app_id: pkg.app_id.to_string(),
+                enabled: true,
+                icon_data: None, // Will be loaded on demand
+            };
+
+            let app = MonitoredApp::Uwp(uwp_app);
+
+            // Add application to controller
+            let mut controller_guard = controller.lock();
+            match controller_guard.add_application(app) {
+                Ok(()) => {
+                    info!("Added UWP app: {}", pkg.display_name);
+                    success_count += 1;
+                }
+                Err(e) => {
+                    warn!("Failed to add UWP app {}: {}", pkg.display_name, e);
+                    error_count += 1;
+                    error_messages.push(format!("{}: {}", pkg.display_name, e));
+                }
+            }
+        }
+
+        // Show summary if there were errors
+        if error_count > 0 {
+            let summary = if success_count > 0 {
+                format!(
+                    "Added {} application(s) successfully.\n\nFailed to add {} application(s):\n{}",
+                    success_count,
+                    error_count,
+                    error_messages.join("\n")
+                )
+            } else {
+                format!(
+                    "Failed to add all {} application(s):\n{}",
+                    error_count,
+                    error_messages.join("\n")
+                )
+            };
+
+            Self::show_error_dialog(&summary);
+        } else if success_count > 0 {
+            info!("Successfully added {} UWP application(s)", success_count);
+        }
+
+        // Manually trigger GUI update
+        if success_count > 0 {
+            info!("Triggering manual GUI update after UWP picker operation");
+            Self::update_app_list_ui(controller, &window.as_weak());
+        }
+    }
+
+    /// Handle UWP picker "Cancel" button click
+    ///
+    /// Closes the picker dialog without adding any applications.
+    #[cfg(windows)]
+    fn uwp_picker_cancel(window: &slint::Weak<MainWindow>) {
+        use tracing::info;
+
+        info!("UWP picker: Cancelled");
+
+        // Clear the package list
+        if let Some(window) = window.upgrade() {
+            window.set_uwp_package_list(slint::ModelRc::new(slint::VecModel::from(Vec::new())));
+        }
+    }
+
+    /// Handle UWP picker package selection toggle
+    ///
+    /// Toggles the selection state of a package in the picker list.
+    #[cfg(windows)]
+    fn uwp_picker_toggle_selection(window: &slint::Weak<MainWindow>, index: i32, selected: bool) {
+        use tracing::debug;
+
+        debug!("UWP picker: Toggling selection for index {} to {}", index, selected);
+
+        let Some(window) = window.upgrade() else {
+            return;
+        };
+
+        let package_list = window.get_uwp_package_list();
+        if let Some(mut pkg) = package_list.row_data(index as usize) {
+            pkg.selected = selected;
+            package_list.set_row_data(index as usize, pkg);
+        }
+    }
+
+    /// Handle UWP picker "Select All" button click
+    ///
+    /// Selects all packages in the picker list.
+    #[cfg(windows)]
+    fn uwp_picker_select_all(window: &slint::Weak<MainWindow>) {
+        use tracing::info;
+
+        info!("UWP picker: Selecting all packages");
+
+        let Some(window) = window.upgrade() else {
+            return;
+        };
+
+        let package_list = window.get_uwp_package_list();
+        for i in 0..package_list.row_count() {
+            if let Some(mut pkg) = package_list.row_data(i) {
+                pkg.selected = true;
+                package_list.set_row_data(i, pkg);
+            }
+        }
+    }
+
+    /// Handle UWP picker "Deselect All" button click
+    ///
+    /// Deselects all packages in the picker list.
+    #[cfg(windows)]
+    fn uwp_picker_deselect_all(window: &slint::Weak<MainWindow>) {
+        use tracing::info;
+
+        info!("UWP picker: Deselecting all packages");
+
+        let Some(window) = window.upgrade() else {
+            return;
+        };
+
+        let package_list = window.get_uwp_package_list();
+        for i in 0..package_list.row_count() {
+            if let Some(mut pkg) = package_list.row_data(i) {
+                pkg.selected = false;
+                package_list.set_row_data(i, pkg);
+            }
+        }
     }
 
     /// Show error dialog to the user

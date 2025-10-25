@@ -69,6 +69,17 @@ export struct AppListItem {
     icon: image,
 }
 
+// UwpPackageListItem struct represents a UWP package in the picker dialog
+// Fields: display-name (app name), publisher (publisher name), icon (app icon), selected (checkbox state)
+export struct UwpPackageListItem {
+    display-name: string,
+    publisher: string,
+    package-family-name: string,
+    app-id: string,
+    icon: image,
+    selected: bool,
+}
+
 // Custom styled button component with guaranteed text contrast
 component StyledButton inherits Rectangle {
     in property <string> text;
@@ -364,6 +375,249 @@ component SettingsDialogContent inherits Rectangle {
         }
     }
 
+// UWP Package Picker Dialog Content
+// Provides UI for selecting UWP applications to add to the monitored app list
+component UwpPickerDialogContent inherits Rectangle {
+    // Properties
+    in-out property <[UwpPackageListItem]> package-list: [];
+    in-out property <bool> loading: false;
+    in-out property <string> error-message: "";
+
+    // Callbacks
+    callback add-selected-packages();
+    callback cancel-picker();
+    callback toggle-package-selection(int, bool);
+    callback select-all();
+    callback deselect-all();
+
+    // Modern card-like design with layered shadows
+    background: DesignTokens.surface-primary;
+    border-width: 1px;
+    border-color: DesignTokens.border-light;
+    border-radius: DesignTokens.radius-xl;
+    drop-shadow-blur: 20px;
+    drop-shadow-color: DesignTokens.shadow-medium;
+    drop-shadow-offset-y: 4px;
+
+    VerticalLayout {
+        padding: DesignTokens.space-2xl;
+        spacing: 0px;
+
+        // Title with modern typography
+        Text {
+            text: "Add UWP Applications";
+            font-family: DesignTokens.font-family-primary;
+            font-size: DesignTokens.font-size-3xl;
+            font-weight: 700;
+            color: DesignTokens.text-primary;
+        }
+
+        // Subtitle
+        Text {
+            text: "Select one or more UWP applications from the Microsoft Store";
+            font-family: DesignTokens.font-family-primary;
+            font-size: DesignTokens.font-size-sm;
+            color: DesignTokens.text-secondary;
+        }
+
+        // Spacing after title
+        Rectangle {
+            height: DesignTokens.space-xl;
+        }
+
+        // Loading state
+        if loading: VerticalLayout {
+            spacing: DesignTokens.space-md;
+            padding: DesignTokens.space-2xl;
+
+            Text {
+                text: "Loading UWP applications...";
+                font-family: DesignTokens.font-family-primary;
+                font-size: DesignTokens.font-size-base;
+                color: DesignTokens.text-secondary;
+                horizontal-alignment: center;
+            }
+        }
+
+        // Error state
+        if !loading && error-message != "": VerticalLayout {
+            spacing: DesignTokens.space-md;
+            padding: DesignTokens.space-2xl;
+
+            Text {
+                text: "⚠️ Error Loading Applications";
+                font-family: DesignTokens.font-family-primary;
+                font-size: DesignTokens.font-size-lg;
+                font-weight: 600;
+                color: DesignTokens.status-error;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: error-message;
+                font-family: DesignTokens.font-family-primary;
+                font-size: DesignTokens.font-size-sm;
+                color: DesignTokens.text-secondary;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+
+        // Package list (when loaded successfully)
+        if !loading && error-message == "": VerticalLayout {
+            spacing: DesignTokens.space-md;
+            vertical-stretch: 1;
+
+            // Selection controls
+            HorizontalLayout {
+                spacing: DesignTokens.space-md;
+
+                Text {
+                    text: package-list.length + " application(s) found";
+                    font-family: DesignTokens.font-family-primary;
+                    font-size: DesignTokens.font-size-sm;
+                    color: DesignTokens.text-secondary;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                StyledButton {
+                    text: "Select All";
+                    clicked => {
+                        select-all();
+                    }
+                }
+
+                StyledButton {
+                    text: "Deselect All";
+                    clicked => {
+                        deselect-all();
+                    }
+                }
+            }
+
+            // Scrollable package list
+            Rectangle {
+                border-width: 1px;
+                border-color: DesignTokens.border-light;
+                border-radius: DesignTokens.radius-md;
+                background: DesignTokens.surface-secondary;
+                vertical-stretch: 1;
+
+                ScrollView {
+                    ListView {
+                        for item[index] in package-list: Rectangle {
+                            // Modern list item with hover state
+                            border-radius: DesignTokens.radius-sm;
+                            background: touch-area.has-hover ? DesignTokens.surface-tertiary : Colors.transparent;
+
+                            // Smooth transitions
+                            animate background {
+                                duration: 200ms;
+                                easing: ease-in-out;
+                            }
+
+                            // Touch area for row interactions
+                            touch-area := TouchArea {
+                                clicked => {
+                                    toggle-package-selection(index, !item.selected);
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: DesignTokens.space-md;
+                                padding: DesignTokens.space-md;
+
+                                // Selection checkbox
+                                CheckBox {
+                                    checked: item.selected;
+                                    toggled => {
+                                        toggle-package-selection(index, self.checked);
+                                    }
+                                }
+
+                                // Application icon
+                                Rectangle {
+                                    width: 32px;
+                                    height: 32px;
+                                    border-radius: DesignTokens.radius-sm;
+                                    background: DesignTokens.surface-primary;
+
+                                    Image {
+                                        source: item.icon;
+                                        width: 28px;
+                                        height: 28px;
+                                        x: 2px;
+                                        y: 2px;
+                                        image-fit: contain;
+                                    }
+                                }
+
+                                // Application details
+                                VerticalLayout {
+                                    spacing: DesignTokens.space-xs;
+                                    horizontal-stretch: 1;
+
+                                    Text {
+                                        text: item.display-name;
+                                        font-family: DesignTokens.font-family-primary;
+                                        font-weight: 600;
+                                        font-size: DesignTokens.font-size-base;
+                                        overflow: elide;
+                                        color: DesignTokens.text-primary;
+                                    }
+
+                                    Text {
+                                        text: item.publisher;
+                                        font-family: DesignTokens.font-family-primary;
+                                        font-size: DesignTokens.font-size-sm;
+                                        color: DesignTokens.text-secondary;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Spacing before buttons
+        Rectangle {
+            height: DesignTokens.space-xl;
+        }
+
+        // Dialog buttons
+        HorizontalLayout {
+            spacing: DesignTokens.space-md;
+
+            // Spacer to push buttons to the right
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            StyledButton {
+                text: "Cancel";
+                clicked => {
+                    cancel-picker();
+                }
+            }
+
+            StyledButton {
+                text: "Add Selected";
+                primary: true;
+                enabled: !loading && error-message == "";
+                clicked => {
+                    add-selected-packages();
+                }
+            }
+        }
+    }
+}
+
 export component MainWindow inherits Window {
     title: "EasyHDR";
     icon: @image-url("../assets/icon.ico");
@@ -390,6 +644,11 @@ export component MainWindow inherits Window {
     in-out property <string> build-id: "unknown";
     in-out property <bool> checking-for-updates: false;
 
+    // UWP picker properties
+    in-out property <[UwpPackageListItem]> uwp-package-list: [];
+    in-out property <bool> uwp-picker-loading: false;
+    in-out property <string> uwp-picker-error: "";
+
     // Callbacks
     callback add-application();
     callback add-uwp-application();
@@ -398,6 +657,13 @@ export component MainWindow inherits Window {
     callback open-settings();
     callback save-settings(bool, int, bool, bool, bool, bool, bool);
     callback check-for-updates();
+
+    // UWP picker callbacks
+    callback uwp-picker-add-selected();
+    callback uwp-picker-cancel();
+    callback uwp-picker-toggle-selection(int, bool);
+    callback uwp-picker-select-all();
+    callback uwp-picker-deselect-all();
 
     // Modern background with subtle gradient
     background: DesignTokens.surface-secondary;
@@ -643,6 +909,7 @@ export component MainWindow inherits Window {
                     primary: true;
                     clicked => {
                         add-uwp-application();
+                        uwp-picker-dialog.show();
                     }
                 }
                 StyledButton {
@@ -775,6 +1042,43 @@ export component MainWindow inherits Window {
 
             cancel-settings => {
                 settings-dialog.close();
+            }
+        }
+    }
+
+    // UWP package picker dialog popup
+    uwp-picker-dialog := PopupWindow {
+        x: (parent.width - 600px) / 2;
+        y: (parent.height - 550px) / 2;
+        width: 600px;
+        height: 550px;
+        close-policy: PopupClosePolicy.no-auto-close;
+
+        UwpPickerDialogContent {
+            package-list <=> uwp-package-list;
+            loading <=> uwp-picker-loading;
+            error-message <=> uwp-picker-error;
+
+            add-selected-packages => {
+                root.uwp-picker-add-selected();
+                uwp-picker-dialog.close();
+            }
+
+            cancel-picker => {
+                root.uwp-picker-cancel();
+                uwp-picker-dialog.close();
+            }
+
+            toggle-package-selection(index, selected) => {
+                root.uwp-picker-toggle-selection(index, selected);
+            }
+
+            select-all => {
+                root.uwp-picker-select-all();
+            }
+
+            deselect-all => {
+                root.uwp-picker-deselect-all();
             }
         }
     }
