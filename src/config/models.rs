@@ -362,7 +362,7 @@ impl std::convert::TryFrom<PathBuf> for Win32App {
 }
 
 /// Top-level application configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct AppConfig {
     /// List of monitored applications
     pub monitored_apps: Vec<MonitoredApp>,
@@ -370,6 +370,101 @@ pub struct AppConfig {
     pub preferences: UserPreferences,
     /// Window state for persistence
     pub window_state: WindowState,
+}
+
+/// Custom deserializer for AppConfig that handles partial failures in monitored_apps
+///
+/// This implementation satisfies Requirement 5.5: when deserialization fails for an
+/// individual app entry, it logs the error and continues loading other valid entries.
+impl<'de> Deserialize<'de> for AppConfig {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{MapAccess, Visitor};
+        use std::fmt;
+
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "snake_case")]
+        enum Field {
+            MonitoredApps,
+            Preferences,
+            WindowState,
+        }
+
+        struct AppConfigVisitor;
+
+        impl<'de> Visitor<'de> for AppConfigVisitor {
+            type Value = AppConfig;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct AppConfig")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> std::result::Result<AppConfig, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut monitored_apps: Option<Vec<MonitoredApp>> = None;
+                let mut preferences: Option<UserPreferences> = None;
+                let mut window_state: Option<WindowState> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::MonitoredApps => {
+                            if monitored_apps.is_some() {
+                                return Err(serde::de::Error::duplicate_field("monitored_apps"));
+                            }
+
+                            // Deserialize as Vec<serde_json::Value> first to handle partial failures
+                            let raw_apps: Vec<serde_json::Value> = map.next_value()?;
+                            let mut valid_apps = Vec::new();
+
+                            for (index, raw_app) in raw_apps.into_iter().enumerate() {
+                                match serde_json::from_value::<MonitoredApp>(raw_app.clone()) {
+                                    Ok(app) => {
+                                        valid_apps.push(app);
+                                    }
+                                    Err(e) => {
+                                        // Log error and continue with other entries
+                                        tracing::warn!(
+                                            "Failed to deserialize monitored app at index {}: {}. Entry: {}. Skipping this entry.",
+                                            index,
+                                            e,
+                                            raw_app
+                                        );
+                                    }
+                                }
+                            }
+
+                            monitored_apps = Some(valid_apps);
+                        }
+                        Field::Preferences => {
+                            if preferences.is_some() {
+                                return Err(serde::de::Error::duplicate_field("preferences"));
+                            }
+                            preferences = Some(map.next_value()?);
+                        }
+                        Field::WindowState => {
+                            if window_state.is_some() {
+                                return Err(serde::de::Error::duplicate_field("window_state"));
+                            }
+                            window_state = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                Ok(AppConfig {
+                    monitored_apps: monitored_apps.unwrap_or_default(),
+                    preferences: preferences.unwrap_or_default(),
+                    window_state: window_state.unwrap_or_default(),
+                })
+            }
+        }
+
+        const FIELDS: &[&str] = &["monitored_apps", "preferences", "window_state"];
+        deserializer.deserialize_struct("AppConfig", FIELDS, AppConfigVisitor)
+    }
 }
 
 /// User preferences and settings
@@ -942,5 +1037,261 @@ mod tests {
         assert!(!app.display_name.is_empty());
         assert!(!app.process_name.is_empty());
         assert_eq!(app.exe_path, current_exe);
+    }
+
+    #[test]
+    fn test_partial_failure_deserialization_all_valid() {
+        // Test that all valid entries are loaded successfully
+        let json = r#"{
+            "monitored_apps": [
+                {
+                    "app_type": "win32",
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "display_name": "App 1",
+                    "exe_path": "C:\\App1\\app1.exe",
+                    "process_name": "app1",
+                    "enabled": true
+                },
+                {
+                    "app_type": "uwp",
+                    "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                    "display_name": "Calculator",
+                    "package_family_name": "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+                    "app_id": "App",
+                    "enabled": true
+                }
+            ],
+            "preferences": {
+                "auto_start": false,
+                "monitoring_interval_ms": 1000,
+                "show_tray_notifications": true,
+                "show_update_notifications": true,
+                "minimize_to_tray_on_minimize": true,
+                "minimize_to_tray_on_close": false,
+                "start_minimized_to_tray": false,
+                "last_update_check_time": 0,
+                "cached_latest_version": ""
+            },
+            "window_state": {
+                "x": 100,
+                "y": 100,
+                "width": 660,
+                "height": 660
+            }
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+
+        // Both apps should be loaded
+        assert_eq!(config.monitored_apps.len(), 2);
+        assert!(matches!(config.monitored_apps[0], MonitoredApp::Win32(_)));
+        assert!(matches!(config.monitored_apps[1], MonitoredApp::Uwp(_)));
+    }
+
+    #[test]
+    fn test_partial_failure_deserialization_one_invalid() {
+        // Test that valid entries are loaded even when one entry is invalid
+        let json = r#"{
+            "monitored_apps": [
+                {
+                    "app_type": "win32",
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "display_name": "App 1",
+                    "exe_path": "C:\\App1\\app1.exe",
+                    "process_name": "app1",
+                    "enabled": true
+                },
+                {
+                    "app_type": "win32",
+                    "id": "invalid-uuid-format",
+                    "display_name": "Invalid App",
+                    "exe_path": "C:\\Invalid\\invalid.exe",
+                    "process_name": "invalid",
+                    "enabled": true
+                },
+                {
+                    "app_type": "uwp",
+                    "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                    "display_name": "Calculator",
+                    "package_family_name": "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+                    "app_id": "App",
+                    "enabled": true
+                }
+            ],
+            "preferences": {
+                "auto_start": false,
+                "monitoring_interval_ms": 1000,
+                "show_tray_notifications": true,
+                "show_update_notifications": true,
+                "minimize_to_tray_on_minimize": true,
+                "minimize_to_tray_on_close": false,
+                "start_minimized_to_tray": false,
+                "last_update_check_time": 0,
+                "cached_latest_version": ""
+            },
+            "window_state": {
+                "x": 100,
+                "y": 100,
+                "width": 660,
+                "height": 660
+            }
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+
+        // Only 2 valid apps should be loaded (the invalid one is skipped)
+        assert_eq!(config.monitored_apps.len(), 2);
+        assert_eq!(config.monitored_apps[0].display_name(), "App 1");
+        assert_eq!(config.monitored_apps[1].display_name(), "Calculator");
+    }
+
+    #[test]
+    fn test_partial_failure_deserialization_missing_required_field() {
+        // Test that entries with missing required fields are skipped
+        let json = r#"{
+            "monitored_apps": [
+                {
+                    "app_type": "win32",
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "display_name": "App 1",
+                    "exe_path": "C:\\App1\\app1.exe",
+                    "process_name": "app1",
+                    "enabled": true
+                },
+                {
+                    "app_type": "uwp",
+                    "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                    "display_name": "Calculator"
+                }
+            ],
+            "preferences": {
+                "auto_start": false,
+                "monitoring_interval_ms": 1000,
+                "show_tray_notifications": true,
+                "show_update_notifications": true,
+                "minimize_to_tray_on_minimize": true,
+                "minimize_to_tray_on_close": false,
+                "start_minimized_to_tray": false,
+                "last_update_check_time": 0,
+                "cached_latest_version": ""
+            },
+            "window_state": {
+                "x": 100,
+                "y": 100,
+                "width": 660,
+                "height": 660
+            }
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+
+        // Only the valid Win32 app should be loaded
+        assert_eq!(config.monitored_apps.len(), 1);
+        assert_eq!(config.monitored_apps[0].display_name(), "App 1");
+    }
+
+    #[test]
+    fn test_partial_failure_deserialization_all_invalid() {
+        // Test that empty list is returned when all entries are invalid
+        let json = r#"{
+            "monitored_apps": [
+                {
+                    "app_type": "win32",
+                    "id": "invalid-uuid",
+                    "display_name": "App 1",
+                    "exe_path": "C:\\App1\\app1.exe",
+                    "process_name": "app1",
+                    "enabled": true
+                },
+                {
+                    "app_type": "uwp",
+                    "id": "also-invalid",
+                    "display_name": "Calculator"
+                }
+            ],
+            "preferences": {
+                "auto_start": false,
+                "monitoring_interval_ms": 1000,
+                "show_tray_notifications": true,
+                "show_update_notifications": true,
+                "minimize_to_tray_on_minimize": true,
+                "minimize_to_tray_on_close": false,
+                "start_minimized_to_tray": false,
+                "last_update_check_time": 0,
+                "cached_latest_version": ""
+            },
+            "window_state": {
+                "x": 100,
+                "y": 100,
+                "width": 660,
+                "height": 660
+            }
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+
+        // No apps should be loaded
+        assert_eq!(config.monitored_apps.len(), 0);
+        // But preferences and window_state should still be loaded
+        assert_eq!(config.preferences.monitoring_interval_ms, 1000);
+        assert_eq!(config.window_state.width, 660);
+    }
+
+    #[test]
+    fn test_partial_failure_deserialization_mixed_legacy_and_new() {
+        // Test that legacy format and new format can coexist, with partial failures
+        let json = r#"{
+            "monitored_apps": [
+                {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "display_name": "Legacy App",
+                    "exe_path": "C:\\Legacy\\legacy.exe",
+                    "process_name": "legacy",
+                    "enabled": true
+                },
+                {
+                    "app_type": "win32",
+                    "id": "invalid-uuid",
+                    "display_name": "Invalid App",
+                    "exe_path": "C:\\Invalid\\invalid.exe",
+                    "process_name": "invalid",
+                    "enabled": true
+                },
+                {
+                    "app_type": "uwp",
+                    "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                    "display_name": "Calculator",
+                    "package_family_name": "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+                    "app_id": "App",
+                    "enabled": true
+                }
+            ],
+            "preferences": {
+                "auto_start": false,
+                "monitoring_interval_ms": 1000,
+                "show_tray_notifications": true,
+                "show_update_notifications": true,
+                "minimize_to_tray_on_minimize": true,
+                "minimize_to_tray_on_close": false,
+                "start_minimized_to_tray": false,
+                "last_update_check_time": 0,
+                "cached_latest_version": ""
+            },
+            "window_state": {
+                "x": 100,
+                "y": 100,
+                "width": 660,
+                "height": 660
+            }
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(json).unwrap();
+
+        // Legacy app and UWP app should be loaded (invalid one skipped)
+        assert_eq!(config.monitored_apps.len(), 2);
+        assert_eq!(config.monitored_apps[0].display_name(), "Legacy App");
+        assert!(matches!(config.monitored_apps[0], MonitoredApp::Win32(_)));
+        assert_eq!(config.monitored_apps[1].display_name(), "Calculator");
+        assert!(matches!(config.monitored_apps[1], MonitoredApp::Uwp(_)));
     }
 }
