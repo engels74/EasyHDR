@@ -12,7 +12,6 @@ use easyhdr::{
     monitor::{ProcessEvent, ProcessMonitor},
 };
 use parking_lot::Mutex;
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::thread;
@@ -70,7 +69,14 @@ fn test_process_monitor_integration() {
     let monitor = ProcessMonitor::new(Duration::from_millis(100), tx);
 
     // Update watch list with a test process
-    monitor.update_watch_list(vec!["notepad".to_string()]);
+    monitor.update_watch_list(vec![MonitoredApp::Win32(Win32App {
+        id: Uuid::new_v4(),
+        display_name: "Notepad".to_string(),
+        exe_path: PathBuf::from("C:\\Windows\\notepad.exe"),
+        process_name: "notepad".to_string(),
+        enabled: true,
+        icon_data: None,
+    })]);
 
     // Start the monitor
     let _handle = monitor.start();
@@ -113,7 +119,7 @@ fn test_app_controller_hdr_logic_integration() {
         icon_data: None,
     }));
 
-    let watch_list = Arc::new(Mutex::new(HashSet::new()));
+    let watch_list = Arc::new(Mutex::new(Vec::new()));
 
     // Create the controller
     let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
@@ -196,7 +202,7 @@ fn test_multiple_apps_integration() {
         icon_data: None,
     }));
 
-    let watch_list = Arc::new(Mutex::new(HashSet::new()));
+    let watch_list = Arc::new(Mutex::new(Vec::new()));
 
     let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
 
@@ -223,7 +229,7 @@ fn test_disabled_apps_ignored() {
         icon_data: None,
     }));
 
-    let watch_list = Arc::new(Mutex::new(HashSet::new()));
+    let watch_list = Arc::new(Mutex::new(Vec::new()));
 
     let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
 

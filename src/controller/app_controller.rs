@@ -8,7 +8,6 @@ use crate::error::{EasyHdrError, Result};
 use crate::hdr::HdrController;
 use crate::monitor::{AppIdentifier, HdrStateEvent, ProcessEvent};
 use parking_lot::Mutex;
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
@@ -44,7 +43,7 @@ pub struct AppController {
     /// Last toggle time for debouncing
     last_toggle_time: Arc<Mutex<Instant>>,
     /// Reference to `ProcessMonitor`'s watch list for updating
-    process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
+    process_monitor_watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
 }
 
 impl AppController {
@@ -54,7 +53,7 @@ impl AppController {
         event_receiver: mpsc::Receiver<ProcessEvent>,
         hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
         gui_state_sender: mpsc::SyncSender<AppState>,
-        process_monitor_watch_list: Arc<Mutex<HashSet<String>>>,
+        process_monitor_watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
     ) -> Result<Self> {
         use tracing::info;
 
@@ -599,38 +598,29 @@ impl AppController {
         Ok(())
     }
 
-    /// Update `ProcessMonitor` watch list with enabled application process names from config
+    /// Update `ProcessMonitor` watch list with enabled monitored applications from config
+    ///
+    /// Filters the config to include only enabled applications (both Win32 and UWP)
+    /// and updates the ProcessMonitor's watch list.
     fn update_process_monitor_watch_list(&self) {
         use tracing::debug;
 
         let config = self.config.lock();
-        let process_names: Vec<String> = config
+        let monitored_apps: Vec<MonitoredApp> = config
             .monitored_apps
             .iter()
-            .filter_map(|app| {
-                if let MonitoredApp::Win32(win32_app) = app {
-                    if win32_app.enabled {
-                        Some(win32_app.process_name.clone())
-                    } else {
-                        None
-                    }
-                } else {
-                    None // UWP apps don't have process names in this context
-                }
-            })
+            .filter(|app| app.is_enabled())
+            .cloned()
             .collect();
         drop(config);
 
         debug!(
-            "Updating ProcessMonitor watch list with {} processes",
-            process_names.len()
+            "Updating ProcessMonitor watch list with {} monitored applications",
+            monitored_apps.len()
         );
 
         let mut watch_list = self.process_monitor_watch_list.lock();
-        watch_list.clear();
-        for name in process_names {
-            watch_list.insert(name.to_lowercase());
-        }
+        *watch_list = monitored_apps;
 
         debug!("ProcessMonitor watch list updated");
     }
@@ -732,7 +722,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
         assert!(controller.is_ok());
@@ -754,7 +744,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -791,7 +781,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -821,7 +811,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -851,7 +841,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -897,7 +887,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -965,7 +955,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -1015,7 +1005,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
@@ -1043,7 +1033,14 @@ mod tests {
 
         // Verify watch list was updated
         let watch_list_guard = watch_list.lock();
-        assert!(watch_list_guard.contains("newapp"));
+        assert_eq!(watch_list_guard.len(), 1);
+        assert!(watch_list_guard.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "newapp"
+            } else {
+                false
+            }
+        }));
     }
 
     #[test]
@@ -1066,7 +1063,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
@@ -1083,7 +1080,7 @@ mod tests {
 
         // Verify watch list was updated
         let watch_list_guard = watch_list.lock();
-        assert!(!watch_list_guard.contains("app"));
+        assert_eq!(watch_list_guard.len(), 0);
     }
 
     #[test]
@@ -1106,7 +1103,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
@@ -1116,7 +1113,14 @@ mod tests {
         controller.update_process_monitor_watch_list();
         {
             let watch_list_guard = watch_list.lock();
-            assert!(watch_list_guard.contains("app"));
+            assert_eq!(watch_list_guard.len(), 1);
+            assert!(watch_list_guard.iter().any(|app| {
+                if let MonitoredApp::Win32(win32_app) = app {
+                    win32_app.process_name == "app"
+                } else {
+                    false
+                }
+            }));
         }
 
         // Disable the application
@@ -1130,7 +1134,7 @@ mod tests {
 
         // Verify watch list was updated (app should be removed)
         let watch_list_guard = watch_list.lock();
-        assert!(!watch_list_guard.contains("app"));
+        assert_eq!(watch_list_guard.len(), 0);
         drop(watch_list_guard);
 
         // Re-enable the application
@@ -1144,7 +1148,14 @@ mod tests {
 
         // Verify watch list was updated (app should be added back)
         let watch_list_guard = watch_list.lock();
-        assert!(watch_list_guard.contains("app"));
+        assert_eq!(watch_list_guard.len(), 1);
+        assert!(watch_list_guard.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "app"
+            } else {
+                false
+            }
+        }));
     }
 
     #[test]
@@ -1157,7 +1168,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -1217,7 +1228,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list.clone())
@@ -1229,9 +1240,27 @@ mod tests {
         // Verify only enabled apps are in watch list
         let watch_list_guard = watch_list.lock();
         assert_eq!(watch_list_guard.len(), 2);
-        assert!(watch_list_guard.contains("app1"));
-        assert!(!watch_list_guard.contains("app2")); // Disabled
-        assert!(watch_list_guard.contains("app3"));
+        assert!(watch_list_guard.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "app1"
+            } else {
+                false
+            }
+        }));
+        assert!(!watch_list_guard.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "app2"
+            } else {
+                false
+            }
+        })); // Disabled
+        assert!(watch_list_guard.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "app3"
+            } else {
+                false
+            }
+        }));
     }
 
     #[test]
@@ -1249,7 +1278,7 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -1289,7 +1318,7 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -1333,7 +1362,7 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -1394,7 +1423,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();
@@ -1465,7 +1494,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(HashSet::new()));
+        let watch_list = Arc::new(Mutex::new(Vec::new()));
 
         let mut controller =
             AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list).unwrap();

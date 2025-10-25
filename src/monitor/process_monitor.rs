@@ -22,6 +22,7 @@ use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES};
 #[cfg(windows)]
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
+use crate::config::MonitoredApp;
 use crate::error::{EasyHdrError, Result};
 
 /// Identifier for a monitored application
@@ -54,8 +55,8 @@ pub enum ProcessEvent {
 /// **Known Limitation:** Matches processes by executable filename only (without path or extension).
 /// Multiple processes with the same filename will all be detected as the same application.
 pub struct ProcessMonitor {
-    /// List of process names to watch (lowercase)
-    watch_list: Arc<Mutex<HashSet<String>>>,
+    /// List of monitored applications to watch (both Win32 and UWP)
+    watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
     /// Channel to send process events
     #[cfg_attr(not(windows), allow(dead_code))]
     event_sender: mpsc::SyncSender<ProcessEvent>,
@@ -76,7 +77,7 @@ impl ProcessMonitor {
         const DEFAULT_PROCESS_COUNT: usize = 200;
 
         Self {
-            watch_list: Arc::new(Mutex::new(HashSet::new())),
+            watch_list: Arc::new(Mutex::new(Vec::new())),
             event_sender,
             interval,
             running_processes: HashSet::with_capacity(DEFAULT_PROCESS_COUNT),
@@ -84,17 +85,17 @@ impl ProcessMonitor {
         }
     }
 
-    /// Update the list of processes to watch
-    pub fn update_watch_list(&self, process_names: Vec<String>) {
+    /// Update the list of monitored applications to watch
+    ///
+    /// Replaces the entire watch list with the provided applications.
+    /// Only enabled applications should be passed to this method.
+    pub fn update_watch_list(&self, monitored_apps: Vec<MonitoredApp>) {
         let mut watch_list = self.watch_list.lock();
-        watch_list.clear();
-        for name in process_names {
-            watch_list.insert(name.to_lowercase());
-        }
+        *watch_list = monitored_apps;
     }
 
     /// Get a reference to the watch list for external updates
-    pub fn get_watch_list_ref(&self) -> Arc<Mutex<HashSet<String>>> {
+    pub fn get_watch_list_ref(&self) -> Arc<Mutex<Vec<MonitoredApp>>> {
         Arc::clone(&self.watch_list)
     }
 
@@ -289,15 +290,7 @@ impl ProcessMonitor {
         // Find started processes
         for app_id in current.difference(&self.running_processes) {
             // Check if this app identifier is monitored
-            let is_monitored = match app_id {
-                AppIdentifier::Win32(process_name) => watch_list.contains(process_name),
-                AppIdentifier::Uwp(_package_family_name) => {
-                    // UWP apps are not yet supported in watch list (will be added in future task)
-                    false
-                }
-            };
-
-            if is_monitored {
+            if self.is_monitored(app_id, &watch_list) {
                 info!("Detected process started: {:?}", app_id);
                 if let Err(e) = self.event_sender.send(ProcessEvent::Started(app_id.clone())) {
                     use tracing::error;
@@ -312,15 +305,7 @@ impl ProcessMonitor {
         // Find stopped processes
         for app_id in self.running_processes.difference(&current) {
             // Check if this app identifier is monitored
-            let is_monitored = match app_id {
-                AppIdentifier::Win32(process_name) => watch_list.contains(process_name),
-                AppIdentifier::Uwp(_package_family_name) => {
-                    // UWP apps are not yet supported in watch list (will be added in future task)
-                    false
-                }
-            };
-
-            if is_monitored {
+            if self.is_monitored(app_id, &watch_list) {
                 info!("Detected process stopped: {:?}", app_id);
                 if let Err(e) = self.event_sender.send(ProcessEvent::Stopped(app_id.clone())) {
                     use tracing::error;
@@ -337,6 +322,37 @@ impl ProcessMonitor {
         self.estimated_process_count = (self.estimated_process_count * 3 + current.len()) / 4;
 
         self.running_processes = current;
+    }
+
+    /// Check if an app identifier is monitored
+    ///
+    /// Pattern matches on the AppIdentifier and checks against the MonitoredApp enum.
+    /// For Win32 apps, matches against Win32App process_name (case-insensitive).
+    /// For UWP apps, matches against UwpApp package_family_name (exact match).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn is_monitored(&self, app_id: &AppIdentifier, watch_list: &[MonitoredApp]) -> bool {
+        match app_id {
+            AppIdentifier::Win32(process_name) => {
+                // Match against Win32App process_name (case-insensitive)
+                watch_list.iter().any(|app| {
+                    if let MonitoredApp::Win32(win32_app) = app {
+                        win32_app.enabled && win32_app.process_name.eq_ignore_ascii_case(process_name)
+                    } else {
+                        false
+                    }
+                })
+            }
+            AppIdentifier::Uwp(package_family_name) => {
+                // Match against UwpApp package_family_name (exact match)
+                watch_list.iter().any(|app| {
+                    if let MonitoredApp::Uwp(uwp_app) = app {
+                        uwp_app.enabled && uwp_app.package_family_name == *package_family_name
+                    } else {
+                        false
+                    }
+                })
+            }
+        }
     }
 }
 
@@ -440,6 +456,21 @@ fn extract_filename_without_extension(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{MonitoredApp, Win32App};
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    /// Helper function to create a test Win32App
+    fn create_test_win32_app(process_name: &str, display_name: &str) -> MonitoredApp {
+        MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: display_name.to_string(),
+            exe_path: PathBuf::from(format!("C:\\test\\{}.exe", process_name)),
+            process_name: process_name.to_string(),
+            enabled: true,
+            icon_data: None,
+        })
+    }
 
     #[test]
     fn test_process_monitor_creation() {
@@ -453,11 +484,27 @@ mod tests {
         let (tx, _rx) = mpsc::sync_channel(32);
         let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
-        monitor.update_watch_list(vec!["test.exe".to_string(), "game.exe".to_string()]);
+        monitor.update_watch_list(vec![
+            create_test_win32_app("test", "Test App"),
+            create_test_win32_app("game", "Game App"),
+        ]);
 
         let watch_list = monitor.watch_list.lock();
-        assert!(watch_list.contains("test.exe"));
-        assert!(watch_list.contains("game.exe"));
+        assert_eq!(watch_list.len(), 2);
+        assert!(watch_list.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "test"
+            } else {
+                false
+            }
+        }));
+        assert!(watch_list.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "game"
+            } else {
+                false
+            }
+        }));
     }
 
     #[test]
@@ -499,7 +546,10 @@ mod tests {
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Set up watch list
-        monitor.update_watch_list(vec!["notepad".to_string(), "game".to_string()]);
+        monitor.update_watch_list(vec![
+            create_test_win32_app("notepad", "Notepad"),
+            create_test_win32_app("game", "Game"),
+        ]);
 
         // Initial state: no processes running
         monitor.running_processes = HashSet::new();
@@ -529,7 +579,10 @@ mod tests {
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Set up watch list
-        monitor.update_watch_list(vec!["notepad".to_string(), "game".to_string()]);
+        monitor.update_watch_list(vec![
+            create_test_win32_app("notepad", "Notepad"),
+            create_test_win32_app("game", "Game"),
+        ]);
 
         // Initial state: notepad running
         let mut initial = HashSet::new();
@@ -558,7 +611,7 @@ mod tests {
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Watch list has lowercase
-        monitor.update_watch_list(vec!["notepad".to_string()]);
+        monitor.update_watch_list(vec![create_test_win32_app("notepad", "Notepad")]);
 
         // Initial state: empty
         monitor.running_processes = HashSet::new();
@@ -585,9 +638,9 @@ mod tests {
 
         // Watch multiple processes
         monitor.update_watch_list(vec![
-            "notepad".to_string(),
-            "game".to_string(),
-            "app".to_string(),
+            create_test_win32_app("notepad", "Notepad"),
+            create_test_win32_app("game", "Game"),
+            create_test_win32_app("app", "App"),
         ]);
 
         // Initial state: empty
@@ -683,15 +736,29 @@ mod tests {
         let (tx, _rx) = mpsc::sync_channel(32);
         let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
-        // Add watch list with mixed case - should be converted to lowercase
-        monitor.update_watch_list(vec!["Game".to_string(), "APP".to_string()]);
+        // Add watch list with mixed case process names
+        monitor.update_watch_list(vec![
+            create_test_win32_app("Game", "Game App"),
+            create_test_win32_app("APP", "APP"),
+        ]);
 
         let watch_list = monitor.watch_list.lock();
-        // Watch list should contain lowercase versions
-        assert!(watch_list.contains("game"));
-        assert!(watch_list.contains("app"));
-        assert!(!watch_list.contains("Game"));
-        assert!(!watch_list.contains("APP"));
+        // Watch list should store the process names as-is
+        assert_eq!(watch_list.len(), 2);
+        assert!(watch_list.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "Game"
+            } else {
+                false
+            }
+        }));
+        assert!(watch_list.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "APP"
+            } else {
+                false
+            }
+        }));
     }
 
     #[test]
@@ -699,7 +766,7 @@ mod tests {
         let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
-        monitor.update_watch_list(vec!["game".to_string()]);
+        monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
 
         // Initial state: process not running
         monitor.running_processes = HashSet::new();
@@ -728,7 +795,7 @@ mod tests {
         let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
-        monitor.update_watch_list(vec!["game".to_string()]);
+        monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
 
         // Initial state: process running
         let mut initial = HashSet::new();
@@ -759,9 +826,9 @@ mod tests {
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         monitor.update_watch_list(vec![
-            "app1".to_string(),
-            "app2".to_string(),
-            "app3".to_string(),
+            create_test_win32_app("app1", "App 1"),
+            create_test_win32_app("app2", "App 2"),
+            create_test_win32_app("app3", "App 3"),
         ]);
 
         // Initial state: app1 and app2 running
@@ -801,7 +868,7 @@ mod tests {
         let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
-        monitor.update_watch_list(vec!["game".to_string()]);
+        monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
 
         // Initial state: game running
         let mut initial = HashSet::new();
@@ -821,7 +888,7 @@ mod tests {
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
         // Only watch "game"
-        monitor.update_watch_list(vec!["game".to_string()]);
+        monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
 
         monitor.running_processes = HashSet::new();
 
@@ -894,18 +961,36 @@ mod tests {
 
         // Add processes with various cases
         monitor.update_watch_list(vec![
-            "Game.exe".to_string(),
-            "NOTEPAD".to_string(),
-            "MyApp.EXE".to_string(),
+            create_test_win32_app("Game.exe", "Game"),
+            create_test_win32_app("NOTEPAD", "Notepad"),
+            create_test_win32_app("MyApp.EXE", "MyApp"),
         ]);
 
         let watch_list = monitor.watch_list.lock();
 
-        // All should be normalized to lowercase
-        assert!(watch_list.contains("game.exe"));
-        assert!(watch_list.contains("notepad"));
-        assert!(watch_list.contains("myapp.exe"));
+        // Process names should be stored as-is (not normalized)
         assert_eq!(watch_list.len(), 3);
+        assert!(watch_list.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "Game.exe"
+            } else {
+                false
+            }
+        }));
+        assert!(watch_list.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "NOTEPAD"
+            } else {
+                false
+            }
+        }));
+        assert!(watch_list.iter().any(|app| {
+            if let MonitoredApp::Win32(win32_app) = app {
+                win32_app.process_name == "MyApp.EXE"
+            } else {
+                false
+            }
+        }));
     }
 
     // Property-based tests using proptest
@@ -954,24 +1039,29 @@ mod tests {
                 prop_assert!(normalized.is_empty() || normalized.chars().all(char::is_whitespace));
             }
 
-            /// Property: Watch list normalization is idempotent
+            /// Property: Watch list update is idempotent
             #[test]
-            fn watch_list_normalization_is_idempotent(
+            fn watch_list_update_is_idempotent(
                 names in prop::collection::vec("[a-zA-Z0-9_-]+(\\.exe)?", 1..10)
             ) {
                 let (tx, _rx) = mpsc::sync_channel(32);
                 let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
-                // Normalize once
-                monitor.update_watch_list(names.clone());
+                // Convert names to MonitoredApp objects
+                let apps: Vec<MonitoredApp> = names.iter().map(|name| {
+                    create_test_win32_app(name, name)
+                }).collect();
+
+                // Update once
+                monitor.update_watch_list(apps.clone());
                 let first_result = monitor.watch_list.lock().clone();
 
-                // Normalize again with the same input
-                monitor.update_watch_list(names);
+                // Update again with the same input
+                monitor.update_watch_list(apps);
                 let second_result = monitor.watch_list.lock().clone();
 
-                // Results should be identical
-                prop_assert_eq!(first_result, second_result);
+                // Results should be identical (same number of apps)
+                prop_assert_eq!(first_result.len(), second_result.len());
             }
         }
     }
