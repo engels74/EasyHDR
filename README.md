@@ -13,6 +13,36 @@
 
 A lightweight Windows utility that automatically enables HDR when you launch configured applications and disables it when you close them.
 
+## Preview
+
+<p align="center">
+  <img src="assets/readme/gif/01-launch-app.gif" alt="Application Launch"/>
+</p>
+
+<p align="center">
+  <em>Initial launch with SmartScreen warning (appears because the application is unsigned; VirusTotal scans are available for every release for verification).</em>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="assets/readme/gif/02-add-application.gif" alt="Adding Applications"/>
+</p>
+
+<p align="center">
+  <em>Adding applications to the monitoring list.</em>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="assets/readme/gif/03-settings-window.gif" alt="Settings Window"/>
+</p>
+
+<p align="center">
+  <em>Configuring application settings and preferences.</em>
+</p>
+
 ## How It Works
 
 EasyHDR monitors running processes at regular intervals (500-1000ms). When a configured application starts, HDR is enabled globally across all capable displays within 1-2 seconds. When the last monitored application closes, HDR is automatically disabled. A 500ms debounce delay prevents rapid toggling if applications restart quickly.
