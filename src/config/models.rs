@@ -173,25 +173,85 @@ impl Win32App {
 impl UwpApp {
     /// Create a UWP app from package information
     ///
-    /// Generates a unique UUID for the app entry.
+    /// Generates a unique UUID for the app entry. If a logo path is provided,
+    /// attempts to extract and cache the icon data in memory.
     ///
     /// # Arguments
     ///
     /// * `display_name` - Human-readable name shown in the UI
     /// * `package_family_name` - Stable package identifier (e.g., "Microsoft.WindowsCalculator_8wekyb3d8bbwe")
     /// * `app_id` - Application ID within the package (typically "App" for main application)
+    /// * `logo_path` - Optional path to the package logo file for icon extraction
+    ///
+    /// # Icon Extraction
+    ///
+    /// If `logo_path` is provided:
+    /// - Attempts to load icon data from the file
+    /// - Caches icon in memory (not persisted to config)
+    /// - Falls back to placeholder icon on failure (handled gracefully)
+    ///
+    /// Icon extraction failures do not cause this function to fail - they result in
+    /// a placeholder icon being used instead.
     pub fn from_package_info(
         display_name: String,
         package_family_name: String,
         app_id: String,
+        logo_path: Option<std::path::PathBuf>,
     ) -> Self {
+        // Extract icon if logo_path is provided
+        let icon_data = if let Some(ref path) = logo_path {
+            #[cfg(windows)]
+            {
+                use crate::uwp;
+                match uwp::extract_icon(path) {
+                    Ok(data) if !data.is_empty() => {
+                        // Record icon in memory profiler
+                        use crate::utils::memory_profiler;
+                        memory_profiler::get_profiler().record_icon_cached(data.len());
+
+                        tracing::debug!(
+                            "Extracted icon for UWP app '{}' ({} bytes)",
+                            display_name,
+                            data.len()
+                        );
+                        Some(data)
+                    }
+                    Ok(_) => {
+                        tracing::debug!(
+                            "Icon extraction returned empty data for UWP app '{}'",
+                            display_name
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        // Log warning but don't fail - icon is optional
+                        tracing::warn!(
+                            "Failed to extract icon for UWP app '{}' from {:?}: {}",
+                            display_name,
+                            path,
+                            e
+                        );
+                        None
+                    }
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                // On non-Windows platforms, skip icon extraction
+                let _ = path; // Suppress unused variable warning
+                None
+            }
+        } else {
+            None
+        };
+
         Self {
             id: Uuid::new_v4(),
             display_name,
             package_family_name,
             app_id,
             enabled: true, // Default to enabled
-            icon_data: None,
+            icon_data,
         }
     }
 }
@@ -1002,11 +1062,12 @@ mod tests {
 
     #[test]
     fn test_uwp_app_from_package_info() {
-        // Test UwpApp constructor
+        // Test UwpApp constructor without logo path
         let app = UwpApp::from_package_info(
             "Calculator".to_string(),
             "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
             "App".to_string(),
+            None, // No logo path
         );
 
         assert_eq!(app.display_name, "Calculator");
@@ -1016,15 +1077,87 @@ mod tests {
         );
         assert_eq!(app.app_id, "App");
         assert!(app.enabled); // Should default to enabled
-        assert!(app.icon_data.is_none());
+        assert!(app.icon_data.is_none()); // No icon without logo path
 
         // Test that UUIDs are unique
         let app2 = UwpApp::from_package_info(
             "Calculator".to_string(),
             "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
             "App".to_string(),
+            None,
         );
         assert_ne!(app.id, app2.id);
+    }
+
+    #[test]
+    fn test_uwp_app_from_package_info_with_valid_icon() {
+        // Test UwpApp constructor with valid icon file
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create a temporary PNG file with test data
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let test_data = b"fake png data for testing";
+        temp_file.write_all(test_data).unwrap();
+        temp_file.flush().unwrap();
+
+        let app = UwpApp::from_package_info(
+            "Calculator".to_string(),
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+            "App".to_string(),
+            Some(temp_file.path().to_path_buf()),
+        );
+
+        assert_eq!(app.display_name, "Calculator");
+        assert_eq!(
+            app.package_family_name,
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
+        );
+
+        // On Windows, icon should be loaded
+        #[cfg(windows)]
+        {
+            assert!(app.icon_data.is_some(), "Icon should be loaded on Windows");
+            let icon_data = app.icon_data.unwrap();
+            assert_eq!(icon_data, test_data, "Icon data should match file contents");
+        }
+
+        // On non-Windows, icon should be None
+        #[cfg(not(windows))]
+        {
+            assert!(app.icon_data.is_none(), "Icon should not be loaded on non-Windows platforms");
+        }
+    }
+
+    #[test]
+    fn test_uwp_app_from_package_info_with_missing_icon() {
+        // Test UwpApp constructor with missing icon file (should use placeholder)
+        let nonexistent_path = PathBuf::from("/nonexistent/icon.png");
+
+        let app = UwpApp::from_package_info(
+            "Calculator".to_string(),
+            "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+            "App".to_string(),
+            Some(nonexistent_path),
+        );
+
+        assert_eq!(app.display_name, "Calculator");
+
+        // On Windows, extract_icon returns placeholder for missing files
+        // Since the placeholder is considered valid data, icon_data should be Some
+        #[cfg(windows)]
+        {
+            assert!(
+                app.icon_data.is_some(),
+                "Icon should be placeholder when file is missing"
+            );
+        }
+
+        // On non-Windows, icon should be None
+        #[cfg(not(windows))]
+        {
+            assert!(app.icon_data.is_none());
+        }
     }
 
     #[cfg(not(windows))]
