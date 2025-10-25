@@ -4,7 +4,6 @@
 //! coordinates between process monitoring and HDR control.
 
 use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
-use crate::config::models::Win32App;
 use crate::error::{EasyHdrError, Result};
 use crate::hdr::HdrController;
 use crate::monitor::{HdrStateEvent, ProcessEvent};
@@ -641,6 +640,7 @@ impl AppController {
 mod tests {
     use super::*;
     use crate::config::{AppConfig, MonitoredApp};
+    use crate::config::models::Win32App;
     use std::path::PathBuf;
     use tempfile::TempDir;
     use uuid::Uuid;

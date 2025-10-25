@@ -2,7 +2,7 @@
 //!
 //! This test module verifies that the application uses less than 50MB RAM during monitoring.
 
-use easyhdr::config::models::{AppConfig, MonitoredApp};
+use easyhdr::config::models::{AppConfig, MonitoredApp, Win32App};
 use easyhdr::utils::memory_profiler;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -62,14 +62,14 @@ fn test_config_memory_estimation() {
 
     // Add 20 monitored apps
     for i in 0..20 {
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: format!("Test App {i}"),
             exe_path: PathBuf::from(format!("C:\\Apps\\app{i}.exe")),
             process_name: format!("app{i}"),
             enabled: true,
             icon_data: None, // No icons for this test
-        });
+        }));
     }
 
     // Estimate memory usage
@@ -85,23 +85,31 @@ fn test_config_memory_estimation() {
 
 #[test]
 fn test_monitored_app_release_icon() {
-    let mut app = MonitoredApp {
+    let mut app = MonitoredApp::Win32(Win32App {
         id: Uuid::new_v4(),
         display_name: "Test App".to_string(),
         exe_path: PathBuf::from("C:\\test.exe"),
         process_name: "test".to_string(),
         enabled: true,
         icon_data: Some(vec![0u8; 4096]), // 4 KB icon
-    };
+    });
 
     // Verify icon is present
-    assert!(app.icon_data.is_some());
+    if let MonitoredApp::Win32(ref win32_app) = app {
+        assert!(win32_app.icon_data.is_some());
+    } else {
+        panic!("Expected Win32 variant");
+    }
 
     // Release icon
     app.release_icon();
 
     // Verify icon is removed
-    assert!(app.icon_data.is_none());
+    if let MonitoredApp::Win32(ref win32_app) = app {
+        assert!(win32_app.icon_data.is_none());
+    } else {
+        panic!("Expected Win32 variant");
+    }
 }
 
 #[test]

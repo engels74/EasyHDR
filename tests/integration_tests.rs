@@ -5,6 +5,7 @@
 
 use easyhdr::{
     config::{AppConfig, ConfigManager, MonitoredApp},
+    config::models::Win32App,
     controller::AppController,
     error::{EasyHdrError, get_user_friendly_error},
     hdr::HdrController,
@@ -28,14 +29,14 @@ fn test_config_persistence_integration() {
 
     // Create a config with some test data
     let mut config = AppConfig::default();
-    config.monitored_apps.push(MonitoredApp {
+    config.monitored_apps.push(MonitoredApp::Win32(Win32App {
         id: Uuid::new_v4(),
         display_name: "Test Game".to_string(),
         exe_path: PathBuf::from("C:\\Games\\test.exe"),
         process_name: "test".to_string(),
         enabled: true,
         icon_data: None,
-    });
+    }));
 
     // Save the config
     let config_path = test_dir.join("config.json");
@@ -48,9 +49,15 @@ fn test_config_persistence_integration() {
 
     // Verify the data matches
     assert_eq!(loaded_config.monitored_apps.len(), 1);
-    assert_eq!(loaded_config.monitored_apps[0].display_name, "Test Game");
-    assert_eq!(loaded_config.monitored_apps[0].process_name, "test");
-    assert!(loaded_config.monitored_apps[0].enabled);
+    assert_eq!(loaded_config.monitored_apps[0].display_name(), "Test Game");
+
+    // Verify it's a Win32 variant and check fields
+    if let MonitoredApp::Win32(app) = &loaded_config.monitored_apps[0] {
+        assert_eq!(app.process_name, "test");
+        assert!(app.enabled);
+    } else {
+        panic!("Expected Win32 variant");
+    }
 
     // Cleanup
     std::fs::remove_dir_all(&test_dir).ok();
@@ -97,14 +104,14 @@ fn test_app_controller_hdr_logic_integration() {
 
     // Create a test config
     let mut config = AppConfig::default();
-    config.monitored_apps.push(MonitoredApp {
+    config.monitored_apps.push(MonitoredApp::Win32(Win32App {
         id: Uuid::new_v4(),
         display_name: "Test Game".to_string(),
         exe_path: PathBuf::from("C:\\Games\\test.exe"),
         process_name: "testgame".to_string(),
         enabled: true,
         icon_data: None,
-    });
+    }));
 
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
@@ -121,8 +128,8 @@ fn test_app_controller_hdr_logic_integration() {
 /// Test error handling for invalid configuration
 #[test]
 fn test_error_handling_invalid_config() {
-    // Try to create a MonitoredApp from a non-existent path
-    let result = MonitoredApp::from_exe_path(PathBuf::from("C:\\NonExistent\\fake.exe"));
+    // Try to create a Win32App from a non-existent path
+    let result = Win32App::from_exe_path(PathBuf::from("C:\\NonExistent\\fake.exe"));
 
     // Should return an error
     assert!(result.is_err());
@@ -172,22 +179,22 @@ fn test_multiple_apps_integration() {
 
     // Create a config with multiple apps
     let mut config = AppConfig::default();
-    config.monitored_apps.push(MonitoredApp {
+    config.monitored_apps.push(MonitoredApp::Win32(Win32App {
         id: Uuid::new_v4(),
         display_name: "Game 1".to_string(),
         exe_path: PathBuf::from("C:\\Games\\game1.exe"),
         process_name: "game1".to_string(),
         enabled: true,
         icon_data: None,
-    });
-    config.monitored_apps.push(MonitoredApp {
+    }));
+    config.monitored_apps.push(MonitoredApp::Win32(Win32App {
         id: Uuid::new_v4(),
         display_name: "Game 2".to_string(),
         exe_path: PathBuf::from("C:\\Games\\game2.exe"),
         process_name: "game2".to_string(),
         enabled: true,
         icon_data: None,
-    });
+    }));
 
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 
@@ -207,14 +214,14 @@ fn test_disabled_apps_ignored() {
     let (state_tx, _state_rx) = mpsc::sync_channel(32);
 
     let mut config = AppConfig::default();
-    config.monitored_apps.push(MonitoredApp {
+    config.monitored_apps.push(MonitoredApp::Win32(Win32App {
         id: Uuid::new_v4(),
         display_name: "Disabled Game".to_string(),
         exe_path: PathBuf::from("C:\\Games\\disabled.exe"),
         process_name: "disabled".to_string(),
         enabled: false, // Disabled
         icon_data: None,
-    });
+    }));
 
     let watch_list = Arc::new(Mutex::new(HashSet::new()));
 

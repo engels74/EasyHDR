@@ -3,7 +3,7 @@
 //! This module provides functionality to load and save configuration to
 //! %APPDATA%\EasyHDR\config.json with atomic writes to prevent corruption.
 
-use crate::config::models::{AppConfig, Win32App};
+use crate::config::models::AppConfig;
 use crate::error::{EasyHdrError, Result};
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -126,7 +126,7 @@ impl ConfigManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::models::MonitoredApp;
+    use crate::config::models::{MonitoredApp, Win32App};
     use std::fs;
     use std::path::PathBuf;
     use std::sync::Mutex;

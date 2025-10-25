@@ -3,6 +3,7 @@
 #![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use easyhdr::config::models::Win32App;
 use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, WindowState};
 use std::hint::black_box;
 use std::path::PathBuf;
@@ -32,14 +33,14 @@ fn create_large_config() -> AppConfig {
 
     // Add 100 monitored apps to simulate a large configuration
     for i in 0..100 {
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: format!("Test Application {i}"),
             exe_path: PathBuf::from(format!("C:\\Games\\Game{i}\\game.exe")),
             process_name: format!("game{i}"),
             enabled: i % 2 == 0,
             icon_data: None,
-        });
+        }));
     }
 
     config
