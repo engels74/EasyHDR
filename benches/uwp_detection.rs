@@ -85,4 +85,3 @@ fn bench_noop(_c: &mut Criterion) {
 criterion_group!(benches, bench_noop);
 
 criterion_main!(benches);
-

@@ -222,16 +222,19 @@ impl AppController {
 
                 // Check if this app is in our monitored list and enabled
                 let config = self.config.lock();
-                let is_monitored = config.monitored_apps.iter().any(|app| match (&app_id, app) {
-                    (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
-                        win32_app.enabled
-                            && win32_app.process_name.eq_ignore_ascii_case(process_name)
-                    }
-                    (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
-                        uwp_app.enabled && uwp_app.package_family_name == *package_family_name
-                    }
-                    _ => false, // Mismatched types (Win32 vs UWP)
-                });
+                let is_monitored = config
+                    .monitored_apps
+                    .iter()
+                    .any(|app| match (&app_id, app) {
+                        (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
+                            win32_app.enabled
+                                && win32_app.process_name.eq_ignore_ascii_case(process_name)
+                        }
+                        (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
+                            uwp_app.enabled && uwp_app.package_family_name == *package_family_name
+                        }
+                        _ => false, // Mismatched types (Win32 vs UWP)
+                    });
                 drop(config); // Release lock early
 
                 if is_monitored {
@@ -268,16 +271,19 @@ impl AppController {
 
                 // Check if this app is in our monitored list and enabled
                 let config = self.config.lock();
-                let is_monitored = config.monitored_apps.iter().any(|app| match (&app_id, app) {
-                    (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
-                        win32_app.enabled
-                            && win32_app.process_name.eq_ignore_ascii_case(process_name)
-                    }
-                    (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
-                        uwp_app.enabled && uwp_app.package_family_name == *package_family_name
-                    }
-                    _ => false, // Mismatched types (Win32 vs UWP)
-                });
+                let is_monitored = config
+                    .monitored_apps
+                    .iter()
+                    .any(|app| match (&app_id, app) {
+                        (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
+                            win32_app.enabled
+                                && win32_app.process_name.eq_ignore_ascii_case(process_name)
+                        }
+                        (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
+                            uwp_app.enabled && uwp_app.package_family_name == *package_family_name
+                        }
+                        _ => false, // Mismatched types (Win32 vs UWP)
+                    });
                 drop(config); // Release lock early
 
                 if is_monitored {
@@ -643,8 +649,8 @@ impl AppController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AppConfig, MonitoredApp};
     use crate::config::models::Win32App;
+    use crate::config::{AppConfig, MonitoredApp};
     use std::path::PathBuf;
     use tempfile::TempDir;
     use uuid::Uuid;

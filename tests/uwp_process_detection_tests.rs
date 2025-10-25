@@ -18,7 +18,7 @@
 
 #[cfg(windows)]
 use easyhdr::{
-    config::{MonitoredApp, Win32App, UwpApp},
+    config::{MonitoredApp, UwpApp, Win32App},
     monitor::{AppIdentifier, ProcessEvent, ProcessMonitor},
 };
 
@@ -238,7 +238,9 @@ fn test_uwp_app_detection_calculator_stopped() {
     }
 
     if !running_detected {
-        eprintln!("Calculator not detected as running within timeout. Please ensure Calculator is running.");
+        eprintln!(
+            "Calculator not detected as running within timeout. Please ensure Calculator is running."
+        );
         return;
     }
 

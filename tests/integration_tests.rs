@@ -4,8 +4,8 @@
 //! and error handling for the full application lifecycle.
 
 use easyhdr::{
-    config::{AppConfig, ConfigManager, MonitoredApp},
     config::models::Win32App,
+    config::{AppConfig, ConfigManager, MonitoredApp},
     controller::AppController,
     error::{EasyHdrError, get_user_friendly_error},
     hdr::HdrController,

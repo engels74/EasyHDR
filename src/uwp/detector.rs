@@ -125,10 +125,7 @@ pub unsafe fn detect_uwp_process(
 
     // Convert UTF-16 buffer to Rust String
     // Find the null terminator
-    let null_pos = buffer
-        .iter()
-        .position(|&c| c == 0)
-        .unwrap_or(buffer.len());
+    let null_pos = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
 
     let full_name = String::from_utf16(&buffer[..null_pos]).map_err(|e| {
         crate::EasyHdrError::UwpProcessDetectionError(crate::error::StringError::new(format!(
@@ -235,10 +232,7 @@ mod tests {
         let full_name = "Microsoft.WindowsCalculator_10.2103.8.0_x64__8wekyb3d8bbwe";
         let result = extract_package_family_name(full_name);
         assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
-        );
+        assert_eq!(result.unwrap(), "Microsoft.WindowsCalculator_8wekyb3d8bbwe");
     }
 
     #[test]
@@ -333,10 +327,7 @@ mod tests {
         let full_name = "Microsoft.WindowsCalculator_10.2103.8.0_x64_extra_part__8wekyb3d8bbwe";
         let result = extract_package_family_name(full_name);
         assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
-        );
+        assert_eq!(result.unwrap(), "Microsoft.WindowsCalculator_8wekyb3d8bbwe");
     }
 
     #[test]

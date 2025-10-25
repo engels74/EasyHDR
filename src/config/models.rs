@@ -812,7 +812,10 @@ mod tests {
             config.monitored_apps[0].display_name(),
             deserialized.monitored_apps[0].display_name()
         );
-        assert!(matches!(deserialized.monitored_apps[0], MonitoredApp::Win32(_)));
+        assert!(matches!(
+            deserialized.monitored_apps[0],
+            MonitoredApp::Win32(_)
+        ));
 
         // Verify second app (Win32)
         assert_eq!(
@@ -826,7 +829,10 @@ mod tests {
             config.monitored_apps[2].id(),
             deserialized.monitored_apps[2].id()
         );
-        assert!(matches!(deserialized.monitored_apps[2], MonitoredApp::Uwp(_)));
+        assert!(matches!(
+            deserialized.monitored_apps[2],
+            MonitoredApp::Uwp(_)
+        ));
 
         // Verify preferences
         assert_eq!(
@@ -1305,15 +1311,18 @@ mod proptests {
     // Strategy for generating valid Win32App instances
     fn win32_app_strategy() -> impl Strategy<Value = Win32App> {
         (
-            any::<[u8; 16]>(), // UUID bytes
-            "[a-zA-Z0-9 ]{1,50}", // display_name
+            any::<[u8; 16]>(),       // UUID bytes
+            "[a-zA-Z0-9 ]{1,50}",    // display_name
             "[a-zA-Z0-9_\\-]{1,20}", // filename
-            any::<bool>(), // enabled
+            any::<bool>(),           // enabled
         )
             .prop_map(|(uuid_bytes, display_name, filename, enabled)| {
                 let id = Uuid::from_bytes(uuid_bytes);
                 let process_name = filename.to_lowercase();
-                let exe_path = PathBuf::from(format!("C:\\Program Files\\{}\\{}.exe", display_name, filename));
+                let exe_path = PathBuf::from(format!(
+                    "C:\\Program Files\\{}\\{}.exe",
+                    display_name, filename
+                ));
 
                 Win32App {
                     id,
@@ -1329,26 +1338,28 @@ mod proptests {
     // Strategy for generating valid UwpApp instances
     fn uwp_app_strategy() -> impl Strategy<Value = UwpApp> {
         (
-            any::<[u8; 16]>(), // UUID bytes
-            "[a-zA-Z0-9 ]{1,50}", // display_name
-            "[A-Za-z0-9\\.]{1,30}", // package name
+            any::<[u8; 16]>(),                         // UUID bytes
+            "[a-zA-Z0-9 ]{1,50}",                      // display_name
+            "[A-Za-z0-9\\.]{1,30}",                    // package name
             "[a-hj-km-np-tv-z0-9A-HJ-KM-NP-TV-Z]{13}", // publisher ID (13 chars, Base-32 Crockford variant)
-            "[A-Za-z]{1,10}", // app_id
-            any::<bool>(), // enabled
+            "[A-Za-z]{1,10}",                          // app_id
+            any::<bool>(),                             // enabled
         )
-            .prop_map(|(uuid_bytes, display_name, package_name, publisher_id, app_id, enabled)| {
-                let id = Uuid::from_bytes(uuid_bytes);
-                let package_family_name = format!("{}_{}", package_name, publisher_id);
+            .prop_map(
+                |(uuid_bytes, display_name, package_name, publisher_id, app_id, enabled)| {
+                    let id = Uuid::from_bytes(uuid_bytes);
+                    let package_family_name = format!("{}_{}", package_name, publisher_id);
 
-                UwpApp {
-                    id,
-                    display_name,
-                    package_family_name,
-                    app_id,
-                    enabled,
-                    icon_data: None,
-                }
-            })
+                    UwpApp {
+                        id,
+                        display_name,
+                        package_family_name,
+                        app_id,
+                        enabled,
+                        icon_data: None,
+                    }
+                },
+            )
     }
 
     proptest! {

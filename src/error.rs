@@ -148,14 +148,12 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
                  Please remove it from your monitored apps list."
             )
         }
-        EasyHdrError::UwpEnumerationError(_) => {
-            "Failed to enumerate UWP applications.\n\n\
+        EasyHdrError::UwpEnumerationError(_) => "Failed to enumerate UWP applications.\n\n\
              Please ensure:\n\
              - You have permission to access installed applications\n\
              - Windows Store services are running\n\
              - Your Windows installation is not corrupted"
-                .to_string()
-        }
+            .to_string(),
         EasyHdrError::InvalidPackageFamilyName(name) => {
             format!(
                 "Invalid package family name: {name}\n\n\
@@ -170,14 +168,12 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
                  This may indicate an incompatible UWP application."
             )
         }
-        EasyHdrError::UwpProcessDetectionError(_) => {
-            "Failed to detect UWP process.\n\n\
+        EasyHdrError::UwpProcessDetectionError(_) => "Failed to detect UWP process.\n\n\
              Process monitoring may not work correctly for UWP applications.\n\
              Please ensure:\n\
              - You have permission to query process information\n\
              - Windows security settings allow process enumeration"
-                .to_string()
-        }
+            .to_string(),
         EasyHdrError::UwpIconExtractionError(path) => {
             format!(
                 "Failed to extract UWP icon from: {path}\n\n\
@@ -267,9 +263,8 @@ mod tests {
 
     #[test]
     fn test_package_family_name_extraction_error_display() {
-        let error = EasyHdrError::PackageFamilyNameExtractionError(
-            "BadFormat_1.0.0.0_x64".to_string(),
-        );
+        let error =
+            EasyHdrError::PackageFamilyNameExtractionError("BadFormat_1.0.0.0_x64".to_string());
         assert_eq!(
             error.to_string(),
             "Failed to extract package family name from full name: BadFormat_1.0.0.0_x64"
@@ -278,9 +273,8 @@ mod tests {
 
     #[test]
     fn test_package_family_name_extraction_error_user_friendly() {
-        let error = EasyHdrError::PackageFamilyNameExtractionError(
-            "BadFormat_1.0.0.0_x64".to_string(),
-        );
+        let error =
+            EasyHdrError::PackageFamilyNameExtractionError("BadFormat_1.0.0.0_x64".to_string());
         let message = get_user_friendly_error(&error);
         assert!(message.contains("Failed to extract package family name"));
         assert!(message.contains("BadFormat_1.0.0.0_x64"));

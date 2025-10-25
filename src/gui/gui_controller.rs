@@ -270,7 +270,10 @@ impl GuiController {
                 // Extract metadata and create Win32App, then wrap in MonitoredApp
                 match Win32App::from_exe_path(path.clone()) {
                     Ok(win32_app) => {
-                        info!("Successfully extracted metadata for: {}", win32_app.display_name);
+                        info!(
+                            "Successfully extracted metadata for: {}",
+                            win32_app.display_name
+                        );
 
                         // Wrap in MonitoredApp enum
                         let app = MonitoredApp::Win32(win32_app);
@@ -388,7 +391,9 @@ impl GuiController {
 
                 // Get exe_path for Win32 apps, use placeholder for UWP apps
                 let exe_path = match app {
-                    MonitoredApp::Win32(win32_app) => win32_app.exe_path.to_string_lossy().to_string(),
+                    MonitoredApp::Win32(win32_app) => {
+                        win32_app.exe_path.to_string_lossy().to_string()
+                    }
                     MonitoredApp::Uwp(uwp_app) => format!("UWP: {}", uwp_app.package_family_name),
                 };
 

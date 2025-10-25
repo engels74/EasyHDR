@@ -183,9 +183,8 @@ impl ProcessMonitor {
 
                 // Try to open process handle for UWP detection
                 // Use PROCESS_QUERY_LIMITED_INFORMATION for minimal access rights
-                let handle_result = unsafe {
-                    OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-                };
+                let handle_result =
+                    unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) };
 
                 match handle_result {
                     Ok(handle) => {
@@ -213,8 +212,10 @@ impl ProcessMonitor {
                                 // This is non-fatal; we'll treat it as Win32 fallback
                                 // Use anyhow::Context to add process ID to error chain
                                 use anyhow::Context;
-                                let contextualized_error = anyhow::Error::from(e)
-                                    .context(format!("Failed to detect UWP package for process ID {}", pid));
+                                let contextualized_error = anyhow::Error::from(e).context(format!(
+                                    "Failed to detect UWP package for process ID {}",
+                                    pid
+                                ));
                                 warn!("{:#}", contextualized_error);
 
                                 // Fallback to Win32 detection
@@ -236,7 +237,10 @@ impl ProcessMonitor {
                         let process_name = extract_process_name(&entry.szExeFile);
                         if let Some(name) = process_name {
                             let name_lower = extract_filename_without_extension(&name);
-                            debug!("Fallback to Win32 for PID {} (no handle): {}", pid, name_lower);
+                            debug!(
+                                "Fallback to Win32 for PID {} (no handle): {}",
+                                pid, name_lower
+                            );
                             current_processes.insert(AppIdentifier::Win32(name_lower));
                         }
                     }
@@ -296,7 +300,10 @@ impl ProcessMonitor {
             // Check if this app identifier is monitored
             if self.is_monitored(app_id, &watch_list) {
                 info!("Detected process started: {:?}", app_id);
-                if let Err(e) = self.event_sender.send(ProcessEvent::Started(app_id.clone())) {
+                if let Err(e) = self
+                    .event_sender
+                    .send(ProcessEvent::Started(app_id.clone()))
+                {
                     use tracing::error;
                     error!(
                         "Failed to send ProcessEvent::Started for '{:?}': {}",
@@ -311,7 +318,10 @@ impl ProcessMonitor {
             // Check if this app identifier is monitored
             if self.is_monitored(app_id, &watch_list) {
                 info!("Detected process stopped: {:?}", app_id);
-                if let Err(e) = self.event_sender.send(ProcessEvent::Stopped(app_id.clone())) {
+                if let Err(e) = self
+                    .event_sender
+                    .send(ProcessEvent::Stopped(app_id.clone()))
+                {
                     use tracing::error;
                     error!(
                         "Failed to send ProcessEvent::Stopped for '{:?}': {}",
@@ -340,7 +350,8 @@ impl ProcessMonitor {
                 // Match against Win32App process_name (case-insensitive)
                 watch_list.iter().any(|app| {
                     if let MonitoredApp::Win32(win32_app) = app {
-                        win32_app.enabled && win32_app.process_name.eq_ignore_ascii_case(process_name)
+                        win32_app.enabled
+                            && win32_app.process_name.eq_ignore_ascii_case(process_name)
                     } else {
                         false
                     }
