@@ -60,13 +60,14 @@ global DesignTokens {
 }
 
 // AppListItem struct represents a configured application in the list
-// Fields: id (UUID), display-name (app name), exe-path (full path), enabled (checkbox state), icon (app icon)
+// Fields: id (UUID), display-name (app name), exe-path (full path), enabled (checkbox state), icon (app icon), app-type (win32 or uwp)
 export struct AppListItem {
     id: string,
     display-name: string,
     exe-path: string,
     enabled: bool,
     icon: image,
+    app-type: string, // "win32" or "uwp"
 }
 
 // UwpPackageListItem struct represents a UWP package in the picker dialog
@@ -859,14 +860,46 @@ export component MainWindow inherits Window {
                             VerticalLayout {
                                 spacing: DesignTokens.space-xs;
 
-                                Text {
-                                    text: item.display-name;
-                                    font-family: DesignTokens.font-family-primary;
-                                    font-weight: 600;
-                                    font-size: DesignTokens.font-size-base;
-                                    overflow: elide;
-                                    color: DesignTokens.text-primary;
+                                // Display name with app type badge
+                                HorizontalLayout {
+                                    spacing: DesignTokens.space-sm;
+
+                                    Text {
+                                        text: item.display-name;
+                                        font-family: DesignTokens.font-family-primary;
+                                        font-weight: 600;
+                                        font-size: DesignTokens.font-size-base;
+                                        overflow: elide;
+                                        color: DesignTokens.text-primary;
+                                    }
+
+                                    // App type badge
+                                    Rectangle {
+                                        width: 48px;
+                                        height: 18px;
+                                        border-radius: DesignTokens.radius-sm;
+                                        background: item.app-type == "uwp" ?
+                                            DesignTokens.brand-accent.transparentize(0.85) :
+                                            DesignTokens.surface-tertiary;
+                                        border-width: 1px;
+                                        border-color: item.app-type == "uwp" ?
+                                            DesignTokens.brand-accent.transparentize(0.6) :
+                                            DesignTokens.border-medium;
+
+                                        Text {
+                                            text: item.app-type == "uwp" ? "UWP" : "Win32";
+                                            font-family: DesignTokens.font-family-primary;
+                                            font-size: DesignTokens.font-size-xs;
+                                            font-weight: 600;
+                                            color: item.app-type == "uwp" ?
+                                                DesignTokens.brand-accent :
+                                                DesignTokens.text-tertiary;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
                                 }
+
                                 Text {
                                     text: item.exe-path;
                                     font-family: DesignTokens.font-family-primary;

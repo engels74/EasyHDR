@@ -504,12 +504,14 @@ impl GuiController {
                     slint::Image::default()
                 };
 
-                // Get exe_path for Win32 apps, use placeholder for UWP apps
-                let exe_path = match app {
+                // Get exe_path and app_type based on app variant
+                let (exe_path, app_type) = match app {
                     MonitoredApp::Win32(win32_app) => {
-                        win32_app.exe_path.to_string_lossy().to_string()
+                        (win32_app.exe_path.to_string_lossy().to_string(), "win32")
                     }
-                    MonitoredApp::Uwp(uwp_app) => format!("UWP: {}", uwp_app.package_family_name),
+                    MonitoredApp::Uwp(uwp_app) => {
+                        (format!("Package: {}", uwp_app.package_family_name), "uwp")
+                    }
                 };
 
                 crate::AppListItem {
@@ -518,6 +520,7 @@ impl GuiController {
                     exe_path: exe_path.into(),
                     enabled: app.is_enabled(),
                     icon,
+                    app_type: app_type.into(),
                 }
             })
             .collect();
