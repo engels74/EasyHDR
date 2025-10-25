@@ -58,6 +58,12 @@ windows = { version = "0.62", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_ProcessStatus",
     "Win32_System_Threading",
+    # UWP application support
+    "Win32_Storage_Packaging_Appx",  # GetPackageFullName API
+    "Management_Deployment",          # PackageManager (WinRT)
+    "ApplicationModel",               # Package types
+    "ApplicationModel_Core",          # Core app model
+    "Storage",                        # Package storage access
 ] }
 winreg = "0.55"
 tray-icon = "0.21"

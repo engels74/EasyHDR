@@ -21,5 +21,9 @@ pub mod hdr;
 pub mod monitor;
 pub mod utils;
 
+// UWP application support (Windows only)
+#[cfg(windows)]
+pub mod uwp;
+
 // Re-export commonly used types
 pub use error::{EasyHdrError, Result};
