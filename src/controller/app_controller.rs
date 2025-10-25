@@ -4,6 +4,7 @@
 //! coordinates between process monitoring and HDR control.
 
 use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
+use crate::config::models::Win32App;
 use crate::error::{EasyHdrError, Result};
 use crate::hdr::HdrController;
 use crate::monitor::{HdrStateEvent, ProcessEvent};
@@ -226,7 +227,13 @@ impl AppController {
                 let is_monitored = config
                     .monitored_apps
                     .iter()
-                    .any(|app| app.enabled && app.process_name.eq_ignore_ascii_case(&process_name));
+                    .any(|app| {
+                        if let MonitoredApp::Win32(win32_app) = app {
+                            win32_app.enabled && win32_app.process_name.eq_ignore_ascii_case(&process_name)
+                        } else {
+                            false // UWP apps are not matched by process name
+                        }
+                    });
                 drop(config); // Release lock early
 
                 if is_monitored {
@@ -259,7 +266,13 @@ impl AppController {
                 let is_monitored = config
                     .monitored_apps
                     .iter()
-                    .any(|app| app.enabled && app.process_name.eq_ignore_ascii_case(&process_name));
+                    .any(|app| {
+                        if let MonitoredApp::Win32(win32_app) = app {
+                            win32_app.enabled && win32_app.process_name.eq_ignore_ascii_case(&process_name)
+                        } else {
+                            false // UWP apps are not matched by process name
+                        }
+                    });
                 drop(config); // Release lock early
 
                 if is_monitored {
@@ -380,8 +393,8 @@ impl AppController {
         let active_apps: Vec<String> = config
             .monitored_apps
             .iter()
-            .filter(|app| app.enabled)
-            .map(|app| app.display_name.clone())
+            .filter(|app| app.is_enabled())
+            .map(|app| app.display_name().to_string())
             .collect();
         drop(config);
 
@@ -424,10 +437,20 @@ impl AppController {
     pub fn add_application(&mut self, app: MonitoredApp) -> Result<()> {
         use tracing::{info, warn};
 
-        info!(
-            "Adding application: {} ({})",
-            app.display_name, app.process_name
-        );
+        match &app {
+            MonitoredApp::Win32(win32_app) => {
+                info!(
+                    "Adding Win32 application: {} ({})",
+                    win32_app.display_name, win32_app.process_name
+                );
+            }
+            MonitoredApp::Uwp(uwp_app) => {
+                info!(
+                    "Adding UWP application: {} ({})",
+                    uwp_app.display_name, uwp_app.package_family_name
+                );
+            }
+        }
 
         // Add to config
         {
@@ -466,7 +489,7 @@ impl AppController {
         // Remove from config
         {
             let mut config = self.config.lock();
-            config.monitored_apps.retain(|app| app.id != id);
+            config.monitored_apps.retain(|app| app.id() != &id);
         }
 
         // Save configuration - if this fails, we continue with in-memory config
@@ -500,8 +523,11 @@ impl AppController {
         // Update enabled flag
         {
             let mut config = self.config.lock();
-            if let Some(app) = config.monitored_apps.iter_mut().find(|app| app.id == id) {
-                app.enabled = enabled;
+            if let Some(app) = config.monitored_apps.iter_mut().find(|app| app.id() == &id) {
+                match app {
+                    MonitoredApp::Win32(win32_app) => win32_app.enabled = enabled,
+                    MonitoredApp::Uwp(uwp_app) => uwp_app.enabled = enabled,
+                }
             }
         }
 
@@ -582,8 +608,17 @@ impl AppController {
         let process_names: Vec<String> = config
             .monitored_apps
             .iter()
-            .filter(|app| app.enabled)
-            .map(|app| app.process_name.clone())
+            .filter_map(|app| {
+                if let MonitoredApp::Win32(win32_app) = app {
+                    if win32_app.enabled {
+                        Some(win32_app.process_name.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None // UWP apps don't have process names in this context
+                }
+            })
             .collect();
         drop(config);
 
@@ -707,14 +742,14 @@ mod tests {
     fn test_handle_process_started_increments_count() {
         // Create a config with one monitored app
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -742,14 +777,14 @@ mod tests {
     fn test_handle_process_started_case_insensitive() {
         // Create a config with one monitored app (lowercase)
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -770,14 +805,14 @@ mod tests {
     fn test_handle_process_started_disabled_app_ignored() {
         // Create a config with one disabled app
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: false, // Disabled
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -798,14 +833,14 @@ mod tests {
     fn test_handle_process_stopped_decrements_count() {
         // Create a config with one monitored app
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -840,14 +875,14 @@ mod tests {
     fn test_handle_process_stopped_when_count_is_zero() {
         // Create a config with one monitored app
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -894,22 +929,22 @@ mod tests {
     fn test_handle_multiple_processes() {
         // Create a config with two monitored apps
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "App 1".to_string(),
             exe_path: PathBuf::from("C:\\test\\app1.exe"),
             process_name: "app1".to_string(),
             enabled: true,
             icon_data: None,
-        });
-        config.monitored_apps.push(MonitoredApp {
+        }));
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "App 2".to_string(),
             exe_path: PathBuf::from("C:\\test\\app2.exe"),
             process_name: "app2".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -963,14 +998,14 @@ mod tests {
                 .unwrap();
 
         // Create a new app to add
-        let app = MonitoredApp {
+        let app = MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "New App".to_string(),
             exe_path: PathBuf::from("C:\\test\\newapp.exe"),
             process_name: "newapp".to_string(),
             enabled: true,
             icon_data: None,
-        };
+        });
 
         // Add the application
         let result = controller.add_application(app.clone());
@@ -979,7 +1014,7 @@ mod tests {
         // Verify it was added to config
         let config = controller.config.lock();
         assert_eq!(config.monitored_apps.len(), 1);
-        assert_eq!(config.monitored_apps[0].display_name, "New App");
+        assert_eq!(config.monitored_apps[0].display_name(), "New App");
         drop(config);
 
         // Verify watch list was updated
@@ -995,14 +1030,14 @@ mod tests {
 
         let mut config = AppConfig::default();
         let app_id = Uuid::new_v4();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: app_id,
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -1035,14 +1070,14 @@ mod tests {
 
         let mut config = AppConfig::default();
         let app_id = Uuid::new_v4();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: app_id,
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -1066,7 +1101,7 @@ mod tests {
 
         // Verify enabled flag was updated
         let config = controller.config.lock();
-        assert!(!config.monitored_apps[0].enabled);
+        assert!(!config.monitored_apps[0].is_enabled());
         drop(config);
 
         // Verify watch list was updated (app should be removed)
@@ -1080,7 +1115,7 @@ mod tests {
 
         // Verify enabled flag was updated
         let config = controller.config.lock();
-        assert!(config.monitored_apps[0].enabled);
+        assert!(config.monitored_apps[0].is_enabled());
         drop(config);
 
         // Verify watch list was updated (app should be added back)
@@ -1130,30 +1165,30 @@ mod tests {
     #[test]
     fn test_update_process_monitor_watch_list() {
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "App 1".to_string(),
             exe_path: PathBuf::from("C:\\test\\app1.exe"),
             process_name: "app1".to_string(),
             enabled: true,
             icon_data: None,
-        });
-        config.monitored_apps.push(MonitoredApp {
+        }));
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "App 2".to_string(),
             exe_path: PathBuf::from("C:\\test\\app2.exe"),
             process_name: "app2".to_string(),
             enabled: false, // Disabled
             icon_data: None,
-        });
-        config.monitored_apps.push(MonitoredApp {
+        }));
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "App 3".to_string(),
             exe_path: PathBuf::from("C:\\test\\app3.exe"),
             process_name: "app3".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -1178,14 +1213,14 @@ mod tests {
     #[test]
     fn test_run_processes_events() {
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -1252,22 +1287,22 @@ mod tests {
     #[test]
     fn test_run_processes_multiple_events() {
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "App 1".to_string(),
             exe_path: PathBuf::from("C:\\test\\app1.exe"),
             process_name: "app1".to_string(),
             enabled: true,
             icon_data: None,
-        });
-        config.monitored_apps.push(MonitoredApp {
+        }));
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "App 2".to_string(),
             exe_path: PathBuf::from("C:\\test\\app2.exe"),
             process_name: "app2".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -1317,14 +1352,14 @@ mod tests {
     fn test_rapid_process_restart_debouncing() {
         // Create a config with one monitored app
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
@@ -1380,14 +1415,14 @@ mod tests {
     fn test_debouncing_does_not_affect_hdr_enable() {
         // Create a config with one monitored app
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: "Test App".to_string(),
             exe_path: PathBuf::from("C:\\test\\app.exe"),
             process_name: "app".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
 
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);

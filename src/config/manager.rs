@@ -3,7 +3,7 @@
 //! This module provides functionality to load and save configuration to
 //! %APPDATA%\EasyHDR\config.json with atomic writes to prevent corruption.
 
-use crate::config::models::AppConfig;
+use crate::config::models::{AppConfig, Win32App};
 use crate::error::{EasyHdrError, Result};
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -277,14 +277,14 @@ mod tests {
 
         // Create a config with data
         let mut config = AppConfig::default();
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
             display_name: "Test Game".to_string(),
             exe_path: PathBuf::from("C:\\Games\\test.exe"),
             process_name: "test".to_string(),
             enabled: true,
             icon_data: None,
-        });
+        }));
         config.preferences.auto_start = true;
         config.preferences.monitoring_interval_ms = 500;
 
@@ -310,12 +310,12 @@ mod tests {
             loaded_config.monitored_apps.len()
         );
         assert_eq!(
-            config.monitored_apps[0].id,
-            loaded_config.monitored_apps[0].id
+            config.monitored_apps[0].id(),
+            loaded_config.monitored_apps[0].id()
         );
         assert_eq!(
-            config.monitored_apps[0].display_name,
-            loaded_config.monitored_apps[0].display_name
+            config.monitored_apps[0].display_name(),
+            loaded_config.monitored_apps[0].display_name()
         );
         assert_eq!(
             config.preferences.auto_start,
@@ -537,22 +537,22 @@ mod tests {
         let mut config = AppConfig::default();
 
         // Add multiple monitored apps
-        config.monitored_apps.push(MonitoredApp {
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
             display_name: "App 1".to_string(),
             exe_path: PathBuf::from("C:\\App1\\app1.exe"),
             process_name: "app1".to_string(),
             enabled: true,
             icon_data: None,
-        });
-        config.monitored_apps.push(MonitoredApp {
+        }));
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(),
             display_name: "App 2".to_string(),
             exe_path: PathBuf::from("D:\\App2\\app2.exe"),
             process_name: "app2".to_string(),
             enabled: false,
             icon_data: None,
-        });
+        }));
 
         // Set all preferences
         config.preferences.auto_start = true;
@@ -575,10 +575,10 @@ mod tests {
 
         // Verify all fields
         assert_eq!(loaded.monitored_apps.len(), 2);
-        assert_eq!(loaded.monitored_apps[0].display_name, "App 1");
-        assert_eq!(loaded.monitored_apps[1].display_name, "App 2");
-        assert!(loaded.monitored_apps[0].enabled);
-        assert!(!loaded.monitored_apps[1].enabled);
+        assert_eq!(loaded.monitored_apps[0].display_name(), "App 1");
+        assert_eq!(loaded.monitored_apps[1].display_name(), "App 2");
+        assert!(loaded.monitored_apps[0].is_enabled());
+        assert!(!loaded.monitored_apps[1].is_enabled());
 
         assert!(loaded.preferences.auto_start);
         assert_eq!(loaded.preferences.monitoring_interval_ms, 1500);
@@ -675,13 +675,15 @@ mod tests {
         /// Strategy for generating valid `MonitoredApp`
         fn monitored_app_strategy() -> impl Strategy<Value = MonitoredApp> {
             ("[a-zA-Z0-9_-]{1,20}", "[a-zA-Z0-9_-]{1,20}", any::<bool>()).prop_map(
-                |(display_name, process_name, enabled)| MonitoredApp {
-                    id: Uuid::new_v4(),
-                    display_name,
-                    exe_path: PathBuf::from(format!("C:\\Program Files\\{process_name}.exe")),
-                    process_name,
-                    enabled,
-                    icon_data: None,
+                |(display_name, process_name, enabled)| {
+                    MonitoredApp::Win32(Win32App {
+                        id: Uuid::new_v4(),
+                        display_name,
+                        exe_path: PathBuf::from(format!("C:\\Program Files\\{process_name}.exe")),
+                        process_name,
+                        enabled,
+                        icon_data: None,
+                    })
                 },
             )
         }
