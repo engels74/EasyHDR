@@ -1,23 +1,32 @@
 //! UWP package enumeration via Windows Runtime APIs
 //!
 //! This module provides enumeration of installed UWP applications using the `WinRT`
-//! `PackageManager` API. It discovers all user-accessible UWP packages and extracts
-//! metadata including display names, package identifiers, and icon paths.
+//! `PackageManager` API. It discovers UWP packages installed for the current user
+//! and extracts metadata including display names, package identifiers, and icon paths.
 //!
 //! # Package Discovery
 //!
 //! The enumeration process:
 //! 1. Create `PackageManager` instance (`WinRT` `Management.Deployment` namespace)
-//! 2. Call `FindPackages()` for the current user
+//! 2. Call `FindPackagesByUserSecurityId("")` to retrieve current user's packages
 //! 3. Iterate through packages and extract metadata:
 //!    - `Package.Id.FamilyName` - Stable identifier
 //!    - `Package.DisplayName` - User-visible name
 //!    - `Package.PublisherDisplayName` - Publisher/vendor
 //!    - `Package.Logo` - Path to icon asset
 //!
+//! # Scope and Permissions
+//!
+//! Only packages installed for the currently logged-in user are enumerated. This includes
+//! Microsoft Store apps and sideloaded applications for the current user, but excludes
+//! packages installed for other users or system-wide protected packages.
+//!
+//! **No administrator privileges are required** for enumeration. Using an empty string
+//! as the user security ID parameter (`""`) retrieves packages for the current user only.
+//!
 //! # Filtering
 //!
-//! System packages and framework packages may be excluded from results to show only
+//! Framework packages and system packages are excluded from results to show only
 //! user-installable applications.
 
 use crate::Result;
@@ -47,12 +56,16 @@ pub struct UwpPackageInfo {
 
 /// Enumerate all installed UWP packages for the current user
 ///
-/// Discovers UWP applications installed via Microsoft Store or sideloading.
-/// System packages and framework packages are typically excluded from results.
+/// Discovers UWP applications installed via Microsoft Store or sideloading for the
+/// currently logged-in user. Packages installed for other users or requiring system-level
+/// access are not included. Framework packages and system packages are filtered from results.
+///
+/// **No administrator privileges are required.** The function uses `FindPackagesByUserSecurityId("")`
+/// which retrieves packages for the current user only.
 ///
 /// # Returns
 ///
-/// Vector of package metadata for all discovered UWP applications
+/// Vector of package metadata for all discovered UWP applications accessible to the current user
 ///
 /// # Errors
 ///
@@ -87,9 +100,11 @@ pub fn enumerate_packages() -> Result<Vec<UwpPackageInfo>> {
     let package_manager =
         PackageManager::new().map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?;
 
-    // FindPackages for current user (API changed in windows 0.62)
+    // FindPackagesByUserSecurityId("") retrieves packages for the current user only
+    // This does not require administrator privileges (unlike FindPackages which
+    // enumerates all users' packages and requires elevation)
     let packages = package_manager
-        .FindPackages()
+        .FindPackagesByUserSecurityId("")
         .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?;
 
     let mut result = Vec::new();
