@@ -621,7 +621,7 @@ impl AppController {
     /// Update `ProcessMonitor` watch list with enabled monitored applications from config
     ///
     /// Filters the config to include only enabled applications (both Win32 and UWP)
-    /// and updates the ProcessMonitor's watch list.
+    /// and updates the `ProcessMonitor`'s watch list.
     fn update_process_monitor_watch_list(&self) {
         use tracing::debug;
 
@@ -1549,7 +1549,7 @@ mod tests {
     // UWP Application Tests
     // ========================================================================================
 
-    /// Helper function to create a test UwpApp
+    /// Helper function to create a test `UwpApp`
     fn create_test_uwp_app(
         package_family_name: &str,
         display_name: &str,
@@ -1566,7 +1566,7 @@ mod tests {
         })
     }
 
-    /// Test that AppController correctly handles UWP application started event.
+    /// Test that `AppController` correctly handles UWP application started event.
     /// Verifies requirement 3.1: UWP app starts and HDR enables.
     #[test]
     fn test_handle_uwp_app_started() {
@@ -1604,7 +1604,7 @@ mod tests {
         assert!(state.hdr_enabled);
     }
 
-    /// Test that AppController correctly handles UWP application stopped event.
+    /// Test that `AppController` correctly handles UWP application stopped event.
     /// Verifies requirement 3.2: Last UWP app stops and HDR disables after debounce.
     #[test]
     fn test_handle_uwp_app_stopped() {
@@ -1652,7 +1652,7 @@ mod tests {
         assert!(!state.hdr_enabled);
     }
 
-    /// Test that AppController handles both Win32 and UWP apps running simultaneously.
+    /// Test that `AppController` handles both Win32 and UWP apps running simultaneously.
     /// Verifies requirement 3.3: Both Win32 and UWP monitored apps running maintains HDR enabled.
     #[test]
     fn test_handle_mixed_win32_and_uwp_apps_simultaneously() {
@@ -1805,7 +1805,7 @@ mod tests {
     }
 
     /// Test that counter-based logic works identically for Win32 and UWP apps.
-    /// Verifies requirement 3.5: AppController uses same counter-based logic for both app types.
+    /// Verifies requirement 3.5: `AppController` uses same counter-based logic for both app types.
     #[test]
     fn test_counter_based_logic_works_for_both_app_types() {
         let mut config = AppConfig::default();
@@ -1883,7 +1883,7 @@ mod tests {
         assert!(!controller.current_hdr_state.load(Ordering::SeqCst));
     }
 
-    /// Test that disabled UWP apps are ignored by the AppController.
+    /// Test that disabled UWP apps are ignored by the `AppController`.
     #[test]
     fn test_disabled_uwp_app_ignored() {
         let mut config = AppConfig::default();

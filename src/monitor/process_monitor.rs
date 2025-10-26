@@ -62,7 +62,7 @@ pub struct ProcessMonitor {
     event_sender: mpsc::SyncSender<ProcessEvent>,
     /// Polling interval
     interval: Duration,
-    /// Previous snapshot of running processes (identified by AppIdentifier)
+    /// Previous snapshot of running processes (identified by `AppIdentifier`)
     #[cfg_attr(not(windows), allow(dead_code))]
     running_processes: HashSet<AppIdentifier>,
     /// Estimated process count for capacity pre-allocation
@@ -298,7 +298,7 @@ impl ProcessMonitor {
         // Find started processes
         for app_id in current.difference(&self.running_processes) {
             // Check if this app identifier is monitored
-            if self.is_monitored(app_id, &watch_list) {
+            if Self::is_monitored(app_id, &watch_list) {
                 info!("Detected process started: {:?}", app_id);
                 if let Err(e) = self
                     .event_sender
@@ -316,7 +316,7 @@ impl ProcessMonitor {
         // Find stopped processes
         for app_id in self.running_processes.difference(&current) {
             // Check if this app identifier is monitored
-            if self.is_monitored(app_id, &watch_list) {
+            if Self::is_monitored(app_id, &watch_list) {
                 info!("Detected process stopped: {:?}", app_id);
                 if let Err(e) = self
                     .event_sender
@@ -340,11 +340,11 @@ impl ProcessMonitor {
 
     /// Check if an app identifier is monitored
     ///
-    /// Pattern matches on the AppIdentifier and checks against the MonitoredApp enum.
-    /// For Win32 apps, matches against Win32App process_name (case-insensitive).
-    /// For UWP apps, matches against UwpApp package_family_name (exact match).
+    /// Pattern matches on the `AppIdentifier` and checks against the `MonitoredApp` enum.
+    /// For Win32 apps, matches against `Win32App` `process_name` (case-insensitive).
+    /// For UWP apps, matches against `UwpApp` `package_family_name` (exact match).
     #[cfg_attr(not(windows), allow(dead_code))]
-    fn is_monitored(&self, app_id: &AppIdentifier, watch_list: &[MonitoredApp]) -> bool {
+    fn is_monitored(app_id: &AppIdentifier, watch_list: &[MonitoredApp]) -> bool {
         match app_id {
             AppIdentifier::Win32(process_name) => {
                 // Match against Win32App process_name (case-insensitive)
@@ -475,12 +475,12 @@ mod tests {
     use std::path::PathBuf;
     use uuid::Uuid;
 
-    /// Helper function to create a test Win32App
+    /// Helper function to create a test `Win32App`
     fn create_test_win32_app(process_name: &str, display_name: &str) -> MonitoredApp {
         MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: display_name.to_string(),
-            exe_path: PathBuf::from(format!("C:\\test\\{}.exe", process_name)),
+            exe_path: PathBuf::from(format!("C:\\test\\{process_name}.exe")),
             process_name: process_name.to_string(),
             enabled: true,
             icon_data: None,
@@ -580,8 +580,8 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Started(AppIdentifier::Win32(name)) => assert_eq!(name, "notepad"),
+            ProcessEvent::Started(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Started event"),
             ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
-            _ => panic!("Expected Win32 Started event"),
         }
 
         // Should not receive event for explorer (not monitored)
@@ -615,8 +615,8 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Stopped(AppIdentifier::Win32(name)) => assert_eq!(name, "notepad"),
+            ProcessEvent::Stopped(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Stopped event"),
             ProcessEvent::Started(_) => panic!("Expected Stopped event, got Started"),
-            _ => panic!("Expected Win32 Stopped event"),
         }
     }
 
@@ -641,8 +641,8 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Started(AppIdentifier::Win32(name)) => assert_eq!(name, "notepad"),
+            ProcessEvent::Started(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Started event"),
             ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
-            _ => panic!("Expected Win32 Started event"),
         }
     }
 
@@ -677,8 +677,8 @@ mod tests {
                 ProcessEvent::Started(AppIdentifier::Win32(name)) => {
                     received.insert(name);
                 }
+                ProcessEvent::Started(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Started event"),
                 ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
-                _ => panic!("Expected Win32 Started event"),
             }
         }
 
@@ -798,10 +798,10 @@ mod tests {
             ProcessEvent::Started(AppIdentifier::Win32(name)) => {
                 assert_eq!(name, "game");
             }
+            ProcessEvent::Started(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Started event"),
             ProcessEvent::Stopped(_) => {
                 panic!("Expected Started event for state transition, got Stopped")
             }
-            _ => panic!("Expected Win32 Started event"),
         }
     }
 
@@ -828,10 +828,10 @@ mod tests {
             ProcessEvent::Stopped(AppIdentifier::Win32(name)) => {
                 assert_eq!(name, "game");
             }
+            ProcessEvent::Stopped(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Stopped event"),
             ProcessEvent::Started(_) => {
                 panic!("Expected Stopped event for state transition, got Started")
             }
-            _ => panic!("Expected Win32 Stopped event"),
         }
     }
 
@@ -920,8 +920,8 @@ mod tests {
         let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
         match event {
             ProcessEvent::Started(AppIdentifier::Win32(name)) => assert_eq!(name, "game"),
+            ProcessEvent::Started(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Started event"),
             ProcessEvent::Stopped(_) => panic!("Expected Started event for game, got Stopped"),
-            _ => panic!("Expected Win32 Started event"),
         }
 
         // No more events should be received

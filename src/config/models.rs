@@ -179,7 +179,7 @@ impl UwpApp {
     /// # Arguments
     ///
     /// * `display_name` - Human-readable name shown in the UI
-    /// * `package_family_name` - Stable package identifier (e.g., "Microsoft.WindowsCalculator_8wekyb3d8bbwe")
+    /// * `package_family_name` - Stable package identifier (e.g., "`Microsoft.WindowsCalculator_8wekyb3d8bbwe`")
     /// * `app_id` - Application ID within the package (typically "App" for main application)
     /// * `logo_path` - Optional path to the package logo file for icon extraction
     ///
@@ -196,14 +196,14 @@ impl UwpApp {
         display_name: String,
         package_family_name: String,
         app_id: String,
-        logo_path: Option<std::path::PathBuf>,
+        logo_path: Option<&std::path::Path>,
     ) -> Self {
         // Extract icon if logo_path is provided
-        let icon_data = if let Some(ref path) = logo_path {
+        let icon_data = if let Some(path) = logo_path {
             #[cfg(windows)]
             {
                 use crate::uwp;
-                match uwp::extract_icon(path) {
+                match uwp::extract_icon(&path) {
                     Ok(data) if !data.is_empty() => {
                         // Record icon in memory profiler
                         use crate::utils::memory_profiler;
@@ -238,7 +238,7 @@ impl UwpApp {
             #[cfg(not(windows))]
             {
                 // On non-Windows platforms, skip icon extraction
-                let _ = path; // Suppress unused variable warning
+                let _ = &path; // Suppress unused variable warning
                 None
             }
         } else {
@@ -322,7 +322,7 @@ impl MonitoredApp {
     }
 }
 
-/// Backward-compatible deserialization for MonitoredApp enum
+/// Backward-compatible deserialization for `MonitoredApp` enum
 ///
 /// Supports both:
 /// - Legacy format: entries without `app_type` field (migrated to Win32)
@@ -373,7 +373,7 @@ impl<'de> Deserialize<'de> for MonitoredApp {
     }
 }
 
-/// Serialize MonitoredApp enum with `app_type` discriminator
+/// Serialize `MonitoredApp` enum with `app_type` discriminator
 impl Serialize for MonitoredApp {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -432,7 +432,7 @@ pub struct AppConfig {
     pub window_state: WindowState,
 }
 
-/// Custom deserializer for AppConfig that handles partial failures in monitored_apps
+/// Custom deserializer for `AppConfig` that handles partial failures in `monitored_apps`
 ///
 /// This implementation satisfies Requirement 5.5: when deserialization fails for an
 /// individual app entry, it logs the error and continues loading other valid entries.
@@ -1105,7 +1105,7 @@ mod tests {
             "Calculator".to_string(),
             "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
             "App".to_string(),
-            Some(temp_file.path().to_path_buf()),
+            Some(temp_file.path()),
         );
 
         assert_eq!(app.display_name, "Calculator");
@@ -1141,7 +1141,7 @@ mod tests {
             "Calculator".to_string(),
             "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
             "App".to_string(),
-            Some(nonexistent_path),
+            Some(&nonexistent_path),
         );
 
         assert_eq!(app.display_name, "Calculator");
@@ -1456,8 +1456,7 @@ mod proptests {
                 let id = Uuid::from_bytes(uuid_bytes);
                 let process_name = filename.to_lowercase();
                 let exe_path = PathBuf::from(format!(
-                    "C:\\Program Files\\{}\\{}.exe",
-                    display_name, filename
+                    "C:\\Program Files\\{display_name}\\{filename}.exe"
                 ));
 
                 Win32App {
@@ -1484,7 +1483,7 @@ mod proptests {
             .prop_map(
                 |(uuid_bytes, display_name, package_name, publisher_id, app_id, enabled)| {
                     let id = Uuid::from_bytes(uuid_bytes);
-                    let package_family_name = format!("{}_{}", package_name, publisher_id);
+                    let package_family_name = format!("{package_name}_{publisher_id}");
 
                     UwpApp {
                         id,
@@ -1633,8 +1632,8 @@ mod proptests {
 
             // Verify variant type is preserved
             match (app, deserialized) {
-                (MonitoredApp::Win32(_), MonitoredApp::Win32(_)) => {},
-                (MonitoredApp::Uwp(_), MonitoredApp::Uwp(_)) => {},
+                (MonitoredApp::Win32(_), MonitoredApp::Win32(_))
+                | (MonitoredApp::Uwp(_), MonitoredApp::Uwp(_)) => {}
                 _ => prop_assert!(false, "Variant type should be preserved"),
             }
         }

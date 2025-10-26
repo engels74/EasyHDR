@@ -15,9 +15,9 @@ use easyhdr::controller::{AppController, AppState};
 use easyhdr::error::Result;
 use easyhdr::utils::UpdateCheckResult;
 use parking_lot::Mutex;
-use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
 #[cfg(windows)]
 use slint::Model;
+use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::TryRecvError;
@@ -460,7 +460,9 @@ impl GuiController {
                     })
                     .collect();
 
-                window.set_uwp_package_list(slint::ModelRc::new(slint::VecModel::from(package_items)));
+                window.set_uwp_package_list(slint::ModelRc::new(slint::VecModel::from(
+                    package_items,
+                )));
                 window.set_uwp_picker_loading(false);
             }
             Err(e) => {
@@ -1215,7 +1217,10 @@ impl GuiController {
     ///
     /// Adds all selected UWP packages to the monitored app list.
     #[cfg(windows)]
-    fn uwp_picker_add_selected(controller: &Arc<Mutex<AppController>>, window: &slint::Weak<MainWindow>) {
+    fn uwp_picker_add_selected(
+        controller: &Arc<Mutex<AppController>>,
+        window: &slint::Weak<MainWindow>,
+    ) {
         use easyhdr::config::models::UwpApp;
         use tracing::{info, warn};
 
@@ -1228,10 +1233,7 @@ impl GuiController {
 
         // Get selected packages
         let package_list = window.get_uwp_package_list();
-        let selected_packages: Vec<_> = package_list
-            .iter()
-            .filter(|pkg| pkg.selected)
-            .collect();
+        let selected_packages: Vec<_> = package_list.iter().filter(|pkg| pkg.selected).collect();
 
         if selected_packages.is_empty() {
             info!("No packages selected");
@@ -1323,7 +1325,10 @@ impl GuiController {
     fn uwp_picker_toggle_selection(window: &slint::Weak<MainWindow>, index: i32, selected: bool) {
         use tracing::debug;
 
-        debug!("UWP picker: Toggling selection for index {} to {}", index, selected);
+        debug!(
+            "UWP picker: Toggling selection for index {} to {}",
+            index, selected
+        );
 
         let Some(window) = window.upgrade() else {
             return;
