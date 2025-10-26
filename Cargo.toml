@@ -69,7 +69,7 @@ winreg = "0.55"
 tray-icon = "0.21"
 rfd = "0.15"  # File dialogs
 tauri-winrt-notification = "0.7"  # Windows toast notifications
-image = { version = "0.25", default-features = false, features = ["ico"] }  # ICO decoding for tray icons
+image = { version = "0.25", default-features = false, features = ["ico", "png"] }  # ICO decoding for tray icons, PNG for UWP app icons
 open = "5.3"  # Open URLs in default browser
 
 [build-dependencies]

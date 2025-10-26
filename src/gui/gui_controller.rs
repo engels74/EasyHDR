@@ -421,16 +421,30 @@ impl GuiController {
                 let package_items: Vec<_> = packages
                     .into_iter()
                     .map(|pkg| {
-                        // Load icon if available
+                        // Load icon if available (returns 32x32 RGBA bytes)
                         let icon_data = if let Some(logo_path) = &pkg.logo_path {
                             uwp::extract_icon(logo_path).ok()
                         } else {
                             None
                         };
 
-                        // Convert icon data to Slint image
+                        // Convert RGBA bytes to Slint image
                         let icon = if let Some(data) = icon_data {
-                            Self::convert_icon_to_slint_image(&data)
+                            // Validate icon data size (32x32 RGBA = 4096 bytes)
+                            if data.len() == 32 * 32 * 4 {
+                                let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+                                    &data, 32, // width
+                                    32, // height
+                                );
+                                slint::Image::from_rgba8(buffer)
+                            } else {
+                                tracing::warn!(
+                                    "Icon data for UWP package '{}' has unexpected size: {} bytes (expected 4096)",
+                                    pkg.display_name,
+                                    data.len()
+                                );
+                                slint::Image::default()
+                            }
                         } else {
                             slint::Image::default()
                         };

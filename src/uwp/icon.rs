@@ -12,10 +12,12 @@
 //!
 //! # Implementation Strategy
 //!
-//! **Phase 1** (current): Simple file-based loading
-//! - Read PNG file directly from package directory
-//! - Return raw image bytes
-//! - Use placeholder icon if file not found
+//! **Phase 1** (current): PNG decoding and conversion to RGBA
+//! - Read PNG file from package directory
+//! - Decode PNG and convert to RGBA8 format
+//! - Resize to 32x32 pixels to match Win32 icon format
+//! - Return raw RGBA bytes (4096 bytes for 32x32 image)
+//! - Use placeholder icon if file not found or decoding fails
 //!
 //! **Phase 2** (future enhancement):
 //! - Parse `.pri` (Package Resource Index) files for optimal icon selection
@@ -30,13 +32,19 @@
 use crate::Result;
 use std::path::Path;
 
+/// Standard icon size for UI display (32x32 pixels)
+const ICON_SIZE: u32 = 32;
+
 /// Extract icon data from a UWP package logo file
 ///
-/// Attempts to load the logo image from the package directory. Returns raw image bytes
-/// (typically PNG format) suitable for display in the UI.
+/// Attempts to load the logo image from the package directory, decode it from PNG format,
+/// and convert it to raw RGBA bytes (32x32 pixels, 4096 bytes total).
 ///
-/// If the logo cannot be found or loaded (e.g., due to permissions), returns placeholder
-/// icon data instead of failing.
+/// This matches the format used by Win32 icon extraction, ensuring consistent handling
+/// in the GUI layer.
+///
+/// If the logo cannot be found, loaded, or decoded (e.g., due to permissions or invalid
+/// format), returns placeholder icon data instead of failing.
 ///
 /// # Arguments
 ///
@@ -44,7 +52,7 @@ use std::path::Path;
 ///
 /// # Returns
 ///
-/// Raw image bytes (PNG format) for the application icon
+/// Raw RGBA bytes (32x32 pixels = 4096 bytes) for the application icon
 ///
 /// # Errors
 ///
@@ -60,30 +68,16 @@ use std::path::Path;
 ///
 /// let logo_path = Path::new(r"C:\Program Files\WindowsApps\...\Assets\Square44x44Logo.png");
 /// let icon_data = easyhdr::uwp::extract_icon(logo_path)?;
-/// println!("Loaded {} bytes of icon data", icon_data.len());
+/// assert_eq!(icon_data.len(), 32 * 32 * 4); // 4096 bytes (RGBA)
 /// # Ok(())
 /// # }
 /// ```
-/// Minimal valid 1x1 transparent PNG file (67 bytes)
-///
-/// Used as fallback when UWP package icons cannot be loaded.
-/// This is a valid PNG image that can be displayed in the UI.
-const PLACEHOLDER_ICON: &[u8] = &[
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
-    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1 dimensions
-    0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, // RGBA color type
-    0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, // IDAT chunk
-    0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, // Compressed data
-    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, // CRC
-    0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, // IEND chunk
-    0x42, 0x60, 0x82, // PNG end marker
-];
 
 #[cfg(windows)]
 pub fn extract_icon(logo_path: &Path) -> Result<Vec<u8>> {
     use crate::EasyHdrError;
-    use std::fs;
+    use image::ImageReader;
+    use std::io::Cursor;
     use tracing::{debug, warn};
 
     // Check if the logo path exists
@@ -92,23 +86,64 @@ pub fn extract_icon(logo_path: &Path) -> Result<Vec<u8>> {
             "Logo file not found at '{}', using placeholder icon",
             logo_path.display()
         );
-        return Ok(PLACEHOLDER_ICON.to_vec());
+        return Ok(create_placeholder_rgba());
     }
 
-    // Attempt to read the icon file
-    match fs::read(logo_path) {
-        Ok(data) => {
-            debug!(
-                "Successfully loaded icon from '{}' ({} bytes)",
-                logo_path.display(),
-                data.len()
-            );
-            Ok(data)
+    // Attempt to read and decode the icon file
+    match ImageReader::open(logo_path) {
+        Ok(reader) => {
+            match reader.decode() {
+                Ok(img) => {
+                    // Convert to RGBA8 format
+                    let rgba_img = img.to_rgba8();
+                    let (width, height) = rgba_img.dimensions();
+
+                    debug!(
+                        "Successfully decoded icon from '{}' ({}x{} pixels)",
+                        logo_path.display(),
+                        width,
+                        height
+                    );
+
+                    // Resize to standard icon size if needed
+                    let rgba_data = if width != ICON_SIZE || height != ICON_SIZE {
+                        debug!(
+                            "Resizing icon from {}x{} to {}x{}",
+                            width, height, ICON_SIZE, ICON_SIZE
+                        );
+                        let resized = image::imageops::resize(
+                            &rgba_img,
+                            ICON_SIZE,
+                            ICON_SIZE,
+                            image::imageops::FilterType::Lanczos3,
+                        );
+                        resized.into_raw()
+                    } else {
+                        rgba_img.into_raw()
+                    };
+
+                    debug!(
+                        "Icon converted to RGBA: {} bytes (expected {})",
+                        rgba_data.len(),
+                        ICON_SIZE * ICON_SIZE * 4
+                    );
+
+                    Ok(rgba_data)
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to decode icon from '{}': {}. Using placeholder icon.",
+                        logo_path.display(),
+                        e
+                    );
+                    Ok(create_placeholder_rgba())
+                }
+            }
         }
         Err(e) => {
             // Log the error but return placeholder instead of failing
             warn!(
-                "Failed to read icon from '{}': {}. Using placeholder icon.",
+                "Failed to open icon file '{}': {}. Using placeholder icon.",
                 logo_path.display(),
                 e
             );
@@ -116,12 +151,12 @@ pub fn extract_icon(logo_path: &Path) -> Result<Vec<u8>> {
             // For logging purposes, we could create an error but we don't return it
             // since the requirement is to gracefully handle failures with placeholder
             let _error = EasyHdrError::UwpIconExtractionError(format!(
-                "Failed to read icon from '{}': {}",
+                "Failed to open icon from '{}': {}",
                 logo_path.display(),
                 e
             ));
 
-            Ok(PLACEHOLDER_ICON.to_vec())
+            Ok(create_placeholder_rgba())
         }
     }
 }
@@ -129,7 +164,39 @@ pub fn extract_icon(logo_path: &Path) -> Result<Vec<u8>> {
 #[cfg(not(windows))]
 pub fn extract_icon(_logo_path: &Path) -> Result<Vec<u8>> {
     // Non-Windows platforms always use placeholder
-    Ok(PLACEHOLDER_ICON.to_vec())
+    Ok(create_placeholder_rgba())
+}
+
+/// Create a placeholder icon as RGBA bytes (32x32 pixels, 4096 bytes)
+///
+/// Returns a simple gray square with a border, matching the format used by
+/// Win32 icon extraction.
+fn create_placeholder_rgba() -> Vec<u8> {
+    let size = (ICON_SIZE * ICON_SIZE * 4) as usize;
+    let mut icon = vec![0u8; size];
+
+    // Create a simple gray square with a border
+    for y in 0..ICON_SIZE {
+        for x in 0..ICON_SIZE {
+            let idx = ((y * ICON_SIZE + x) * 4) as usize;
+
+            // Border pixels (darker gray)
+            if x == 0 || x == ICON_SIZE - 1 || y == 0 || y == ICON_SIZE - 1 {
+                icon[idx] = 64; // R
+                icon[idx + 1] = 64; // G
+                icon[idx + 2] = 64; // B
+                icon[idx + 3] = 255; // A
+            } else {
+                // Interior pixels (lighter gray)
+                icon[idx] = 128; // R
+                icon[idx + 1] = 128; // G
+                icon[idx + 2] = 128; // B
+                icon[idx + 3] = 255; // A
+            }
+        }
+    }
+
+    icon
 }
 
 #[cfg(test)]
@@ -139,21 +206,20 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[test]
-    fn test_placeholder_icon_is_valid_png() {
-        // Verify placeholder starts with PNG signature
-        assert_eq!(
-            &PLACEHOLDER_ICON[0..8],
-            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-        );
+    fn test_placeholder_icon_is_valid_rgba() {
+        let placeholder = create_placeholder_rgba();
 
-        // Verify placeholder ends with IEND chunk
-        assert_eq!(
-            &PLACEHOLDER_ICON[PLACEHOLDER_ICON.len() - 4..],
-            &[0xAE, 0x42, 0x60, 0x82]
-        );
+        // Verify size (32x32 RGBA = 4096 bytes)
+        assert_eq!(placeholder.len(), (ICON_SIZE * ICON_SIZE * 4) as usize);
+        assert_eq!(placeholder.len(), 4096);
 
-        // Verify minimum PNG size
-        assert!(PLACEHOLDER_ICON.len() >= 67);
+        // Verify it's not all zeros
+        assert!(placeholder.iter().any(|&b| b != 0));
+
+        // Verify alpha channel is fully opaque (255) for all pixels
+        for i in (0..placeholder.len()).step_by(4) {
+            assert_eq!(placeholder[i + 3], 255, "Alpha channel should be 255");
+        }
     }
 
     #[test]
@@ -163,23 +229,35 @@ mod tests {
         // Should succeed with placeholder icon
         assert!(result.is_ok());
         let data = result.unwrap();
-        assert_eq!(data, PLACEHOLDER_ICON);
+        assert_eq!(data.len(), 4096); // 32x32 RGBA
+        assert_eq!(data, create_placeholder_rgba());
     }
 
     #[test]
-    fn test_extract_icon_valid_file() {
-        // Create a temporary PNG file with test data
+    fn test_extract_icon_valid_png() {
+        // Create a minimal valid 1x1 PNG file
         let mut temp_file = NamedTempFile::new().unwrap();
-        let test_data = b"fake png data for testing";
-        temp_file.write_all(test_data).unwrap();
+        let png_data = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1 dimensions
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, // RGBA color type
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, // IDAT chunk
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, // Compressed data
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, // CRC
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, // IEND chunk
+            0x42, 0x60, 0x82, // PNG end marker
+        ];
+        temp_file.write_all(png_data).unwrap();
         temp_file.flush().unwrap();
 
         let result = extract_icon(temp_file.path());
 
-        // Should succeed with the actual file data
+        // Should succeed and return RGBA data
         assert!(result.is_ok());
         let data = result.unwrap();
-        assert_eq!(data, test_data);
+        // Should be resized to 32x32 RGBA
+        assert_eq!(data.len(), 4096);
     }
 
     #[cfg(windows)]
@@ -194,19 +272,46 @@ mod tests {
         // Should succeed with placeholder icon rather than failing
         assert!(result.is_ok());
         let data = result.unwrap();
-        assert_eq!(data, PLACEHOLDER_ICON);
+        assert_eq!(data.len(), 4096);
+        assert_eq!(data, create_placeholder_rgba());
     }
 
     #[test]
-    fn test_extract_icon_empty_file() {
-        // Create an empty temporary file
-        let temp_file = NamedTempFile::new().unwrap();
+    fn test_extract_icon_invalid_png() {
+        // Create a file with invalid PNG data
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(b"not a valid PNG file").unwrap();
+        temp_file.flush().unwrap();
 
         let result = extract_icon(temp_file.path());
 
-        // Should succeed with the empty file (valid case - just 0 bytes)
+        // Should succeed with placeholder icon (graceful degradation)
         assert!(result.is_ok());
         let data = result.unwrap();
-        assert_eq!(data.len(), 0);
+        assert_eq!(data.len(), 4096);
+        assert_eq!(data, create_placeholder_rgba());
+    }
+
+    #[test]
+    fn test_create_placeholder_rgba_format() {
+        let placeholder = create_placeholder_rgba();
+
+        // Check size
+        assert_eq!(placeholder.len(), 4096);
+
+        // Check that border pixels are darker (64, 64, 64, 255)
+        // Top-left corner
+        assert_eq!(placeholder[0], 64); // R
+        assert_eq!(placeholder[1], 64); // G
+        assert_eq!(placeholder[2], 64); // B
+        assert_eq!(placeholder[3], 255); // A
+
+        // Check that interior pixels are lighter (128, 128, 128, 255)
+        // Pixel at (1, 1) - second row, second column
+        let idx = ((1 * ICON_SIZE + 1) * 4) as usize;
+        assert_eq!(placeholder[idx], 128); // R
+        assert_eq!(placeholder[idx + 1], 128); // G
+        assert_eq!(placeholder[idx + 2], 128); // B
+        assert_eq!(placeholder[idx + 3], 255); // A
     }
 }
