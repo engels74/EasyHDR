@@ -850,10 +850,10 @@ mod tests {
         // TempDir and AppdataGuard automatically clean up when dropped
     }
 
-    /// Test ConfigManager save/load with mixed Win32 and UWP apps
+    /// Test `ConfigManager` save/load with mixed Win32 and UWP apps
     ///
     /// Verifies Requirement 1.3: Store UWP application entries in configuration file
-    /// Verifies Requirement 5.2: Include app_type field for all monitored applications
+    /// Verifies Requirement 5.2: Include `app_type` field for all monitored applications
     /// Verifies Requirement 5.4: Successfully deserialize mixed Win32 and UWP entries
     #[test]
     fn test_save_and_load_mixed_win32_and_uwp_apps() {
@@ -961,7 +961,7 @@ mod tests {
         // TempDir and AppdataGuard automatically clean up when dropped
     }
 
-    /// Test ConfigManager load with legacy config format (automatic migration)
+    /// Test `ConfigManager` load with legacy config format (automatic migration)
     ///
     /// Verifies Requirement 5.1: Deserialize legacy entries as Win32 applications
     /// Verifies Requirement 5.3: Preserve all existing fields for migrated Win32 apps
@@ -1072,10 +1072,10 @@ mod tests {
         // TempDir and AppdataGuard automatically clean up when dropped
     }
 
-    /// Test that atomic write mechanism works correctly with MonitoredApp enum
+    /// Test that atomic write mechanism works correctly with `MonitoredApp` enum
     ///
     /// Verifies that the temp file -> rename atomic write pattern still functions
-    /// correctly with the new MonitoredApp enum structure.
+    /// correctly with the new `MonitoredApp` enum structure.
     #[test]
     fn test_atomic_write_with_monitored_app_enum() {
         use crate::config::models::UwpApp;

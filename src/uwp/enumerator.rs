@@ -8,7 +8,7 @@
 //!
 //! The enumeration process:
 //! 1. Create `PackageManager` instance (WinRT `Management.Deployment` namespace)
-//! 2. Call `FindPackagesForUser()` for the current user
+//! 2. Call `FindPackages()` for the current user
 //! 3. Iterate through packages and extract metadata:
 //!    - `Package.Id.FamilyName` - Stable identifier
 //!    - `Package.DisplayName` - User-visible name
@@ -82,15 +82,14 @@ pub struct UwpPackageInfo {
 pub fn enumerate_packages() -> Result<Vec<UwpPackageInfo>> {
     use crate::EasyHdrError;
     use windows::Management::Deployment::PackageManager;
-    use windows::core::HSTRING;
 
     // Create PackageManager instance
     let package_manager =
         PackageManager::new().map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?;
 
-    // FindPackagesForUser with empty string for current user
+    // FindPackages for current user (API changed in windows 0.62)
     let packages = package_manager
-        .FindPackagesForUser(&HSTRING::new())
+        .FindPackages()
         .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?;
 
     let mut result = Vec::new();
@@ -102,12 +101,10 @@ pub fn enumerate_packages() -> Result<Vec<UwpPackageInfo>> {
             Ok(Some(info)) => result.push(info),
             Ok(None) => {
                 // Package was filtered (framework or system package)
-                continue;
             }
             Err(e) => {
                 // Log error but continue processing other packages
                 tracing::warn!("Failed to extract package info: {}", e);
-                continue;
             }
         }
     }

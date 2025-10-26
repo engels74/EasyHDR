@@ -90,8 +90,9 @@ pub unsafe fn detect_uwp_process(
     let result = unsafe { GetPackageFullName(h_process, &mut length, None) };
 
     // APPMODEL_ERROR_NO_PACKAGE (15700) means this is a Win32 app, not a UWP app
-    const APPMODEL_ERROR_NO_PACKAGE: i32 = 15700;
-    const ERROR_INSUFFICIENT_BUFFER: i32 = 122;
+    use windows::Win32::Foundation::WIN32_ERROR;
+    const APPMODEL_ERROR_NO_PACKAGE: WIN32_ERROR = WIN32_ERROR(15700);
+    const ERROR_INSUFFICIENT_BUFFER: WIN32_ERROR = WIN32_ERROR(122);
 
     if result == APPMODEL_ERROR_NO_PACKAGE {
         // This is a Win32 application, not a UWP app
@@ -102,7 +103,7 @@ pub unsafe fn detect_uwp_process(
         // Unexpected error
         return Err(crate::EasyHdrError::UwpProcessDetectionError(
             crate::error::StringError::new(format!(
-                "GetPackageFullName failed with error code {result}"
+                "GetPackageFullName failed with error code {result:?}"
             )),
         ));
     }
@@ -112,13 +113,15 @@ pub unsafe fn detect_uwp_process(
     let mut buffer = vec![0u16; length as usize];
 
     // Second call to retrieve the actual package full name
-    let result = unsafe { GetPackageFullName(h_process, &mut length, Some(buffer.as_mut_ptr())) };
+    use windows::core::PWSTR;
+    let result =
+        unsafe { GetPackageFullName(h_process, &mut length, Some(PWSTR(buffer.as_mut_ptr()))) };
 
-    if result != 0 {
+    if result != WIN32_ERROR(0) {
         // ERROR_SUCCESS is 0
         return Err(crate::EasyHdrError::UwpProcessDetectionError(
             crate::error::StringError::new(format!(
-                "GetPackageFullName (second call) failed with error code {result}"
+                "GetPackageFullName (second call) failed with error code {result:?}"
             )),
         ));
     }

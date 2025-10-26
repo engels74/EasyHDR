@@ -72,12 +72,10 @@ const ICON_SIZE: u32 = 32;
 /// # Ok(())
 /// # }
 /// ```
-
 #[cfg(windows)]
 pub fn extract_icon(logo_path: &Path) -> Result<Vec<u8>> {
     use crate::EasyHdrError;
     use image::ImageReader;
-    use std::io::Cursor;
     use tracing::{debug, warn};
 
     // Check if the logo path exists
