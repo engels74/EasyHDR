@@ -677,7 +677,9 @@ mod tests {
                 ProcessEvent::Started(AppIdentifier::Win32(name)) => {
                     received.insert(name);
                 }
-                ProcessEvent::Started(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Started event"),
+                ProcessEvent::Started(AppIdentifier::Uwp(_)) => {
+                    panic!("Expected Win32 Started event")
+                }
                 ProcessEvent::Stopped(_) => panic!("Expected Started event, got Stopped"),
             }
         }

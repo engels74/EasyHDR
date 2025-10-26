@@ -1455,9 +1455,8 @@ mod proptests {
             .prop_map(|(uuid_bytes, display_name, filename, enabled)| {
                 let id = Uuid::from_bytes(uuid_bytes);
                 let process_name = filename.to_lowercase();
-                let exe_path = PathBuf::from(format!(
-                    "C:\\Program Files\\{display_name}\\{filename}.exe"
-                ));
+                let exe_path =
+                    PathBuf::from(format!("C:\\Program Files\\{display_name}\\{filename}.exe"));
 
                 Win32App {
                     id,
