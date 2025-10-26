@@ -101,16 +101,20 @@ fn bench_uwp_detection_on_real_processes(c: &mut Criterion) {
 
     // Collect a sample of process IDs (up to 50 for faster benchmarking)
     let mut process_ids = Vec::new();
-    let mut entry = PROCESSENTRY32W::default();
-    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>()
+            .try_into()
+            .expect("PROCESSENTRY32W size fits in u32"),
+        ..Default::default()
+    };
 
-    if unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok() {
+    if unsafe { Process32FirstW(snapshot, &raw mut entry) }.is_ok() {
         loop {
             process_ids.push(entry.th32ProcessID);
             if process_ids.len() >= 50 {
                 break;
             }
-            if unsafe { Process32NextW(snapshot, &mut entry) }.is_err() {
+            if unsafe { Process32NextW(snapshot, &raw mut entry) }.is_err() {
                 break;
             }
         }
@@ -165,17 +169,21 @@ fn bench_polling_cycle_comparison(c: &mut Criterion) {
     let snapshot = snapshot.unwrap();
 
     let mut process_ids = Vec::new();
-    let mut entry = PROCESSENTRY32W::default();
-    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>()
+            .try_into()
+            .expect("PROCESSENTRY32W size fits in u32"),
+        ..Default::default()
+    };
 
-    if unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok() {
+    if unsafe { Process32FirstW(snapshot, &raw mut entry) }.is_ok() {
         loop {
             process_ids.push(entry.th32ProcessID);
             if process_ids.len() >= 200 {
                 // Simulate typical system with 200 processes
                 break;
             }
-            if unsafe { Process32NextW(snapshot, &mut entry) }.is_err() {
+            if unsafe { Process32NextW(snapshot, &raw mut entry) }.is_err() {
                 break;
             }
         }
@@ -191,12 +199,11 @@ fn bench_polling_cycle_comparison(c: &mut Criterion) {
         b.iter(|| {
             let mut count = 0;
             for &pid in black_box(&process_ids) {
-                if let Ok(handle) =
+                if let Ok(_handle) =
                     unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }
                 {
                     count += 1;
                     // Handle is automatically closed when it goes out of scope
-                    drop(handle);
                 }
             }
             black_box(count)
@@ -246,13 +253,17 @@ fn bench_uwp_detection_scaling(c: &mut Criterion) {
     let snapshot = snapshot.unwrap();
 
     let mut all_process_ids = Vec::new();
-    let mut entry = PROCESSENTRY32W::default();
-    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>()
+            .try_into()
+            .expect("PROCESSENTRY32W size fits in u32"),
+        ..Default::default()
+    };
 
-    if unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok() {
+    if unsafe { Process32FirstW(snapshot, &raw mut entry) }.is_ok() {
         loop {
             all_process_ids.push(entry.th32ProcessID);
-            if unsafe { Process32NextW(snapshot, &mut entry) }.is_err() {
+            if unsafe { Process32NextW(snapshot, &raw mut entry) }.is_err() {
                 break;
             }
         }
@@ -266,11 +277,11 @@ fn bench_uwp_detection_scaling(c: &mut Criterion) {
     let mut group = c.benchmark_group("uwp_detection_scaling");
 
     // Test at different scales
-    for count in [50, 100, 150, 200, 250].iter() {
+    for count in &[50, 100, 150, 200, 250] {
         let process_sample: Vec<_> = all_process_ids.iter().take(*count).copied().collect();
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}_processes", count)),
+            BenchmarkId::from_parameter(format!("{count}_processes")),
             &process_sample,
             |b, pids| {
                 b.iter(|| {
