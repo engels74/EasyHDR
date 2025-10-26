@@ -468,8 +468,7 @@ impl GuiController {
             Err(e) => {
                 warn!("Failed to enumerate UWP packages: {}", e);
                 window.set_uwp_picker_error(slint::SharedString::from(format!(
-                    "Failed to load UWP applications: {}",
-                    e
+                    "Failed to load UWP applications: {e}"
                 )));
                 window.set_uwp_picker_loading(false);
             }
@@ -1334,10 +1333,15 @@ impl GuiController {
             return;
         };
 
+        // Convert index to usize safely
+        let Ok(index_usize) = usize::try_from(index) else {
+            return;
+        };
+
         let package_list = window.get_uwp_package_list();
-        if let Some(mut pkg) = package_list.row_data(index as usize) {
+        if let Some(mut pkg) = package_list.row_data(index_usize) {
             pkg.selected = selected;
-            package_list.set_row_data(index as usize, pkg);
+            package_list.set_row_data(index_usize, pkg);
         }
     }
 
