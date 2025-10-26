@@ -414,8 +414,15 @@ impl GuiController {
 
         // Enumerate packages (blocking operation)
         match uwp::enumerate_packages() {
-            Ok(packages) => {
+            Ok(mut packages) => {
                 info!("Successfully enumerated {} UWP packages", packages.len());
+
+                // Sort packages alphabetically by display name (case-insensitive)
+                packages.sort_by(|a, b| {
+                    a.display_name
+                        .to_lowercase()
+                        .cmp(&b.display_name.to_lowercase())
+                });
 
                 // Convert to Slint model
                 let package_items: Vec<_> = packages
