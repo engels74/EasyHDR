@@ -33,20 +33,20 @@ use std::time::Duration;
 #[cfg(windows)]
 use uuid::Uuid;
 
-/// Helper function to create a test Win32App
+/// Helper function to create a test `Win32App`
 #[cfg(windows)]
 fn create_test_win32_app(process_name: &str, display_name: &str) -> MonitoredApp {
     MonitoredApp::Win32(Win32App {
         id: Uuid::new_v4(),
         display_name: display_name.to_string(),
-        exe_path: PathBuf::from(format!("C:\\Windows\\{}.exe", process_name)),
+        exe_path: PathBuf::from(format!("C:\\Windows\\{process_name}.exe")),
         process_name: process_name.to_lowercase(),
         enabled: true,
         icon_data: None,
     })
 }
 
-/// Helper function to create a test UwpApp
+/// Helper function to create a test `UwpApp`
 #[cfg(windows)]
 fn create_test_uwp_app(
     package_family_name: &str,
@@ -112,7 +112,10 @@ fn test_uwp_app_detection_calculator_started() {
         }
     }
 
-    if !calculator_already_running {
+    if calculator_already_running {
+        // Calculator was already running, which also satisfies the test
+        tracing::info!("Test passed: Calculator was already detected as running");
+    } else {
         // Launch Calculator using PowerShell
         // This is more reliable than trying to find the executable path
         tracing::info!("Attempting to launch Calculator...");
@@ -167,13 +170,9 @@ fn test_uwp_app_detection_calculator_started() {
                         "Cannot launch Calculator ({e}). Skipping test. \
                          This is expected on non-Windows or restricted environments."
                     );
-                    return;
                 }
             }
         }
-    } else {
-        // Calculator was already running, which also satisfies the test
-        tracing::info!("Test passed: Calculator was already detected as running");
     }
 }
 
@@ -186,7 +185,7 @@ fn test_uwp_app_detection_calculator_started() {
 /// **Requirements Tested**: 2.1, 2.2, 2.3, 2.5
 #[test]
 #[cfg(windows)]
-#[ignore] // Ignored by default as it requires Calculator to be running and then closed
+#[ignore = "Requires Calculator to be running and then closed"]
 fn test_uwp_app_detection_calculator_stopped() {
     use tracing_subscriber;
 

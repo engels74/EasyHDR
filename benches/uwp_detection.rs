@@ -18,8 +18,6 @@ use std::hint::black_box;
 use easyhdr::uwp::extract_package_family_name;
 
 #[cfg(windows)]
-use windows::Win32::Foundation::HANDLE;
-#[cfg(windows)]
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
@@ -86,9 +84,10 @@ fn bench_extract_package_family_name_complexity(c: &mut Criterion) {
 
 /// Benchmark UWP detection overhead on real processes
 ///
-/// This benchmark measures the overhead of calling detect_uwp_process on actual
+/// This benchmark measures the overhead of calling `detect_uwp_process` on actual
 /// running processes. It validates Requirement 2.6 and 7.3.
 #[cfg(windows)]
+#[allow(unsafe_code)]
 fn bench_uwp_detection_on_real_processes(c: &mut Criterion) {
     use easyhdr::uwp::detect_uwp_process;
 
@@ -151,6 +150,7 @@ fn bench_uwp_detection_on_real_processes(c: &mut Criterion) {
 /// This benchmark compares the performance of Win32-only process detection
 /// against Win32+UWP detection to validate Requirement 2.6 (<2ms overhead).
 #[cfg(windows)]
+#[allow(unsafe_code)]
 fn bench_polling_cycle_comparison(c: &mut Criterion) {
     use easyhdr::uwp::detect_uwp_process;
 
@@ -233,6 +233,7 @@ fn bench_polling_cycle_comparison(c: &mut Criterion) {
 /// This benchmark measures detection performance at different scales to validate
 /// Requirement 7.3 (150-250 processes within 1.25ms).
 #[cfg(windows)]
+#[allow(unsafe_code)]
 fn bench_uwp_detection_scaling(c: &mut Criterion) {
     use easyhdr::uwp::detect_uwp_process;
 
