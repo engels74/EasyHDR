@@ -849,4 +849,282 @@ mod tests {
 
         // TempDir and AppdataGuard automatically clean up when dropped
     }
+
+    /// Test ConfigManager save/load with mixed Win32 and UWP apps
+    ///
+    /// Verifies Requirement 1.3: Store UWP application entries in configuration file
+    /// Verifies Requirement 5.2: Include app_type field for all monitored applications
+    /// Verifies Requirement 5.4: Successfully deserialize mixed Win32 and UWP entries
+    #[test]
+    fn test_save_and_load_mixed_win32_and_uwp_apps() {
+        use crate::config::models::UwpApp;
+
+        let test_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&test_dir);
+
+        // Create config with mixed Win32 and UWP apps
+        let mut config = AppConfig::default();
+
+        // Add Win32 app
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
+            id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
+            display_name: "Cyberpunk 2077".to_string(),
+            exe_path: PathBuf::from("C:\\Games\\Cyberpunk 2077\\bin\\x64\\Cyberpunk2077.exe"),
+            process_name: "cyberpunk2077".to_string(),
+            enabled: true,
+            icon_data: None,
+        }));
+
+        // Add UWP app
+        config.monitored_apps.push(MonitoredApp::Uwp(UwpApp {
+            id: Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(),
+            display_name: "Calculator".to_string(),
+            package_family_name: "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+            app_id: "App".to_string(),
+            enabled: true,
+            icon_data: None,
+        }));
+
+        // Add another Win32 app
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
+            id: Uuid::parse_str("7c9e6679-7425-40de-944b-e07fc1f90ae7").unwrap(),
+            display_name: "Red Dead Redemption 2".to_string(),
+            exe_path: PathBuf::from("D:\\Games\\RDR2\\RDR2.exe"),
+            process_name: "rdr2".to_string(),
+            enabled: false,
+            icon_data: None,
+        }));
+
+        config.preferences.auto_start = true;
+        config.preferences.monitoring_interval_ms = 500;
+
+        // Save config
+        let result = ConfigManager::save(&config);
+        assert!(result.is_ok(), "Save should succeed with mixed app types");
+
+        // Verify the saved JSON contains app_type fields
+        let config_path = ConfigManager::get_config_path();
+        let saved_json = fs::read_to_string(&config_path).unwrap();
+        assert!(
+            saved_json.contains("\"app_type\": \"win32\""),
+            "Saved JSON should contain Win32 app_type"
+        );
+        assert!(
+            saved_json.contains("\"app_type\": \"uwp\""),
+            "Saved JSON should contain UWP app_type"
+        );
+
+        // Load config back
+        let loaded_config = ConfigManager::load().unwrap();
+
+        // Verify all apps were loaded correctly
+        assert_eq!(
+            loaded_config.monitored_apps.len(),
+            3,
+            "Should load all 3 apps"
+        );
+
+        // Verify first app (Win32)
+        assert!(matches!(
+            loaded_config.monitored_apps[0],
+            MonitoredApp::Win32(_)
+        ));
+        assert_eq!(
+            loaded_config.monitored_apps[0].display_name(),
+            "Cyberpunk 2077"
+        );
+        assert!(loaded_config.monitored_apps[0].is_enabled());
+
+        // Verify second app (UWP)
+        assert!(matches!(
+            loaded_config.monitored_apps[1],
+            MonitoredApp::Uwp(_)
+        ));
+        assert_eq!(loaded_config.monitored_apps[1].display_name(), "Calculator");
+        assert!(loaded_config.monitored_apps[1].is_enabled());
+
+        // Verify third app (Win32)
+        assert!(matches!(
+            loaded_config.monitored_apps[2],
+            MonitoredApp::Win32(_)
+        ));
+        assert_eq!(
+            loaded_config.monitored_apps[2].display_name(),
+            "Red Dead Redemption 2"
+        );
+        assert!(!loaded_config.monitored_apps[2].is_enabled());
+
+        // Verify preferences were preserved
+        assert!(loaded_config.preferences.auto_start);
+        assert_eq!(loaded_config.preferences.monitoring_interval_ms, 500);
+
+        // TempDir and AppdataGuard automatically clean up when dropped
+    }
+
+    /// Test ConfigManager load with legacy config format (automatic migration)
+    ///
+    /// Verifies Requirement 5.1: Deserialize legacy entries as Win32 applications
+    /// Verifies Requirement 5.3: Preserve all existing fields for migrated Win32 apps
+    #[test]
+    fn test_load_legacy_config_automatic_migration() {
+        let test_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&test_dir);
+
+        // Create config directory
+        let config_dir = test_dir.path().join("EasyHDR");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        // Write legacy config format (without app_type field)
+        let legacy_json = r#"{
+            "monitored_apps": [
+                {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "display_name": "Legacy Game",
+                    "exe_path": "C:\\Games\\Legacy\\game.exe",
+                    "process_name": "game",
+                    "enabled": true
+                },
+                {
+                    "id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                    "display_name": "Another Legacy App",
+                    "exe_path": "D:\\Apps\\app.exe",
+                    "process_name": "app",
+                    "enabled": false
+                }
+            ],
+            "preferences": {
+                "auto_start": true,
+                "monitoring_interval_ms": 1500,
+                "show_tray_notifications": false,
+                "show_update_notifications": true,
+                "minimize_to_tray_on_minimize": true,
+                "minimize_to_tray_on_close": false,
+                "start_minimized_to_tray": false,
+                "last_update_check_time": 0,
+                "cached_latest_version": ""
+            },
+            "window_state": {
+                "x": 200,
+                "y": 150,
+                "width": 800,
+                "height": 600
+            }
+        }"#;
+
+        let config_path = config_dir.join("config.json");
+        fs::write(&config_path, legacy_json).unwrap();
+
+        // Load config - should automatically migrate legacy format
+        let loaded_config = ConfigManager::load().unwrap();
+
+        // Verify both apps were loaded and migrated to Win32 variant
+        assert_eq!(
+            loaded_config.monitored_apps.len(),
+            2,
+            "Should load both legacy apps"
+        );
+
+        // Verify first app
+        assert!(
+            matches!(loaded_config.monitored_apps[0], MonitoredApp::Win32(_)),
+            "Legacy app should be migrated to Win32 variant"
+        );
+        assert_eq!(
+            loaded_config.monitored_apps[0].id(),
+            &Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap()
+        );
+        assert_eq!(
+            loaded_config.monitored_apps[0].display_name(),
+            "Legacy Game"
+        );
+        assert!(loaded_config.monitored_apps[0].is_enabled());
+
+        // Verify all fields were preserved for first app
+        if let MonitoredApp::Win32(app) = &loaded_config.monitored_apps[0] {
+            assert_eq!(app.exe_path, PathBuf::from("C:\\Games\\Legacy\\game.exe"));
+            assert_eq!(app.process_name, "game");
+        } else {
+            panic!("Expected Win32 variant");
+        }
+
+        // Verify second app
+        assert!(
+            matches!(loaded_config.monitored_apps[1], MonitoredApp::Win32(_)),
+            "Legacy app should be migrated to Win32 variant"
+        );
+        assert_eq!(
+            loaded_config.monitored_apps[1].display_name(),
+            "Another Legacy App"
+        );
+        assert!(!loaded_config.monitored_apps[1].is_enabled());
+
+        // Verify preferences were preserved
+        assert!(loaded_config.preferences.auto_start);
+        assert_eq!(loaded_config.preferences.monitoring_interval_ms, 1500);
+        assert!(!loaded_config.preferences.show_tray_notifications);
+
+        // Verify window state was preserved
+        assert_eq!(loaded_config.window_state.x, 200);
+        assert_eq!(loaded_config.window_state.y, 150);
+        assert_eq!(loaded_config.window_state.width, 800);
+        assert_eq!(loaded_config.window_state.height, 600);
+
+        // TempDir and AppdataGuard automatically clean up when dropped
+    }
+
+    /// Test that atomic write mechanism works correctly with MonitoredApp enum
+    ///
+    /// Verifies that the temp file -> rename atomic write pattern still functions
+    /// correctly with the new MonitoredApp enum structure.
+    #[test]
+    fn test_atomic_write_with_monitored_app_enum() {
+        use crate::config::models::UwpApp;
+
+        let test_dir = create_test_dir();
+        let _guard = AppdataGuard::new(&test_dir);
+
+        // Create config with both Win32 and UWP apps
+        let mut config = AppConfig::default();
+        config.monitored_apps.push(MonitoredApp::Win32(Win32App {
+            id: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap(),
+            display_name: "Test Game".to_string(),
+            exe_path: PathBuf::from("C:\\Games\\test.exe"),
+            process_name: "test".to_string(),
+            enabled: true,
+            icon_data: None,
+        }));
+        config.monitored_apps.push(MonitoredApp::Uwp(UwpApp {
+            id: Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap(),
+            display_name: "Calculator".to_string(),
+            package_family_name: "Microsoft.WindowsCalculator_8wekyb3d8bbwe".to_string(),
+            app_id: "App".to_string(),
+            enabled: true,
+            icon_data: None,
+        }));
+
+        // Save the config
+        let result = ConfigManager::save(&config);
+        assert!(result.is_ok(), "Atomic write should succeed");
+
+        // Verify the final config file exists
+        let config_path = test_dir.path().join("EasyHDR").join("config.json");
+        assert!(config_path.exists(), "Final config file should exist");
+
+        // Verify the temp file was cleaned up (atomic write completed)
+        let temp_path = test_dir.path().join("EasyHDR").join("config.json.tmp");
+        assert!(
+            !temp_path.exists(),
+            "Temp file should be removed after atomic write"
+        );
+
+        // Verify the saved file is valid JSON and can be loaded
+        let loaded_config = ConfigManager::load().unwrap();
+        assert_eq!(
+            loaded_config.monitored_apps.len(),
+            2,
+            "Loaded config should have both apps"
+        );
+
+        // TempDir and AppdataGuard automatically clean up when dropped
+    }
 }
