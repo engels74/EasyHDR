@@ -700,7 +700,7 @@ impl GuiController {
                 reason = "index is validated to be non-negative"
             )]
             let idx = index as usize;
-            config.monitored_apps[idx].id
+            *config.monitored_apps[idx].id()
         };
 
         // Remove the application
@@ -759,7 +759,7 @@ impl GuiController {
                 reason = "index is validated to be non-negative"
             )]
             let idx = index as usize;
-            config.monitored_apps[idx].id
+            *config.monitored_apps[idx].id()
         };
 
         // Toggle the enabled state

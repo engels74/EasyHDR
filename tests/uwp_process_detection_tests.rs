@@ -63,10 +63,10 @@ fn create_test_uwp_app(
     })
 }
 
-/// Test that ProcessMonitor can detect when a UWP application starts
+/// Test that `ProcessMonitor` can detect when a UWP application starts
 ///
 /// This test monitors the Windows Calculator app (a standard UWP app) and verifies
-/// that a ProcessEvent::Started event is emitted when it's running.
+/// that a `ProcessEvent::Started` event is emitted when it's running.
 ///
 /// **Requirements Tested**: 2.1, 2.2, 2.3, 2.4
 #[test]
@@ -74,14 +74,14 @@ fn create_test_uwp_app(
 fn test_uwp_app_detection_calculator_started() {
     use tracing_subscriber;
 
+    // Calculator package family name (stable across Windows versions)
+    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
+
     // Initialize logging for debugging
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_test_writer()
         .try_init();
-
-    // Calculator package family name (stable across Windows versions)
-    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
 
     let (tx, rx) = mpsc::sync_channel(32);
     let monitor = ProcessMonitor::new(Duration::from_millis(500), tx);
@@ -164,9 +164,8 @@ fn test_uwp_app_detection_calculator_started() {
                 Err(e) => {
                     // If we can't launch Calculator, skip the test
                     eprintln!(
-                        "Cannot launch Calculator ({}). Skipping test. \
-                         This is expected on non-Windows or restricted environments.",
-                        e
+                        "Cannot launch Calculator ({e}). Skipping test. \
+                         This is expected on non-Windows or restricted environments."
                     );
                     return;
                 }
@@ -178,7 +177,7 @@ fn test_uwp_app_detection_calculator_started() {
     }
 }
 
-/// Test that ProcessMonitor can detect when a UWP application stops
+/// Test that `ProcessMonitor` can detect when a UWP application stops
 ///
 /// This test attempts to detect when Calculator closes. Due to the complexity
 /// of programmatically closing UWP apps, this test may require manual intervention
@@ -191,13 +190,13 @@ fn test_uwp_app_detection_calculator_started() {
 fn test_uwp_app_detection_calculator_stopped() {
     use tracing_subscriber;
 
+    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
+
     // Initialize logging for debugging
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_test_writer()
         .try_init();
-
-    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
 
     let (tx, rx) = mpsc::sync_channel(32);
     let monitor = ProcessMonitor::new(Duration::from_millis(500), tx);
@@ -288,13 +287,13 @@ fn test_uwp_app_detection_calculator_stopped() {
                 );
             }
             Err(e) => {
-                eprintln!("Cannot kill Calculator process ({}). Test may fail.", e);
+                eprintln!("Cannot kill Calculator process ({e}). Test may fail.");
             }
         }
     }
 }
 
-/// Test that ProcessMonitor can detect both Win32 and UWP applications simultaneously
+/// Test that `ProcessMonitor` can detect both Win32 and UWP applications simultaneously
 ///
 /// This test adds both notepad.exe (Win32) and Calculator (UWP) to the watch list
 /// and verifies that the monitor can detect both types of applications.
@@ -305,13 +304,13 @@ fn test_uwp_app_detection_calculator_stopped() {
 fn test_mixed_win32_and_uwp_detection() {
     use tracing_subscriber;
 
+    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
+
     // Initialize logging for debugging
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_test_writer()
         .try_init();
-
-    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
 
     let (tx, rx) = mpsc::sync_channel(32);
     let monitor = ProcessMonitor::new(Duration::from_millis(500), tx);
@@ -393,9 +392,9 @@ fn test_mixed_win32_and_uwp_detection() {
     }
 }
 
-/// Test that the ProcessMonitor correctly identifies UWP vs Win32 apps
+/// Test that the `ProcessMonitor` correctly identifies UWP vs Win32 apps
 ///
-/// This test verifies that the monitor uses the correct AppIdentifier variant
+/// This test verifies that the monitor uses the correct `AppIdentifier` variant
 /// for each application type.
 ///
 /// **Requirements Tested**: 2.1, 2.2, 2.3
@@ -404,13 +403,13 @@ fn test_mixed_win32_and_uwp_detection() {
 fn test_app_identifier_discrimination() {
     use tracing_subscriber;
 
+    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
+
     // Initialize logging for debugging
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_test_writer()
         .try_init();
-
-    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
 
     let (tx, rx) = mpsc::sync_channel(32);
     let monitor = ProcessMonitor::new(Duration::from_millis(500), tx);
@@ -482,13 +481,13 @@ fn test_app_identifier_discrimination() {
 fn test_disabled_uwp_app_not_monitored() {
     use tracing_subscriber;
 
+    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
+
     // Initialize logging for debugging
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .with_test_writer()
         .try_init();
-
-    const CALCULATOR_FAMILY_NAME: &str = "Microsoft.WindowsCalculator_8wekyb3d8bbwe";
 
     let (tx, rx) = mpsc::sync_channel(32);
     let monitor = ProcessMonitor::new(Duration::from_millis(500), tx);
@@ -525,8 +524,7 @@ fn test_disabled_uwp_app_not_monitored() {
 
     assert!(
         calculator_events.is_empty(),
-        "No events should be emitted for disabled UWP app, but got: {:?}",
-        calculator_events
+        "No events should be emitted for disabled UWP app, but got: {calculator_events:?}"
     );
 
     tracing::info!("Disabled UWP app correctly not monitored");
