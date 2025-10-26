@@ -1095,10 +1095,22 @@ mod tests {
         use std::io::Write;
         use tempfile::NamedTempFile;
 
-        // Create a temporary PNG file with test data
+        // Create a temporary PNG file with minimal valid 1x1 transparent PNG (67 bytes)
+        // This is a valid PNG that can be decoded and will be resized to 32x32 RGBA
         let mut temp_file = NamedTempFile::new().unwrap();
-        let test_data = b"fake png data for testing";
-        temp_file.write_all(test_data).unwrap();
+        #[rustfmt::skip]
+        let minimal_png: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1 dimensions
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, // RGBA color type
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, // IDAT chunk
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, // Compressed data
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, // CRC
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, // IEND chunk
+            0x42, 0x60, 0x82, // PNG end marker
+        ];
+        temp_file.write_all(minimal_png).unwrap();
         temp_file.flush().unwrap();
 
         let app = UwpApp::from_package_info(
@@ -1114,12 +1126,16 @@ mod tests {
             "Microsoft.WindowsCalculator_8wekyb3d8bbwe"
         );
 
-        // On Windows, icon should be loaded
+        // On Windows, icon should be decoded to RGBA format (32x32 pixels = 4096 bytes)
         #[cfg(windows)]
         {
             assert!(app.icon_data.is_some(), "Icon should be loaded on Windows");
             let icon_data = app.icon_data.unwrap();
-            assert_eq!(icon_data, test_data, "Icon data should match file contents");
+            assert_eq!(
+                icon_data.len(),
+                32 * 32 * 4,
+                "Icon data should be 32x32 RGBA (4096 bytes)"
+            );
         }
 
         // On non-Windows, icon should be None
