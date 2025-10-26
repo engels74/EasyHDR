@@ -95,6 +95,7 @@ pub struct UwpPackageInfo {
 pub fn enumerate_packages() -> Result<Vec<UwpPackageInfo>> {
     use crate::EasyHdrError;
     use windows::Management::Deployment::PackageManager;
+    use windows::core::HSTRING;
 
     // Create PackageManager instance
     let package_manager =
@@ -104,7 +105,7 @@ pub fn enumerate_packages() -> Result<Vec<UwpPackageInfo>> {
     // This does not require administrator privileges (unlike FindPackages which
     // enumerates all users' packages and requires elevation)
     let packages = package_manager
-        .FindPackagesByUserSecurityId("")
+        .FindPackagesByUserSecurityId(&HSTRING::from(""))
         .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?;
 
     let mut result = Vec::new();
