@@ -6,7 +6,7 @@
 //! # Key Capabilities
 //!
 //! - **Process Detection**: Identify running UWP processes via `GetPackageFullName` API
-//! - **Package Enumeration**: List installed UWP applications using WinRT `PackageManager`
+//! - **Package Enumeration**: List installed UWP applications using `WinRT` `PackageManager`
 //! - **Icon Extraction**: Load application icons from UWP package directories
 //!
 //! # Architecture
@@ -17,8 +17,8 @@
 //!
 //! # Windows API Dependencies
 //!
-//! - `Win32_Storage_Packaging_Appx`: Process detection (GetPackageFullName)
-//! - `Management_Deployment`: Package enumeration (PackageManager)
+//! - `Win32_Storage_Packaging_Appx`: Process detection (`GetPackageFullName`)
+//! - `Management_Deployment`: Package enumeration (`PackageManager`)
 //! - `ApplicationModel`: Package metadata types
 //! - `Storage`: Package directory access
 //!

@@ -1,13 +1,13 @@
 //! UWP package enumeration via Windows Runtime APIs
 //!
-//! This module provides enumeration of installed UWP applications using the WinRT
+//! This module provides enumeration of installed UWP applications using the `WinRT`
 //! `PackageManager` API. It discovers all user-accessible UWP packages and extracts
 //! metadata including display names, package identifiers, and icon paths.
 //!
 //! # Package Discovery
 //!
 //! The enumeration process:
-//! 1. Create `PackageManager` instance (WinRT `Management.Deployment` namespace)
+//! 1. Create `PackageManager` instance (`WinRT` `Management.Deployment` namespace)
 //! 2. Call `FindPackages()` for the current user
 //! 3. Iterate through packages and extract metadata:
 //!    - `Package.Id.FamilyName` - Stable identifier
@@ -32,7 +32,7 @@ pub struct UwpPackageInfo {
     /// User-visible display name (e.g., "Calculator")
     pub display_name: String,
 
-    /// Stable package identifier (e.g., "Microsoft.WindowsCalculator_8wekyb3d8bbwe")
+    /// Stable package identifier (e.g., "`Microsoft.WindowsCalculator_8wekyb3d8bbwe`")
     pub package_family_name: String,
 
     /// Application ID within the package (typically "App" for main executable)
@@ -112,7 +112,7 @@ pub fn enumerate_packages() -> Result<Vec<UwpPackageInfo>> {
     Ok(result)
 }
 
-/// Extract package information from a WinRT Package object
+/// Extract package information from a `WinRT` Package object
 ///
 /// Returns `Ok(None)` if package should be filtered (e.g., framework package)
 #[cfg(windows)]
@@ -170,10 +170,10 @@ fn extract_package_info(
             // WinRT URIs for UWP packages use the ms-appx:/// scheme
             // We need to resolve them to actual file paths
             // For now, store the raw URI and let icon extraction handle it
-            if !uri_str.is_empty() {
-                Some(PathBuf::from(uri_str))
-            } else {
+            if uri_str.is_empty() {
                 None
+            } else {
+                Some(PathBuf::from(uri_str))
             }
         }
         Err(_) => None, // Logo is optional

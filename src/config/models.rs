@@ -203,7 +203,7 @@ impl UwpApp {
             #[cfg(windows)]
             {
                 use crate::uwp;
-                match uwp::extract_icon(&path) {
+                match uwp::extract_icon(path) {
                     Ok(data) if !data.is_empty() => {
                         // Record icon in memory profiler
                         use crate::utils::memory_profiler;

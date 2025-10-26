@@ -1,4 +1,4 @@
-//! UWP process detection via Windows AppModel APIs
+//! UWP process detection via Windows `AppModel` APIs
 //!
 //! This module provides runtime detection of UWP applications by querying process handles
 //! for their associated package information. The `GetPackageFullName` API distinguishes
@@ -83,16 +83,17 @@ use crate::Result;
 pub unsafe fn detect_uwp_process(
     h_process: windows::Win32::Foundation::HANDLE,
 ) -> Result<Option<String>> {
+    use windows::Win32::Foundation::WIN32_ERROR;
     use windows::Win32::Storage::Packaging::Appx::GetPackageFullName;
+    use windows::core::PWSTR;
+
+    // APPMODEL_ERROR_NO_PACKAGE (15700) means this is a Win32 app, not a UWP app
+    const APPMODEL_ERROR_NO_PACKAGE: WIN32_ERROR = WIN32_ERROR(15700);
+    const ERROR_INSUFFICIENT_BUFFER: WIN32_ERROR = WIN32_ERROR(122);
 
     // First call to get required buffer length
     let mut length: u32 = 0;
-    let result = unsafe { GetPackageFullName(h_process, &mut length, None) };
-
-    // APPMODEL_ERROR_NO_PACKAGE (15700) means this is a Win32 app, not a UWP app
-    use windows::Win32::Foundation::WIN32_ERROR;
-    const APPMODEL_ERROR_NO_PACKAGE: WIN32_ERROR = WIN32_ERROR(15700);
-    const ERROR_INSUFFICIENT_BUFFER: WIN32_ERROR = WIN32_ERROR(122);
+    let result = unsafe { GetPackageFullName(h_process, &raw mut length, None) };
 
     if result == APPMODEL_ERROR_NO_PACKAGE {
         // This is a Win32 application, not a UWP app
@@ -113,9 +114,8 @@ pub unsafe fn detect_uwp_process(
     let mut buffer = vec![0u16; length as usize];
 
     // Second call to retrieve the actual package full name
-    use windows::core::PWSTR;
     let result =
-        unsafe { GetPackageFullName(h_process, &mut length, Some(PWSTR(buffer.as_mut_ptr()))) };
+        unsafe { GetPackageFullName(h_process, &raw mut length, Some(PWSTR(buffer.as_mut_ptr()))) };
 
     if result != WIN32_ERROR(0) {
         // ERROR_SUCCESS is 0

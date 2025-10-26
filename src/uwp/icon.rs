@@ -306,7 +306,7 @@ mod tests {
 
         // Check that interior pixels are lighter (128, 128, 128, 255)
         // Pixel at (1, 1) - second row, second column
-        let idx = ((1 * ICON_SIZE + 1) * 4) as usize;
+        let idx = ((ICON_SIZE + 1) * 4) as usize;
         assert_eq!(placeholder[idx], 128); // R
         assert_eq!(placeholder[idx + 1], 128); // G
         assert_eq!(placeholder[idx + 2], 128); // B
