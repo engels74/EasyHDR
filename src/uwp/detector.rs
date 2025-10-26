@@ -90,6 +90,7 @@ pub unsafe fn detect_uwp_process(
     // APPMODEL_ERROR_NO_PACKAGE (15700) means this is a Win32 app, not a UWP app
     const APPMODEL_ERROR_NO_PACKAGE: WIN32_ERROR = WIN32_ERROR(15700);
     const ERROR_INSUFFICIENT_BUFFER: WIN32_ERROR = WIN32_ERROR(122);
+    const ERROR_ACCESS_DENIED: WIN32_ERROR = WIN32_ERROR(5);
 
     // First call to get required buffer length
     let mut length: u32 = 0;
@@ -97,6 +98,13 @@ pub unsafe fn detect_uwp_process(
 
     if result == APPMODEL_ERROR_NO_PACKAGE {
         // This is a Win32 application, not a UWP app
+        return Ok(None);
+    }
+
+    if result == ERROR_ACCESS_DENIED {
+        // Access denied - common for system processes (e.g., PID 4 System process)
+        // Even with admin rights, some kernel-mode processes cannot be queried
+        // Treat as non-UWP since we cannot determine package information
         return Ok(None);
     }
 
