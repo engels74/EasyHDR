@@ -192,9 +192,82 @@ impl IconCache {
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
     pub fn load_icon(&self, app_id: Uuid, source_path: Option<&Path>) -> Result<Option<Vec<u8>>> {
-        // Stub implementation - will be completed in task 2.4
-        let _ = (app_id, source_path);
-        Ok(None)
+        let cache_path = self.cache_path(app_id);
+
+        // Requirement 2.5: Return Ok(None) if cache file does not exist
+        if !cache_path.exists() {
+            tracing::debug!("Cache miss for app {}: file does not exist", app_id);
+            return Ok(None);
+        }
+
+        // Requirements 2.1, 2.2, 2.4: Cache validation for Win32 apps
+        if let Some(source) = source_path {
+            // Get cache file metadata
+            let cache_metadata = std::fs::metadata(&cache_path).map_err(|source| {
+                EasyHdrError::IconCache(IconCacheError::MetadataError {
+                    path: cache_path.clone(),
+                    source,
+                })
+            })?;
+
+            // Get source file metadata
+            let source_metadata = std::fs::metadata(source).map_err(|source_err| {
+                EasyHdrError::IconCache(IconCacheError::MetadataError {
+                    path: source.to_path_buf(),
+                    source: source_err,
+                })
+            })?;
+
+            // Compare modification times (Requirement 2.1)
+            let cache_mtime = cache_metadata.modified().map_err(|cache_err| {
+                EasyHdrError::IconCache(IconCacheError::MetadataError {
+                    path: cache_path.clone(),
+                    source: cache_err,
+                })
+            })?;
+
+            let source_mtime = source_metadata.modified().map_err(|source_err| {
+                EasyHdrError::IconCache(IconCacheError::MetadataError {
+                    path: source.to_path_buf(),
+                    source: source_err,
+                })
+            })?;
+
+            // Requirement 2.2: Return Ok(None) if executable is newer than cache
+            if source_mtime > cache_mtime {
+                tracing::debug!(
+                    "Cache miss for app {}: source file is newer (source: {:?}, cache: {:?})",
+                    app_id,
+                    source_mtime,
+                    cache_mtime
+                );
+                return Ok(None);
+            }
+        } else {
+            // Requirement 2.4: Skip validation for UWP apps (no source path)
+            tracing::trace!("Loading cached icon for UWP app {} (no validation)", app_id);
+        }
+
+        // Read PNG file from disk
+        let png_bytes = std::fs::read(&cache_path).map_err(|source| {
+            EasyHdrError::IconCache(IconCacheError::CacheReadError {
+                app_id,
+                path: cache_path.clone(),
+                source,
+            })
+        })?;
+
+        // Decode PNG to RGBA (this already returns proper errors)
+        let rgba_bytes = Self::decode_png_to_rgba(&png_bytes, app_id)?;
+
+        tracing::debug!(
+            "Loaded icon for app {} from cache ({} bytes PNG -> {} bytes RGBA)",
+            app_id,
+            png_bytes.len(),
+            rgba_bytes.len()
+        );
+
+        Ok(Some(rgba_bytes))
     }
 
     /// Save an icon to cache with atomic write
@@ -969,5 +1042,238 @@ mod tests {
             Some(expected_name.as_str()),
             "Should be the PNG file"
         );
+    }
+
+    // load_icon() tests
+
+    #[test]
+    fn load_icon_cache_hit() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create test RGBA data with a pattern
+        let mut rgba_data = vec![0u8; 4096];
+        for i in 0..4096 {
+            rgba_data[i] = (i % 256) as u8;
+        }
+
+        // Save icon first
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Load icon (no source path = UWP app, no validation)
+        let loaded = cache
+            .load_icon(app_id, None)
+            .expect("load_icon should succeed")
+            .expect("Should have loaded icon data");
+
+        // Verify roundtrip preserves data
+        assert_eq!(rgba_data, loaded, "Loaded icon should match original data");
+    }
+
+    #[test]
+    fn load_icon_cache_miss_file_not_found() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Load icon that doesn't exist
+        let result = cache
+            .load_icon(app_id, None)
+            .expect("load_icon should succeed (Ok(None))");
+
+        // Should return None (cache miss)
+        assert!(
+            result.is_none(),
+            "Should return None for non-existent cache file"
+        );
+    }
+
+    #[test]
+    fn load_icon_stale_cache_win32_app() {
+        use std::fs::File;
+        use std::io::Write;
+        use std::thread;
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create a fake source EXE file
+        let source_path = temp_dir.path().join("test.exe");
+        let mut source_file = File::create(&source_path).expect("Failed to create source file");
+        source_file
+            .write_all(b"fake exe")
+            .expect("Failed to write source file");
+        drop(source_file); // Close file
+
+        // Wait a moment to ensure time difference
+        thread::sleep(Duration::from_millis(10));
+
+        // Save icon
+        let rgba_data = vec![128u8; 4096];
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Wait a moment to ensure time difference
+        thread::sleep(Duration::from_millis(10));
+
+        // Update source file modification time (simulate EXE update)
+        let mut source_file = File::create(&source_path).expect("Failed to update source file");
+        source_file
+            .write_all(b"updated exe")
+            .expect("Failed to write source file");
+        drop(source_file); // Close file
+
+        // Load icon with source path validation
+        let result = cache
+            .load_icon(app_id, Some(&source_path))
+            .expect("load_icon should succeed (Ok(None))");
+
+        // Should return None (stale cache)
+        assert!(
+            result.is_none(),
+            "Should return None when source file is newer than cache"
+        );
+    }
+
+    #[test]
+    fn load_icon_fresh_cache_win32_app() {
+        use std::fs::File;
+        use std::io::Write;
+        use std::thread;
+        use std::time::Duration;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create a fake source EXE file
+        let source_path = temp_dir.path().join("test.exe");
+        let mut source_file = File::create(&source_path).expect("Failed to create source file");
+        source_file
+            .write_all(b"fake exe")
+            .expect("Failed to write source file");
+        drop(source_file); // Close file
+
+        // Wait a moment to ensure time difference
+        thread::sleep(Duration::from_millis(10));
+
+        // Save icon (cache will be newer than source)
+        let rgba_data = vec![128u8; 4096];
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Load icon with source path validation
+        let loaded = cache
+            .load_icon(app_id, Some(&source_path))
+            .expect("load_icon should succeed")
+            .expect("Should have loaded icon data (cache is fresh)");
+
+        // Verify data matches
+        assert_eq!(rgba_data, loaded, "Loaded icon should match original data");
+    }
+
+    #[test]
+    fn load_icon_uwp_app_no_validation() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create test RGBA data
+        let rgba_data = vec![200u8; 4096];
+
+        // Save icon
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Load icon without source path (UWP app - no validation)
+        let loaded = cache
+            .load_icon(app_id, None)
+            .expect("load_icon should succeed")
+            .expect("Should have loaded icon data");
+
+        // Verify data matches
+        assert_eq!(rgba_data, loaded, "Loaded icon should match original data");
+    }
+
+    #[test]
+    fn load_icon_corrupted_png() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create a corrupted PNG file
+        let cache_path = temp_dir.path().join(format!("{app_id}.png"));
+        let mut file = File::create(&cache_path).expect("Failed to create cache file");
+        file.write_all(b"not a valid PNG file")
+            .expect("Failed to write corrupted data");
+        drop(file);
+
+        // Load icon - should return error for corrupted PNG
+        let result = cache.load_icon(app_id, None);
+
+        assert!(result.is_err(), "Should return error for corrupted PNG");
+        match result {
+            Err(EasyHdrError::IconCache(IconCacheError::PngDecodingError {
+                app_id: error_id,
+                ..
+            })) => {
+                assert_eq!(error_id, app_id, "Error should include correct app UUID");
+            }
+            _ => panic!("Expected PngDecodingError"),
+        }
+    }
+
+    #[test]
+    fn load_icon_save_load_roundtrip() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create test data with varying pattern
+        let mut rgba_data = vec![0u8; 4096];
+        for i in 0..4096 {
+            rgba_data[i] = ((i * 7 + 13) % 256) as u8; // More complex pattern
+        }
+
+        // Save icon
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Load icon
+        let loaded = cache
+            .load_icon(app_id, None)
+            .expect("load_icon should succeed")
+            .expect("Should have loaded icon data");
+
+        // Verify exact roundtrip
+        assert_eq!(
+            rgba_data.len(),
+            loaded.len(),
+            "Loaded data should have same length"
+        );
+        assert_eq!(rgba_data, loaded, "Roundtrip should preserve data exactly");
     }
 }
