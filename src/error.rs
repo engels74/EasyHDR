@@ -6,7 +6,9 @@
 //! Error variants use `#[source]` to preserve error chains for better
 //! observability and debugging (Rust-Bible: Error Handling & Observability).
 
+use std::path::PathBuf;
 use thiserror::Error;
+use uuid::Uuid;
 
 /// Simple error type for wrapping string messages while implementing `std::error::Error`
 #[derive(Debug, Error)]
@@ -18,6 +20,127 @@ impl StringError {
     pub fn new(msg: impl Into<String>) -> Box<Self> {
         Box::new(Self(msg.into()))
     }
+}
+
+/// Icon cache error types
+///
+/// Structured error types for icon cache operations following thiserror pattern.
+/// All errors preserve source chains via `#[source]` for full observability
+/// (Requirement 5.1, 5.6: Structured errors with thiserror and source chains).
+#[derive(Debug, Error)]
+pub enum IconCacheError {
+    /// Invalid icon data size (must be exactly 4096 bytes for 32x32 RGBA)
+    /// (Requirement 7.1: Validate RGBA data size)
+    #[error("Invalid icon data size: expected 4096 bytes, got {actual}")]
+    InvalidIconSize { actual: usize },
+
+    /// Failed to create icon cache directory
+    /// Preserves the underlying I/O error source
+    /// (Requirement 5.6: Preserve error source chains)
+    #[error("Failed to create icon cache directory at {path}")]
+    CacheDirectoryCreationFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to read cached icon file
+    /// Includes app UUID and path context for debugging
+    /// (Requirement 5.6: Preserve error source chains)
+    #[error("Failed to read cached icon for app {app_id} from {path}")]
+    CacheReadError {
+        app_id: Uuid,
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to write cached icon file
+    /// Includes app UUID and path context for debugging
+    /// (Requirement 5.6: Preserve error source chains)
+    #[error("Failed to write cached icon for app {app_id} to {path}")]
+    CacheWriteError {
+        app_id: Uuid,
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// PNG encoding failed
+    /// Includes app UUID context for debugging
+    /// (Requirement 7.4: Return structured error with app UUID)
+    #[cfg(windows)]
+    #[error("Failed to encode icon to PNG for app {app_id}")]
+    PngEncodingError {
+        app_id: Uuid,
+        #[source]
+        source: image::ImageError,
+    },
+
+    /// PNG decoding failed
+    /// Includes app UUID context for debugging
+    /// (Requirement 7.4: Return structured error with app UUID)
+    #[cfg(windows)]
+    #[error("Failed to decode PNG icon for app {app_id}")]
+    PngDecodingError {
+        app_id: Uuid,
+        #[source]
+        source: image::ImageError,
+    },
+
+    /// Failed to create temporary file for atomic write
+    /// (Requirement 7.3: Use atomic write operations)
+    #[error("Failed to create temporary file for icon {app_id}")]
+    TempFileCreationFailed {
+        app_id: Uuid,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to persist temporary file (atomic rename)
+    /// (Requirement 7.3: Use atomic write operations)
+    /// Note: Available only in test builds until tempfile is promoted to regular dependency in task 4
+    #[cfg(any(test, windows))]
+    #[error("Failed to atomically persist icon for app {app_id} to {path}")]
+    AtomicPersistFailed {
+        app_id: Uuid,
+        path: PathBuf,
+        #[source]
+        source: tempfile::PersistError,
+    },
+
+    /// Failed to remove cached icon
+    #[error("Failed to remove cached icon for app {app_id} at {path}")]
+    IconRemovalFailed {
+        app_id: Uuid,
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to clear entire cache directory
+    #[error("Failed to clear icon cache directory at {path}")]
+    CacheClearFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to calculate cache statistics
+    #[error("Failed to calculate cache statistics for {path}")]
+    CacheStatsFailed {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    /// Failed to get file metadata for cache validation
+    #[error("Failed to get metadata for {path}")]
+    MetadataError {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 /// Main error type for `EasyHDR` application
@@ -85,6 +208,12 @@ pub enum EasyHdrError {
     /// UWP icon extraction failed
     #[error("UWP icon extraction failed: {0}")]
     UwpIconExtractionError(String),
+
+    /// Icon cache error
+    /// Preserves the underlying icon cache error for full error chain transparency
+    /// (Requirement 5.1, 5.6: Structured errors with source chains)
+    #[error("Icon cache error: {0}")]
+    IconCache(#[from] IconCacheError),
 }
 
 /// Result type alias for `EasyHDR` operations
@@ -181,6 +310,12 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
                  This does not affect functionality."
             )
         }
+        EasyHdrError::IconCache(_) => "Icon cache error occurred.\n\n\
+             Icon caching may not work correctly, but the application\n\
+             will continue to function normally with icons in memory.\n\
+             Check that you have write permissions to:\n\
+             %APPDATA%\\EasyHDR\\icon_cache"
+            .to_string(),
     }
 }
 
