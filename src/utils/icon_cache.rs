@@ -37,7 +37,7 @@
 
 use crate::error::{EasyHdrError, IconCacheError};
 use image::{ImageFormat, ImageReader, imageops::FilterType};
-use std::io::Cursor;
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -240,8 +240,58 @@ impl IconCache {
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
     pub fn save_icon(&self, app_id: Uuid, rgba_bytes: &[u8]) -> Result<()> {
-        // Stub implementation - will be completed in task 2.3
-        let _ = (app_id, rgba_bytes);
+        // Step 1 & 2: Validate size and encode RGBA to PNG
+        // (Requirement 7.1: validation happens inside encode_rgba_to_png)
+        let png_bytes = Self::encode_rgba_to_png(rgba_bytes, app_id)?;
+
+        // Get the final cache file path
+        let cache_file_path = self.cache_path(app_id);
+
+        // Step 3: Use tempfile::NamedTempFile::persist() for atomic write
+        // (Requirement 1.4, 7.3: Atomic writes via tempfile)
+        //
+        // Create temporary file in the same directory as the cache file.
+        // This is critical for atomic rename to work correctly on Windows:
+        // - Temp file and target must be on the same filesystem
+        // - persist() uses MoveFileEx on Windows which is atomic
+        let mut temp_file = tempfile::Builder::new()
+            .prefix(&format!("{app_id}_"))
+            .suffix(".tmp")
+            .tempfile_in(&self.cache_dir)
+            .map_err(|source| {
+                EasyHdrError::IconCache(IconCacheError::TempFileCreationFailed { app_id, source })
+            })?;
+
+        // Write PNG data to temporary file
+        temp_file.write_all(&png_bytes).map_err(|source| {
+            EasyHdrError::IconCache(IconCacheError::CacheWriteError {
+                app_id,
+                path: cache_file_path.clone(),
+                source,
+            })
+        })?;
+
+        // Atomically persist the temporary file
+        // This performs an atomic rename operation that either:
+        // - Succeeds completely (file is visible with all data)
+        // - Fails completely (no partial file visible)
+        // This prevents corruption from crashes or power loss during write
+        temp_file.persist(&cache_file_path).map_err(|e| {
+            EasyHdrError::IconCache(IconCacheError::AtomicPersistFailed {
+                app_id,
+                path: cache_file_path.clone(),
+                source: e,
+            })
+        })?;
+
+        // Step 4: Log success with icon size
+        tracing::debug!(
+            "Saved icon for app {} to cache ({} bytes PNG, from {} bytes RGBA)",
+            app_id,
+            png_bytes.len(),
+            rgba_bytes.len()
+        );
+
         Ok(())
     }
 
@@ -776,5 +826,148 @@ mod tests {
         assert_eq!(png_bytes[1], 80, "PNG signature byte 1 (P)");
         assert_eq!(png_bytes[2], 78, "PNG signature byte 2 (N)");
         assert_eq!(png_bytes[3], 71, "PNG signature byte 3 (G)");
+    }
+
+    // save_icon() tests
+
+    #[test]
+    fn save_icon_validates_input_size() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Test with invalid size
+        let invalid_rgba = vec![0u8; 100];
+        let result = cache.save_icon(app_id, &invalid_rgba);
+
+        assert!(result.is_err(), "Invalid size should produce error");
+        match result {
+            Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual })) => {
+                assert_eq!(actual, 100);
+            }
+            _ => panic!("Expected InvalidIconSize error"),
+        }
+    }
+
+    #[test]
+    fn save_icon_creates_file_with_correct_name() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create valid RGBA data
+        let rgba_data = vec![128u8; 4096];
+
+        // Save icon
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Verify file exists with correct name
+        let expected_path = temp_dir.path().join(format!("{app_id}.png"));
+        assert!(
+            expected_path.exists(),
+            "Icon file should exist at expected path"
+        );
+    }
+
+    #[test]
+    fn save_icon_overwrites_existing_file() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Save first icon
+        let rgba_data_1 = vec![100u8; 4096];
+        cache
+            .save_icon(app_id, &rgba_data_1)
+            .expect("First save should succeed");
+
+        // Save second icon with different data
+        let rgba_data_2 = vec![200u8; 4096];
+        cache
+            .save_icon(app_id, &rgba_data_2)
+            .expect("Second save should succeed");
+
+        // Verify file exists (atomic persist should have overwritten)
+        let expected_path = temp_dir.path().join(format!("{app_id}.png"));
+        assert!(
+            expected_path.exists(),
+            "Icon file should exist after overwrite"
+        );
+    }
+
+    #[test]
+    fn save_icon_produces_valid_png_file() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Create RGBA data with a pattern
+        let mut rgba_data = vec![0u8; 4096];
+        for i in 0..4096 {
+            rgba_data[i] = (i % 256) as u8;
+        }
+
+        // Save icon
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Read the file directly and verify PNG signature
+        let file_path = temp_dir.path().join(format!("{app_id}.png"));
+        let file_data = std::fs::read(&file_path).expect("Failed to read icon file");
+
+        // Verify PNG signature
+        assert!(file_data.len() >= 8, "PNG should have at least header");
+        assert_eq!(file_data[0], 137, "PNG signature byte 0");
+        assert_eq!(file_data[1], 80, "PNG signature byte 1 (P)");
+        assert_eq!(file_data[2], 78, "PNG signature byte 2 (N)");
+        assert_eq!(file_data[3], 71, "PNG signature byte 3 (G)");
+    }
+
+    #[test]
+    fn save_icon_atomic_write_no_partial_files() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Save icon
+        let rgba_data = vec![255u8; 4096];
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Verify no temporary files remain in cache directory
+        let entries: Vec<_> = std::fs::read_dir(temp_dir.path())
+            .expect("Failed to read cache dir")
+            .collect();
+
+        // Should only have one file (the .png file)
+        assert_eq!(
+            entries.len(),
+            1,
+            "Should only have the PNG file, no temp files"
+        );
+
+        // Verify it's the correct file
+        let entry = entries[0].as_ref().expect("Failed to get entry");
+        let file_name = entry.file_name();
+        let expected_name = format!("{app_id}.png");
+        assert_eq!(
+            file_name.to_str(),
+            Some(expected_name.as_str()),
+            "Should be the PNG file"
+        );
     }
 }
