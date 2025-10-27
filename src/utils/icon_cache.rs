@@ -36,6 +36,8 @@
 //! ```
 
 use crate::error::{EasyHdrError, IconCacheError};
+use image::{ImageFormat, ImageReader, imageops::FilterType};
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -365,6 +367,136 @@ impl IconCache {
     fn cache_path(&self, app_id: Uuid) -> PathBuf {
         self.cache_dir.join(format!("{app_id}.png"))
     }
+
+    /// Encode RGBA data to PNG format
+    ///
+    /// Encodes raw RGBA pixel data (32x32 pixels) to PNG format for disk storage.
+    /// Pre-allocates output buffer with 8192 bytes capacity for efficient encoding
+    /// (Requirement 7.5: Pre-allocate PNG buffers).
+    ///
+    /// # Arguments
+    ///
+    /// * `rgba_bytes` - Raw RGBA pixel data (must be exactly 4096 bytes)
+    /// * `app_id` - Application UUID for error context
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Vec<u8>)` containing PNG-encoded data on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns `IconCacheError` if:
+    /// - Input size is not exactly 4096 bytes (`InvalidIconSize`)
+    /// - PNG encoding fails (`PngEncodingError`)
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 7.1: Validates input size is exactly 4096 bytes
+    /// - Requirement 7.4: Returns structured error with app UUID context
+    /// - Requirement 7.5: Pre-allocates with `Vec::with_capacity(8192)`
+    ///
+    /// # Design
+    ///
+    /// Pre-allocation of 8192 bytes is based on measured PNG sizes for 32x32 RGBA icons:
+    /// - Typical compressed size: 2-6 KB
+    /// - 8KB capacity avoids reallocation in most cases
+    /// - Follows Rust guideline: "Pre-allocate (Vec::with_capacity)"
+    fn encode_rgba_to_png(rgba_bytes: &[u8], app_id: Uuid) -> Result<Vec<u8>> {
+        // Requirement 7.1: Validate input size is exactly 4096 bytes (32x32 × 4 channels)
+        const EXPECTED_SIZE: usize = 32 * 32 * 4;
+        if rgba_bytes.len() != EXPECTED_SIZE {
+            return Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize {
+                actual: rgba_bytes.len(),
+            }));
+        }
+
+        // Requirement 7.5: Pre-allocate PNG buffer with 8192 bytes capacity
+        // Based on measured PNG sizes: typically 2-6KB for 32x32 RGBA
+        let mut png_bytes = Vec::with_capacity(8192);
+
+        // Encode RGBA data to PNG format
+        // Use Cursor for in-memory encoding
+        image::write_buffer_with_format(
+            &mut Cursor::new(&mut png_bytes),
+            rgba_bytes,
+            32,
+            32,
+            image::ExtendedColorType::Rgba8,
+            ImageFormat::Png,
+        )
+        .map_err(|source| {
+            // Requirement 7.4: Return structured error with app UUID context
+            EasyHdrError::IconCache(IconCacheError::PngEncodingError { app_id, source })
+        })?;
+
+        Ok(png_bytes)
+    }
+
+    /// Decode PNG data to RGBA format
+    ///
+    /// Decodes PNG image data and resizes to exactly 32x32 pixels using Lanczos3
+    /// resampling for high-quality results (Requirement 7.2).
+    ///
+    /// # Arguments
+    ///
+    /// * `png_bytes` - PNG-encoded image data
+    /// * `app_id` - Application UUID for error context
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(Vec<u8>)` containing exactly 4096 bytes of RGBA data (32x32 pixels).
+    ///
+    /// # Errors
+    ///
+    /// Returns `IconCacheError` if:
+    /// - PNG decoding fails (`PngDecodingError`)
+    /// - Image cannot be resized
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 7.2: Resizes images to exactly 32x32 pixels
+    /// - Requirement 7.4: Returns structured error with app UUID context
+    ///
+    /// # Design
+    ///
+    /// Uses Lanczos3 resampling filter for high-quality downscaling:
+    /// - Preserves sharp edges better than bilinear
+    /// - Reduces aliasing artifacts
+    /// - Industry standard for icon resampling
+    fn decode_png_to_rgba(png_bytes: &[u8], app_id: Uuid) -> Result<Vec<u8>> {
+        // Decode PNG from memory buffer
+        let img = ImageReader::new(Cursor::new(png_bytes))
+            .with_guessed_format()
+            .map_err(|source| {
+                // Requirement 7.4: Return structured error with app UUID context
+                EasyHdrError::IconCache(IconCacheError::PngDecodingError {
+                    app_id,
+                    source: image::ImageError::IoError(source),
+                })
+            })?
+            .decode()
+            .map_err(|source| {
+                // Requirement 7.4: Return structured error with app UUID context
+                EasyHdrError::IconCache(IconCacheError::PngDecodingError { app_id, source })
+            })?;
+
+        // Requirement 7.2: Resize to exactly 32x32 pixels using Lanczos3 filter
+        // Lanczos3 provides high-quality resampling with sharp edges
+        let resized = img.resize_exact(32, 32, FilterType::Lanczos3);
+
+        // Convert to RGBA8 format and extract raw bytes
+        let rgba_img = resized.to_rgba8();
+        let rgba_bytes = rgba_img.into_raw();
+
+        // Verify output size (should always be 4096 bytes)
+        debug_assert_eq!(
+            rgba_bytes.len(),
+            4096,
+            "PNG decode produced unexpected size"
+        );
+
+        Ok(rgba_bytes)
+    }
 }
 
 /// Cache statistics
@@ -500,5 +632,149 @@ mod tests {
         let debug_str = format!("{cache:?}");
         assert!(debug_str.contains("IconCache"));
         assert!(debug_str.contains("cache_dir"));
+    }
+
+    // PNG encoding/decoding tests
+
+    #[test]
+    fn encode_rgba_to_png_validates_input_size() {
+        let app_id = Uuid::new_v4();
+
+        // Test with invalid size (too small)
+        let invalid_small = vec![0u8; 100];
+        let result = IconCache::encode_rgba_to_png(&invalid_small, app_id);
+        assert!(result.is_err());
+        match result {
+            Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual })) => {
+                assert_eq!(actual, 100);
+            }
+            _ => panic!("Expected InvalidIconSize error"),
+        }
+
+        // Test with invalid size (too large)
+        let invalid_large = vec![0u8; 5000];
+        let result = IconCache::encode_rgba_to_png(&invalid_large, app_id);
+        assert!(result.is_err());
+        match result {
+            Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual })) => {
+                assert_eq!(actual, 5000);
+            }
+            _ => panic!("Expected InvalidIconSize error"),
+        }
+    }
+
+    #[test]
+    fn encode_rgba_to_png_accepts_valid_size() {
+        let app_id = Uuid::new_v4();
+
+        // Test with valid size (4096 bytes = 32x32 RGBA)
+        let valid_rgba = vec![128u8; 4096];
+        let result = IconCache::encode_rgba_to_png(&valid_rgba, app_id);
+        assert!(result.is_ok(), "Valid size should succeed");
+
+        let png_bytes = result.unwrap();
+        assert!(!png_bytes.is_empty(), "PNG data should not be empty");
+        assert!(
+            png_bytes.len() < 8192,
+            "PNG should be smaller than pre-allocated capacity"
+        );
+    }
+
+    #[test]
+    fn png_encoding_decoding_roundtrip() {
+        let app_id = Uuid::new_v4();
+
+        // Create test RGBA data with a pattern
+        let mut rgba_data = vec![0u8; 4096];
+        for i in 0..4096 {
+            rgba_data[i] = (i % 256) as u8;
+        }
+
+        // Encode to PNG
+        let png_bytes =
+            IconCache::encode_rgba_to_png(&rgba_data, app_id).expect("Encoding should succeed");
+
+        // Decode back to RGBA
+        let decoded_rgba =
+            IconCache::decode_png_to_rgba(&png_bytes, app_id).expect("Decoding should succeed");
+
+        // Verify size
+        assert_eq!(
+            decoded_rgba.len(),
+            4096,
+            "Decoded data should be exactly 4096 bytes"
+        );
+
+        // Verify roundtrip preserves data
+        assert_eq!(
+            rgba_data, decoded_rgba,
+            "Roundtrip should preserve RGBA data exactly"
+        );
+    }
+
+    #[test]
+    fn decode_png_to_rgba_produces_correct_size() {
+        let app_id = Uuid::new_v4();
+
+        // Create a simple RGBA image
+        let rgba_data = vec![255u8; 4096]; // All white pixels
+
+        // Encode to PNG
+        let png_bytes =
+            IconCache::encode_rgba_to_png(&rgba_data, app_id).expect("Encoding should succeed");
+
+        // Decode
+        let decoded =
+            IconCache::decode_png_to_rgba(&png_bytes, app_id).expect("Decoding should succeed");
+
+        // Verify exact size (32x32 RGBA = 4096 bytes)
+        assert_eq!(
+            decoded.len(),
+            4096,
+            "Decoded data must be exactly 4096 bytes"
+        );
+    }
+
+    #[test]
+    fn decode_png_handles_invalid_data() {
+        let app_id = Uuid::new_v4();
+
+        // Test with invalid PNG data
+        let invalid_png = vec![0u8; 100];
+        let result = IconCache::decode_png_to_rgba(&invalid_png, app_id);
+
+        assert!(result.is_err(), "Invalid PNG data should produce error");
+        match result {
+            Err(EasyHdrError::IconCache(IconCacheError::PngDecodingError {
+                app_id: error_id,
+                ..
+            })) => {
+                assert_eq!(error_id, app_id, "Error should include correct app UUID");
+            }
+            _ => panic!("Expected PngDecodingError"),
+        }
+    }
+
+    #[test]
+    fn png_encoding_produces_valid_png() {
+        let app_id = Uuid::new_v4();
+
+        // Create test data
+        let rgba_data = vec![200u8; 4096];
+
+        // Encode
+        let png_bytes =
+            IconCache::encode_rgba_to_png(&rgba_data, app_id).expect("Encoding should succeed");
+
+        // Verify PNG signature (first 8 bytes)
+        // PNG files start with: 137 80 78 71 13 10 26 10
+        assert!(
+            png_bytes.len() >= 8,
+            "PNG should have at least header bytes"
+        );
+        assert_eq!(png_bytes[0], 137, "PNG signature byte 0");
+        assert_eq!(png_bytes[1], 80, "PNG signature byte 1 (P)");
+        assert_eq!(png_bytes[2], 78, "PNG signature byte 2 (N)");
+        assert_eq!(png_bytes[3], 71, "PNG signature byte 3 (G)");
     }
 }

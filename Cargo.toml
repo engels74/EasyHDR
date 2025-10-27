@@ -44,6 +44,12 @@ tracing-appender = "0.2"
 parking_lot = "0.12"
 smallvec = { version = "1.15.1", features = ["union"] }
 
+# Image processing (for icon cache PNG encoding/decoding)
+image = { version = "0.25", default-features = false, features = ["ico", "png"] }
+
+# File system utilities (for atomic writes in icon cache)
+tempfile = "3.23"
+
 # Windows-specific dependencies
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
@@ -69,7 +75,6 @@ winreg = "0.55"
 tray-icon = "0.21"
 rfd = "0.15"  # File dialogs
 tauri-winrt-notification = "0.7"  # Windows toast notifications
-image = { version = "0.25", default-features = false, features = ["ico", "png"] }  # ICO decoding for tray icons, PNG for UWP app icons
 open = "5.3"  # Open URLs in default browser
 
 [build-dependencies]
@@ -80,7 +85,6 @@ winres = "0.1"
 
 [dev-dependencies]
 proptest = "1.8"
-tempfile = "3.23"
 criterion = "0.7"
 
 [[bench]]

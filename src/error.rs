@@ -69,7 +69,6 @@ pub enum IconCacheError {
     /// PNG encoding failed
     /// Includes app UUID context for debugging
     /// (Requirement 7.4: Return structured error with app UUID)
-    #[cfg(windows)]
     #[error("Failed to encode icon to PNG for app {app_id}")]
     PngEncodingError {
         app_id: Uuid,
@@ -80,7 +79,6 @@ pub enum IconCacheError {
     /// PNG decoding failed
     /// Includes app UUID context for debugging
     /// (Requirement 7.4: Return structured error with app UUID)
-    #[cfg(windows)]
     #[error("Failed to decode PNG icon for app {app_id}")]
     PngDecodingError {
         app_id: Uuid,
@@ -99,8 +97,6 @@ pub enum IconCacheError {
 
     /// Failed to persist temporary file (atomic rename)
     /// (Requirement 7.3: Use atomic write operations)
-    /// Note: Available only in test builds until tempfile is promoted to regular dependency in task 4
-    #[cfg(any(test, windows))]
     #[error("Failed to atomically persist icon for app {app_id} to {path}")]
     AtomicPersistFailed {
         app_id: Uuid,
