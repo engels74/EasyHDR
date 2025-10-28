@@ -349,7 +349,6 @@ impl TrayIcon {
     }
 
     /// Updates the tray icon and menu item text to reflect the current HDR state.
-    #[expect(dead_code)]
     pub fn update_icon(&mut self, hdr_enabled: bool) {
         use tracing::{info, warn};
 
@@ -383,7 +382,6 @@ impl TrayIcon {
     }
 
     /// Displays a Windows toast notification (respects user's notification preference).
-    #[expect(dead_code)]
     #[expect(
         clippy::unused_self,
         reason = "Method signature matches expected API pattern; self may be used in future implementations"
