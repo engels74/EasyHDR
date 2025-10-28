@@ -96,6 +96,10 @@ harness = false
 name = "hdr_detection"
 harness = false
 
+[[bench]]
+name = "icon_cache"
+harness = false
+
 [profile.release]
 opt-level = "z"     # Optimize for size
 lto = true          # Link-time optimization
