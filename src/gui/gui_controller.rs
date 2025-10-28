@@ -119,6 +119,9 @@ impl GuiController {
             info!("Settings properties initialized from config");
         }
 
+        // Initialize cache info from icon cache (Requirement 4.5)
+        Self::update_cache_info(&main_window);
+
         // Set version and build ID from compile-time environment variables
         main_window.set_app_version(env!("CARGO_PKG_VERSION").into());
         main_window.set_build_id(env!("GIT_COMMIT_SHA").into());
@@ -177,6 +180,11 @@ impl GuiController {
         let window_weak = main_window.as_weak();
         main_window.on_check_for_updates(move || {
             Self::check_for_updates(&controller_clone, &window_weak);
+        });
+
+        let window_weak = main_window.as_weak();
+        main_window.on_clear_icon_cache(move || {
+            Self::clear_icon_cache(&window_weak);
         });
 
         // UWP picker callbacks
@@ -1452,6 +1460,117 @@ impl GuiController {
     fn show_error_dialog_from_error(error: &easyhdr::error::EasyHdrError) {
         use easyhdr::error::get_user_friendly_error;
         eprintln!("Error: {}", get_user_friendly_error(error));
+    }
+
+    /// Update cache info display in the UI
+    ///
+    /// Reads cache statistics from the icon cache and updates the UI display
+    /// with the current icon count and human-readable size.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 4.1: Retrieves cache statistics
+    /// - Requirement 4.5: Displays cache statistics in settings dialog
+    fn update_cache_info(window: &MainWindow) {
+        use easyhdr::utils::icon_cache::IconCache;
+        use tracing::{info, warn};
+
+        // Get cache statistics
+        let cache_dir = IconCache::default_cache_dir();
+        match IconCache::new(cache_dir) {
+            Ok(cache) => match cache.get_cache_stats() {
+                Ok(stats) => {
+                    info!(
+                        "Cache statistics: {} icons, {}",
+                        stats.count,
+                        stats.size_human_readable()
+                    );
+
+                    // Update UI with cache info
+                    // Safe cast: icon count is unlikely to exceed i32::MAX
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "Icon count is unlikely to exceed i32::MAX in practice"
+                    )]
+                    {
+                        window.set_cache_icon_count(stats.count as i32);
+                    }
+                    window.set_cache_size_text(stats.size_human_readable().into());
+                }
+                Err(e) => {
+                    warn!("Failed to get cache statistics: {}", e);
+                    // Set default values on error
+                    window.set_cache_icon_count(0);
+                    window.set_cache_size_text("0 KB".into());
+                }
+            },
+            Err(e) => {
+                warn!("Failed to initialize icon cache: {}", e);
+                // Set default values on error
+                window.set_cache_icon_count(0);
+                window.set_cache_size_text("0 KB".into());
+            }
+        }
+    }
+
+    /// Clear the icon cache
+    ///
+    /// Removes all cached icons from the cache directory, updates the UI display,
+    /// and shows a success notification to the user.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 4.2: Provides method to clear all cached icons
+    /// - Requirement 4.3: Removes all PNG files from cache directory
+    /// - Requirement 4.5: Updates cache info display after clearing
+    #[cfg(windows)]
+    fn clear_icon_cache(window: &slint::Weak<MainWindow>) {
+        use easyhdr::utils::icon_cache::IconCache;
+        use tracing::{info, warn};
+
+        info!("Clearing icon cache");
+
+        let Some(window) = window.upgrade() else {
+            warn!("Failed to upgrade window weak reference");
+            return;
+        };
+
+        // Get icon cache
+        let cache_dir = IconCache::default_cache_dir();
+        let cache = match IconCache::new(cache_dir) {
+            Ok(cache) => cache,
+            Err(e) => {
+                warn!("Failed to initialize icon cache: {}", e);
+                Self::show_error_dialog(&format!("Failed to initialize icon cache:\n\n{}", e));
+                return;
+            }
+        };
+
+        // Clear the cache
+        match cache.clear_cache() {
+            Ok(()) => {
+                info!("Icon cache cleared successfully");
+
+                // Update cache info display (Requirement 4.5)
+                Self::update_cache_info(&window);
+
+                // Show success notification (Requirement 4.5)
+                Self::show_info_notification(
+                    "Cache Cleared",
+                    "Icon cache has been cleared successfully",
+                );
+            }
+            Err(e) => {
+                warn!("Failed to clear icon cache: {}", e);
+                Self::show_error_dialog(&format!("Failed to clear icon cache:\n\n{}", e));
+            }
+        }
+    }
+
+    /// Stub implementation for non-Windows platforms
+    #[cfg(not(windows))]
+    fn clear_icon_cache(_window: &slint::Weak<MainWindow>) {
+        Self::show_error_dialog("Cache management is only supported on Windows");
     }
 
     /// Restore window position and size from config
