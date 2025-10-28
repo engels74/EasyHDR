@@ -219,7 +219,7 @@ impl ConfigManager {
     ///
     /// Errors during icon extraction are logged but don't prevent the method from
     /// completing. Apps without icons will display with a default/placeholder icon.
-    #[allow(
+    #[expect(
         clippy::too_many_lines,
         reason = "Icon regeneration logic requires handling both Win32 and UWP apps with different extraction strategies; splitting would reduce cohesion"
     )]
