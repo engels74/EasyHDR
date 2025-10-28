@@ -225,6 +225,10 @@ impl ConfigManager {
     )]
     fn regenerate_missing_icons(config: &mut AppConfig) {
         use crate::config::models::MonitoredApp;
+        #[cfg(windows)]
+        use crate::utils::memory_profiler;
+        #[cfg(windows)]
+        use crate::uwp;
 
         // Early return if no apps to process
         if config.monitored_apps.is_empty() {
@@ -276,7 +280,6 @@ impl ConfigManager {
         // For UWP apps, we need to enumerate packages to get logo paths
         #[cfg(windows)]
         let uwp_packages = {
-            use crate::uwp;
             match uwp::enumerate_packages() {
                 Ok(packages) => Some(packages),
                 Err(e) => {
@@ -338,7 +341,6 @@ impl ConfigManager {
                         {
                             // Extract icon from logo path if available
                             if let Some(logo_path) = &pkg.logo_path {
-                                use crate::uwp;
                                 match uwp::extract_icon(logo_path) {
                                     Ok(icon_data) if !icon_data.is_empty() => {
                                         tracing::debug!(
@@ -359,7 +361,6 @@ impl ConfigManager {
                                         }
 
                                         // Record icon in memory profiler
-                                        use crate::utils::memory_profiler;
                                         memory_profiler::get_profiler()
                                             .record_icon_cached(icon_data.len());
 

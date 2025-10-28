@@ -291,7 +291,7 @@ impl HdrStateMonitor {
 }
 
 /// Shared state for the window procedure
-#[expect(dead_code)] // Used in Windows-specific window procedure
+#[cfg(windows)]
 struct MonitorState {
     hdr_controller: Arc<Mutex<HdrController>>,
     cached_hdr_state: Arc<Mutex<bool>>,
