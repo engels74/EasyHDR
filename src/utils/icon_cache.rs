@@ -1652,3 +1652,155 @@ mod tests {
         assert_eq!(stats.size_human_readable(), "0 bytes");
     }
 }
+
+/// Property-based tests for PNG encoding/decoding
+///
+/// These tests use Proptest to verify that PNG encoding/decoding roundtrip
+/// preserves data for arbitrary RGBA input vectors. This validates the correctness
+/// of the PNG codec implementation across a wide range of input patterns.
+///
+/// # Requirements
+///
+/// - Requirement 10.2: Property-based tests using Proptest for PNG encoding/decoding
+///
+/// # Design
+///
+/// Uses `proptest` to generate arbitrary 4096-byte RGBA vectors (32x32 pixels × 4 channels).
+/// Each test case verifies that encoding to PNG and decoding back to RGBA preserves
+/// the original data byte-for-byte.
+///
+/// The property being tested: ∀ rgba ∈ valid_rgba_data, decode(encode(rgba)) = rgba
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// Property test: PNG encoding/decoding roundtrip preserves data
+        ///
+        /// Tests that for any arbitrary 4096-byte RGBA input vector, encoding to PNG
+        /// and decoding back to RGBA produces exactly the original data.
+        ///
+        /// This property test validates:
+        /// 1. The encoder produces valid PNG data for all possible RGBA inputs
+        /// 2. The decoder correctly interprets the encoded PNG data
+        /// 3. No data loss occurs during the encoding/decoding cycle
+        /// 4. The image crate's PNG codec is lossless for our use case
+        ///
+        /// # Test Strategy
+        ///
+        /// - Generates arbitrary 4096-byte vectors (32x32 pixels × RGBA)
+        /// - Tests encode → decode roundtrip
+        /// - Verifies byte-for-byte equality
+        ///
+        /// # Requirements
+        ///
+        /// - Requirement 10.2: Property-based tests for PNG encoding/decoding roundtrip
+        ///
+        /// # Rationale
+        ///
+        /// Property-based testing is superior to example-based testing for this use case:
+        /// - Explores edge cases that manual tests might miss
+        /// - Provides high confidence in correctness across all inputs
+        /// - Shrinks failing cases to minimal reproducible examples
+        /// - Complements unit tests with broader coverage
+        #[test]
+        fn png_encoding_roundtrip_preserves_data(
+            rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)
+        ) {
+            // Generate a fresh UUID for each test case
+            let app_id = Uuid::new_v4();
+
+            // Encode RGBA to PNG
+            let encoded = IconCache::encode_rgba_to_png(&rgba_bytes, app_id)
+                .expect("Encoding should succeed for valid 4096-byte input");
+
+            // Decode PNG back to RGBA
+            let decoded = IconCache::decode_png_to_rgba(&encoded, app_id)
+                .expect("Decoding should succeed for valid PNG data");
+
+            // Verify roundtrip preserves data exactly
+            prop_assert_eq!(rgba_bytes.len(), decoded.len(),
+                "Decoded data should have same length as original");
+            prop_assert_eq!(rgba_bytes, decoded,
+                "Roundtrip should preserve RGBA data byte-for-byte");
+        }
+
+        /// Property test: PNG decoding produces consistent output size
+        ///
+        /// Tests that decoding always produces exactly 4096 bytes (32x32 × RGBA),
+        /// regardless of the input RGBA pattern. This validates the resizing logic.
+        ///
+        /// # Test Strategy
+        ///
+        /// - Generates arbitrary 4096-byte RGBA vectors
+        /// - Encodes to PNG (which may vary in size due to compression)
+        /// - Decodes back and verifies output is always 4096 bytes
+        ///
+        /// # Requirements
+        ///
+        /// - Requirement 7.2: Decoding resizes to exactly 32x32 pixels
+        /// - Requirement 10.2: Property-based tests for PNG encoding/decoding
+        #[test]
+        fn png_decoding_always_produces_correct_size(
+            rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)
+        ) {
+            let app_id = Uuid::new_v4();
+
+            // Encode to PNG
+            let encoded = IconCache::encode_rgba_to_png(&rgba_bytes, app_id)
+                .expect("Encoding should succeed");
+
+            // Decode back
+            let decoded = IconCache::decode_png_to_rgba(&encoded, app_id)
+                .expect("Decoding should succeed");
+
+            // Verify output size is always exactly 4096 bytes (32x32 RGBA)
+            prop_assert_eq!(decoded.len(), 4096,
+                "Decoded data must always be exactly 4096 bytes");
+        }
+
+        /// Property test: PNG encoding produces valid PNG data
+        ///
+        /// Tests that encoding always produces data that starts with the PNG file signature,
+        /// regardless of the input RGBA pattern. This validates that the encoder produces
+        /// well-formed PNG files.
+        ///
+        /// # Test Strategy
+        ///
+        /// - Generates arbitrary 4096-byte RGBA vectors
+        /// - Encodes to PNG
+        /// - Verifies PNG signature (magic bytes)
+        ///
+        /// # PNG Signature
+        ///
+        /// Valid PNG files start with: 137 80 78 71 13 10 26 10 (0x89 'P' 'N' 'G' \\r \\n 0x1a \\n)
+        ///
+        /// # Requirements
+        ///
+        /// - Requirement 10.2: Property-based tests for PNG encoding/decoding
+        #[test]
+        fn png_encoding_produces_valid_png_signature(
+            rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)
+        ) {
+            let app_id = Uuid::new_v4();
+
+            // Encode to PNG
+            let encoded = IconCache::encode_rgba_to_png(&rgba_bytes, app_id)
+                .expect("Encoding should succeed");
+
+            // Verify PNG signature (first 8 bytes)
+            // PNG files start with: 137 80 78 71 13 10 26 10
+            prop_assert!(encoded.len() >= 8,
+                "PNG data should have at least 8 bytes for signature");
+            prop_assert_eq!(encoded[0], 137, "PNG signature byte 0 (0x89)");
+            prop_assert_eq!(encoded[1], 80,  "PNG signature byte 1 ('P')");
+            prop_assert_eq!(encoded[2], 78,  "PNG signature byte 2 ('N')");
+            prop_assert_eq!(encoded[3], 71,  "PNG signature byte 3 ('G')");
+            prop_assert_eq!(encoded[4], 13,  "PNG signature byte 4 (\\r)");
+            prop_assert_eq!(encoded[5], 10,  "PNG signature byte 5 (\\n)");
+            prop_assert_eq!(encoded[6], 26,  "PNG signature byte 6 (0x1a)");
+            prop_assert_eq!(encoded[7], 10,  "PNG signature byte 7 (\\n)");
+        }
+    }
+}
