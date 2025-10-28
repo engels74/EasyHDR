@@ -166,9 +166,14 @@ component SettingsDialogContent inherits Rectangle {
     in-out property <bool> minimize-to-tray-on-close: false;
     in-out property <bool> start-minimized-to-tray: false;
 
+    // Cache management properties
+    in-out property <int> cache-icon-count: 0;
+    in-out property <string> cache-size-text: "0 KB";
+
     // Callbacks
     callback save-settings(bool, int, bool, bool, bool, bool, bool);
     callback cancel-settings();
+    callback clear-icon-cache();
 
     // Modern card-like design with layered shadows
     background: DesignTokens.surface-primary;
@@ -339,6 +344,69 @@ component SettingsDialogContent inherits Rectangle {
                     StyledCheckBox {
                         text: "Show notifications when updates are available";
                         checked <=> show-update-notifications;
+                    }
+                }
+            }
+
+            // Visual separator
+            Rectangle {
+                height: 1px;
+                background: DesignTokens.border-light;
+            }
+
+            // Category 4: Cache Management
+            VerticalLayout {
+                spacing: DesignTokens.space-md;
+
+                // Section header
+                Text {
+                    text: "Cache Management";
+                    font-family: DesignTokens.font-family-primary;
+                    font-size: DesignTokens.font-size-lg;
+                    font-weight: 600;
+                    color: DesignTokens.text-primary;
+                }
+
+                // Cache information display
+                VerticalLayout {
+                    spacing: DesignTokens.space-sm;
+
+                    Text {
+                        text: "Icon cache stores application icons for faster loading.";
+                        font-family: DesignTokens.font-family-primary;
+                        font-size: DesignTokens.font-size-sm;
+                        color: DesignTokens.text-secondary;
+                        wrap: word-wrap;
+                    }
+
+                    // Cache stats display
+                    HorizontalLayout {
+                        spacing: DesignTokens.space-md;
+
+                        Text {
+                            text: "Cached icons:";
+                            font-family: DesignTokens.font-family-primary;
+                            font-size: DesignTokens.font-size-base;
+                            color: DesignTokens.text-secondary;
+                        }
+
+                        Text {
+                            text: cache-icon-count + " (" + cache-size-text + ")";
+                            font-family: DesignTokens.font-family-primary;
+                            font-size: DesignTokens.font-size-base;
+                            font-weight: 600;
+                            color: DesignTokens.text-primary;
+                        }
+                    }
+
+                    // Clear cache button
+                    HorizontalLayout {
+                        StyledButton {
+                            text: "Clear Icon Cache";
+                            clicked => {
+                                clear-icon-cache();
+                            }
+                        }
                     }
                 }
             }
@@ -640,6 +708,10 @@ export component MainWindow inherits Window {
     in-out property <bool> settings-minimize-to-tray-on-close: false;
     in-out property <bool> settings-start-minimized-to-tray: false;
 
+    // Cache management properties
+    in-out property <int> cache-icon-count: 0;
+    in-out property <string> cache-size-text: "0 KB";
+
     // Version and update check properties
     in-out property <string> app-version: "0.1.0";
     in-out property <string> build-id: "unknown";
@@ -658,6 +730,7 @@ export component MainWindow inherits Window {
     callback open-settings();
     callback save-settings(bool, int, bool, bool, bool, bool, bool);
     callback check-for-updates();
+    callback clear-icon-cache();
 
     // UWP picker callbacks
     callback uwp-picker-add-selected();
@@ -1067,6 +1140,8 @@ export component MainWindow inherits Window {
             minimize-to-tray-on-minimize <=> settings-minimize-to-tray-on-minimize;
             minimize-to-tray-on-close <=> settings-minimize-to-tray-on-close;
             start-minimized-to-tray <=> settings-start-minimized-to-tray;
+            cache-icon-count <=> cache-icon-count;
+            cache-size-text <=> cache-size-text;
 
             save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, show-update-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray) => {
                 root.save-settings(auto-start, monitoring-interval-ms, show-tray-notifications, show-update-notifications, minimize-to-tray-on-minimize, minimize-to-tray-on-close, start-minimized-to-tray);
@@ -1075,6 +1150,10 @@ export component MainWindow inherits Window {
 
             cancel-settings => {
                 settings-dialog.close();
+            }
+
+            clear-icon-cache => {
+                root.clear-icon-cache();
             }
         }
     }

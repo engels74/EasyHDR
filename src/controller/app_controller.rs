@@ -519,10 +519,7 @@ impl AppController {
                 // Continue with app removal despite cache cleanup failure
             }
         } else {
-            warn!(
-                "Failed to initialize icon cache for cleanup of app {}",
-                id
-            );
+            warn!("Failed to initialize icon cache for cleanup of app {}", id);
             // Continue with app removal despite cache initialization failure
         }
 
