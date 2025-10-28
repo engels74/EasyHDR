@@ -225,6 +225,11 @@ impl UwpApp {
         app_id: String,
         logo_path: Option<&std::path::Path>,
     ) -> Self {
+        // Generate unique UUID for this app
+        // Thread safety: Each call generates a unique UUID, preventing file path conflicts
+        // in concurrent icon cache writes (Requirement 6.3, 6.4)
+        let id = Uuid::new_v4();
+
         // Extract icon if logo_path is provided
         let icon_data = if let Some(path) = logo_path {
             #[cfg(windows)]
@@ -241,6 +246,28 @@ impl UwpApp {
                             display_name,
                             data.len()
                         );
+
+                        // Cache icon to disk for persistence across restarts (Requirement 1.3)
+                        // Graceful degradation: Cache failures don't prevent app addition (Requirement 5.2)
+                        if let Ok(cache) = crate::utils::IconCache::new(
+                            crate::utils::IconCache::default_cache_dir(),
+                        ) {
+                            if let Err(e) = cache.save_icon(id, &data) {
+                                tracing::warn!(
+                                    "Failed to cache UWP icon for '{}' ({}): {}. Icon will remain in memory only.",
+                                    display_name,
+                                    id,
+                                    e
+                                );
+                            } else {
+                                tracing::debug!(
+                                    "Successfully cached UWP icon for '{}' ({}) to disk",
+                                    display_name,
+                                    id
+                                );
+                            }
+                        }
+
                         Some(data)
                     }
                     Ok(_) => {
@@ -273,7 +300,7 @@ impl UwpApp {
         };
 
         Self {
-            id: Uuid::new_v4(),
+            id,
             display_name,
             package_family_name,
             app_id,
