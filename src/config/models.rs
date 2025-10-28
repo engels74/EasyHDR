@@ -94,6 +94,11 @@ impl Win32App {
             })?
             .to_lowercase();
 
+        // Generate unique UUID for this app
+        // Thread safety: Each call generates a unique UUID, preventing file path conflicts
+        // in concurrent icon cache writes (Requirement 6.3, 6.4)
+        let id = Uuid::new_v4();
+
         // Extract icon from executable (gracefully handles failures)
         let icon_data = match extract_icon_from_exe(&exe_path) {
             Ok(data) if !data.is_empty() => {
@@ -103,6 +108,28 @@ impl Win32App {
                     use crate::utils::memory_profiler;
                     memory_profiler::get_profiler().record_icon_cached(data.len());
                 }
+
+                // Cache icon to disk for persistence across restarts (Requirement 1.2)
+                // Graceful degradation: Cache failures don't prevent app addition (Requirement 5.2)
+                if let Ok(cache) =
+                    crate::utils::IconCache::new(crate::utils::IconCache::default_cache_dir())
+                {
+                    if let Err(e) = cache.save_icon(id, &data) {
+                        tracing::warn!(
+                            "Failed to cache icon for '{}' ({}): {}. Icon will remain in memory only.",
+                            display_name,
+                            id,
+                            e
+                        );
+                    } else {
+                        tracing::debug!(
+                            "Successfully cached icon for '{}' ({}) to disk",
+                            display_name,
+                            id
+                        );
+                    }
+                }
+
                 Some(data)
             }
             Ok(_) => None, // Empty data means extraction failed gracefully
@@ -114,7 +141,7 @@ impl Win32App {
         };
 
         Ok(Self {
-            id: Uuid::new_v4(),
+            id,
             display_name,
             exe_path,
             process_name,
