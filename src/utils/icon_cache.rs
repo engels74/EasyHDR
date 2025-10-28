@@ -402,8 +402,32 @@ impl IconCache {
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
     pub fn remove_icon(&self, app_id: Uuid) -> Result<()> {
-        // Stub implementation - will be completed in task 2.5
-        let _ = app_id;
+        let cache_path = self.cache_path(app_id);
+
+        // Idempotent: OK if file doesn't exist
+        if !cache_path.exists() {
+            tracing::debug!(
+                "Icon file for app {} does not exist, nothing to remove",
+                app_id
+            );
+            return Ok(());
+        }
+
+        // Remove the cache file
+        std::fs::remove_file(&cache_path).map_err(|source| {
+            EasyHdrError::IconCache(IconCacheError::IconRemovalFailed {
+                app_id,
+                path: cache_path.clone(),
+                source,
+            })
+        })?;
+
+        tracing::debug!(
+            "Removed cached icon for app {} from {}",
+            app_id,
+            cache_path.display()
+        );
+
         Ok(())
     }
 
@@ -436,7 +460,53 @@ impl IconCache {
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
     pub fn clear_cache(&self) -> Result<()> {
-        // Stub implementation - will be completed in task 2.5
+        // Requirement 4.2, 4.3: Remove all PNG files from cache directory
+
+        // If directory doesn't exist, nothing to clear (idempotent)
+        if !self.cache_dir.exists() {
+            tracing::debug!("Cache directory does not exist, nothing to clear");
+            return Ok(());
+        }
+
+        // Read directory entries
+        let entries = std::fs::read_dir(&self.cache_dir).map_err(|source| {
+            EasyHdrError::IconCache(IconCacheError::CacheClearFailed {
+                path: self.cache_dir.clone(),
+                source,
+            })
+        })?;
+
+        let mut removed_count = 0;
+
+        // Iterate through all entries and remove PNG files
+        for entry in entries {
+            let entry = entry.map_err(|source| {
+                EasyHdrError::IconCache(IconCacheError::CacheClearFailed {
+                    path: self.cache_dir.clone(),
+                    source,
+                })
+            })?;
+
+            let path = entry.path();
+
+            // Only remove .png files
+            if path.extension().and_then(|s| s.to_str()) == Some("png") {
+                std::fs::remove_file(&path).map_err(|source| {
+                    EasyHdrError::IconCache(IconCacheError::CacheClearFailed {
+                        path: self.cache_dir.clone(),
+                        source,
+                    })
+                })?;
+                removed_count += 1;
+            }
+        }
+
+        tracing::info!(
+            "Cleared icon cache: removed {} PNG files from {}",
+            removed_count,
+            self.cache_dir.display()
+        );
+
         Ok(())
     }
 
@@ -468,11 +538,57 @@ impl IconCache {
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
     pub fn get_cache_stats(&self) -> Result<CacheStats> {
-        // Stub implementation - will be completed in task 2.5
-        Ok(CacheStats {
-            count: 0,
-            size_bytes: 0,
-        })
+        // Requirement 4.1: Calculate icon count and total size in bytes
+
+        // If directory doesn't exist, return zero stats
+        if !self.cache_dir.exists() {
+            tracing::debug!("Cache directory does not exist, returning zero stats");
+            return Ok(CacheStats {
+                count: 0,
+                size_bytes: 0,
+            });
+        }
+
+        // Read directory entries
+        let entries = std::fs::read_dir(&self.cache_dir).map_err(|source| {
+            EasyHdrError::IconCache(IconCacheError::CacheStatsFailed {
+                path: self.cache_dir.clone(),
+                source,
+            })
+        })?;
+
+        let mut count = 0;
+        let mut size_bytes = 0u64;
+
+        // Iterate through all entries and sum PNG file sizes
+        for entry in entries {
+            let entry = entry.map_err(|source| {
+                EasyHdrError::IconCache(IconCacheError::CacheStatsFailed {
+                    path: self.cache_dir.clone(),
+                    source,
+                })
+            })?;
+
+            let path = entry.path();
+
+            // Only count .png files
+            if path.extension().and_then(|s| s.to_str()) == Some("png") {
+                // Get file metadata for size
+                let metadata = std::fs::metadata(&path).map_err(|source| {
+                    EasyHdrError::IconCache(IconCacheError::CacheStatsFailed {
+                        path: self.cache_dir.clone(),
+                        source,
+                    })
+                })?;
+
+                count += 1;
+                size_bytes += metadata.len();
+            }
+        }
+
+        tracing::debug!("Cache statistics: {} icons, {} bytes", count, size_bytes);
+
+        Ok(CacheStats { count, size_bytes })
     }
 
     /// Get the cache file path for an application
@@ -1275,5 +1391,264 @@ mod tests {
             "Loaded data should have same length"
         );
         assert_eq!(rgba_data, loaded, "Roundtrip should preserve data exactly");
+    }
+
+    // Cache management operation tests
+
+    #[test]
+    fn remove_icon_deletes_file() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Save icon first
+        let rgba_data = vec![128u8; 4096];
+        cache
+            .save_icon(app_id, &rgba_data)
+            .expect("save_icon should succeed");
+
+        // Verify file exists
+        let cache_path = temp_dir.path().join(format!("{app_id}.png"));
+        assert!(cache_path.exists(), "Icon file should exist");
+
+        // Remove icon
+        cache
+            .remove_icon(app_id)
+            .expect("remove_icon should succeed");
+
+        // Verify file is deleted
+        assert!(!cache_path.exists(), "Icon file should be deleted");
+    }
+
+    #[test]
+    fn remove_icon_is_idempotent() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+        let app_id = Uuid::new_v4();
+
+        // Remove non-existent icon (should not error)
+        cache
+            .remove_icon(app_id)
+            .expect("remove_icon should succeed for non-existent file");
+
+        // Remove again (should still not error)
+        cache
+            .remove_icon(app_id)
+            .expect("remove_icon should be idempotent");
+    }
+
+    #[test]
+    fn clear_cache_removes_all_png_files() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+
+        // Create multiple icon files
+        let app_id_1 = Uuid::new_v4();
+        let app_id_2 = Uuid::new_v4();
+        let app_id_3 = Uuid::new_v4();
+
+        let rgba_data = vec![128u8; 4096];
+        cache.save_icon(app_id_1, &rgba_data).expect("save 1");
+        cache.save_icon(app_id_2, &rgba_data).expect("save 2");
+        cache.save_icon(app_id_3, &rgba_data).expect("save 3");
+
+        // Verify files exist
+        assert!(temp_dir.path().join(format!("{app_id_1}.png")).exists());
+        assert!(temp_dir.path().join(format!("{app_id_2}.png")).exists());
+        assert!(temp_dir.path().join(format!("{app_id_3}.png")).exists());
+
+        // Clear cache
+        cache.clear_cache().expect("clear_cache should succeed");
+
+        // Verify all files are deleted
+        assert!(!temp_dir.path().join(format!("{app_id_1}.png")).exists());
+        assert!(!temp_dir.path().join(format!("{app_id_2}.png")).exists());
+        assert!(!temp_dir.path().join(format!("{app_id_3}.png")).exists());
+    }
+
+    #[test]
+    fn clear_cache_only_removes_png_files() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+
+        // Create PNG file
+        let app_id = Uuid::new_v4();
+        let rgba_data = vec![128u8; 4096];
+        cache.save_icon(app_id, &rgba_data).expect("save icon");
+
+        // Create a non-PNG file in the cache directory
+        let txt_path = temp_dir.path().join("readme.txt");
+        let mut txt_file = File::create(&txt_path).expect("create txt file");
+        txt_file.write_all(b"test file").expect("write txt");
+        drop(txt_file);
+
+        // Clear cache
+        cache.clear_cache().expect("clear_cache should succeed");
+
+        // PNG should be deleted
+        assert!(!temp_dir.path().join(format!("{app_id}.png")).exists());
+
+        // Non-PNG file should remain
+        assert!(txt_path.exists(), "Non-PNG files should not be deleted");
+    }
+
+    #[test]
+    fn clear_cache_is_idempotent() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+
+        // Clear empty cache (should not error)
+        cache
+            .clear_cache()
+            .expect("clear_cache should succeed on empty cache");
+
+        // Clear again (should still not error)
+        cache
+            .clear_cache()
+            .expect("clear_cache should be idempotent");
+    }
+
+    #[test]
+    fn get_cache_stats_returns_correct_count_and_size() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+
+        // Initially empty
+        let stats = cache
+            .get_cache_stats()
+            .expect("get_cache_stats should succeed");
+        assert_eq!(stats.count, 0, "Initial count should be 0");
+        assert_eq!(stats.size_bytes, 0, "Initial size should be 0");
+
+        // Add first icon
+        let app_id_1 = Uuid::new_v4();
+        let rgba_data = vec![128u8; 4096];
+        cache.save_icon(app_id_1, &rgba_data).expect("save icon 1");
+
+        let stats = cache
+            .get_cache_stats()
+            .expect("get_cache_stats should succeed");
+        assert_eq!(stats.count, 1, "Count should be 1 after adding one icon");
+        assert!(stats.size_bytes > 0, "Size should be greater than 0");
+
+        let size_after_one = stats.size_bytes;
+
+        // Add second icon
+        let app_id_2 = Uuid::new_v4();
+        cache.save_icon(app_id_2, &rgba_data).expect("save icon 2");
+
+        let stats = cache
+            .get_cache_stats()
+            .expect("get_cache_stats should succeed");
+        assert_eq!(stats.count, 2, "Count should be 2 after adding two icons");
+        assert!(
+            stats.size_bytes > size_after_one,
+            "Size should increase after adding second icon"
+        );
+
+        // Add third icon
+        let app_id_3 = Uuid::new_v4();
+        cache.save_icon(app_id_3, &rgba_data).expect("save icon 3");
+
+        let stats = cache
+            .get_cache_stats()
+            .expect("get_cache_stats should succeed");
+        assert_eq!(stats.count, 3, "Count should be 3 after adding three icons");
+    }
+
+    #[test]
+    fn get_cache_stats_only_counts_png_files() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+
+        // Add PNG icon
+        let app_id = Uuid::new_v4();
+        let rgba_data = vec![128u8; 4096];
+        cache.save_icon(app_id, &rgba_data).expect("save icon");
+
+        // Create non-PNG file
+        let txt_path = temp_dir.path().join("readme.txt");
+        let mut txt_file = File::create(&txt_path).expect("create txt file");
+        txt_file.write_all(b"test file content").expect("write txt");
+        drop(txt_file);
+
+        // Get stats
+        let stats = cache
+            .get_cache_stats()
+            .expect("get_cache_stats should succeed");
+
+        // Should only count the PNG file
+        assert_eq!(stats.count, 1, "Should only count PNG files");
+    }
+
+    #[test]
+    fn get_cache_stats_empty_directory() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
+
+        let stats = cache
+            .get_cache_stats()
+            .expect("get_cache_stats should succeed");
+
+        assert_eq!(stats.count, 0, "Empty cache should have count 0");
+        assert_eq!(stats.size_bytes, 0, "Empty cache should have size 0");
+    }
+
+    #[test]
+    fn cache_stats_size_human_readable_edge_cases() {
+        // Test edge case: exactly 1 KB
+        let stats = CacheStats {
+            count: 1,
+            size_bytes: 1024,
+        };
+        assert_eq!(stats.size_human_readable(), "1 KB");
+
+        // Test edge case: exactly 1 MB
+        let stats = CacheStats {
+            count: 250,
+            size_bytes: 1024 * 1024,
+        };
+        assert_eq!(stats.size_human_readable(), "1.0 MB");
+
+        // Test edge case: 1.5 MB
+        let stats = CacheStats {
+            count: 375,
+            size_bytes: 1024 * 1024 + 512 * 1024,
+        };
+        assert_eq!(stats.size_human_readable(), "1.5 MB");
+
+        // Test edge case: less than 1 KB
+        let stats = CacheStats {
+            count: 1,
+            size_bytes: 500,
+        };
+        assert_eq!(stats.size_human_readable(), "500 bytes");
+
+        // Test edge case: zero
+        let stats = CacheStats {
+            count: 0,
+            size_bytes: 0,
+        };
+        assert_eq!(stats.size_human_readable(), "0 bytes");
     }
 }
