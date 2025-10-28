@@ -510,6 +510,22 @@ impl AppController {
             config.monitored_apps.retain(|app| app.id() != &id);
         }
 
+        // Clean up cached icon (Requirement 4.4: graceful failure)
+        if let Ok(cache) = crate::utils::icon_cache::IconCache::new(
+            crate::utils::icon_cache::IconCache::default_cache_dir(),
+        ) {
+            if let Err(e) = cache.remove_icon(id) {
+                warn!("Failed to remove cached icon for app {}: {}", id, e);
+                // Continue with app removal despite cache cleanup failure
+            }
+        } else {
+            warn!(
+                "Failed to initialize icon cache for cleanup of app {}",
+                id
+            );
+            // Continue with app removal despite cache initialization failure
+        }
+
         // Save configuration - if this fails, we continue with in-memory config
         let config = self.config.lock();
         if let Err(e) = ConfigManager::save(&config) {
