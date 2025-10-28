@@ -80,5 +80,5 @@ pub mod gui_controller;
 pub mod tray;
 
 pub use gui_controller::GuiController;
-#[allow(unused_imports)]
+#[expect(unused_imports)]
 pub use tray::TrayIcon;

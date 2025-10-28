@@ -565,7 +565,7 @@ mod tests {
     }
 
     /// Helper function to clean up test directory (deprecated - use `TempDir` instead)
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     fn cleanup_test_dir(dir: &PathBuf) {
         if dir.exists() {
             fs::remove_dir_all(dir).ok();

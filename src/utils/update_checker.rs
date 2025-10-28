@@ -15,7 +15,7 @@ struct GitHubRelease {
     /// Release tag name (e.g., "v1.2.3" or "1.2.3")
     tag_name: String,
     /// Release name (not currently used, but part of API response)
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     name: String,
     /// Whether this is a prerelease
     prerelease: bool,

@@ -55,7 +55,6 @@ pub enum HdrStateEvent {
 ///
 /// Monitors Windows display configuration changes and detects HDR state transitions.
 /// Uses a message-only window to receive `WM_DISPLAYCHANGE` and `WM_SETTINGCHANGE` messages.
-#[allow(dead_code)] // Fields are used in Windows-specific code
 pub struct HdrStateMonitor {
     /// Event sender to notify the application controller
     event_sender: mpsc::SyncSender<HdrStateEvent>,
@@ -140,7 +139,7 @@ impl HdrStateMonitor {
     ///
     /// This method is called when a display configuration change is detected.
     /// It queries the actual HDR state and compares with the cached state.
-    #[allow(dead_code)] // Used in Windows-specific window procedure
+    #[expect(dead_code)] // Used in Windows-specific window procedure
     fn check_and_notify_hdr_state_change(&self) {
         debug!("Checking for HDR state change");
 
@@ -292,7 +291,7 @@ impl HdrStateMonitor {
 }
 
 /// Shared state for the window procedure
-#[allow(dead_code)] // Used in Windows-specific window procedure
+#[expect(dead_code)] // Used in Windows-specific window procedure
 struct MonitorState {
     hdr_controller: Arc<Mutex<HdrController>>,
     cached_hdr_state: Arc<Mutex<bool>>,
