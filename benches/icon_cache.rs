@@ -41,7 +41,10 @@ use uuid::Uuid;
 /// - `TempDir`: Must be kept alive to prevent directory deletion
 /// - `IconCache`: The cache instance to use for benchmarks
 /// - `Vec<Uuid>`: List of app IDs corresponding to cached icons
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Benchmark utility: modulo 256 ensures value fits in u8 range (0-255)"
+)]
 fn create_populated_cache(icon_count: usize) -> (TempDir, IconCache, Vec<Uuid>) {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
@@ -202,7 +205,10 @@ fn bench_single_icon_load(c: &mut Criterion) {
 ///
 /// This benchmark measures the time to save a single icon to cache,
 /// including PNG encoding and atomic file write.
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Benchmark utility: modulo 256 ensures value fits in u8 range (0-255)"
+)]
 fn bench_icon_save(c: &mut Criterion) {
     c.bench_function("icon_cache_save", |b| {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");

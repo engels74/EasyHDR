@@ -1487,8 +1487,14 @@ impl GuiController {
                     );
 
                     // Update UI with cache info
-                    // Safe cast: icon count is unlikely to exceed i32::MAX
-                    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
+                    // Icon count is practically limited by filesystem and memory constraints
+                    // to values far below i32::MAX (2.1 billion). Even with 100KB per icon,
+                    // reaching i32::MAX would require ~200TB of storage.
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_possible_wrap,
+                        reason = "Icon count will never exceed i32::MAX in practice due to filesystem/memory limits"
+                    )]
                     {
                         window.set_cache_icon_count(stats.count as i32);
                     }

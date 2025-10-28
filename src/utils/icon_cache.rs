@@ -778,7 +778,10 @@ impl CacheStats {
     /// let stats = CacheStats { count: 100, size_bytes: 2_097_152 };
     /// assert_eq!(stats.size_human_readable(), "2.0 MB");
     /// ```
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "Precision loss is acceptable for human-readable display formatting; exact byte values aren't needed for UI presentation"
+    )]
     pub fn size_human_readable(&self) -> String {
         const KB: u64 = 1024;
         const MB: u64 = 1024 * KB;
@@ -924,7 +927,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
+    )]
     fn png_encoding_decoding_roundtrip() {
         let app_id = Uuid::new_v4();
 
@@ -1098,7 +1104,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
+    )]
     fn save_icon_produces_valid_png_file() {
         use tempfile::TempDir;
 
@@ -1169,7 +1178,10 @@ mod tests {
     // load_icon() tests
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
+    )]
     fn load_icon_cache_hit() {
         use tempfile::TempDir;
 
@@ -1367,7 +1379,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
+    )]
     fn load_icon_save_load_roundtrip() {
         use tempfile::TempDir;
 

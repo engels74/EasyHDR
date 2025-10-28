@@ -390,7 +390,10 @@ fn test_mixed_win32_and_uwp_icons() {
 /// - Requirement 3.3: Load 50 icons in <150ms
 /// - Requirement 3.5: Gracefully degrade to sequential on single-core systems
 #[test]
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
+)]
 fn test_parallel_loading_with_many_apps() {
     use rayon::prelude::*;
     use std::time::Instant;
@@ -629,7 +632,10 @@ fn test_graceful_fallback_on_cache_corruption() {
 /// Creates a 32x32 RGBA image (4096 bytes) with a repeating pattern
 /// based on the input seed. Different seeds produce different patterns
 /// for testing cache correctness.
-#[allow(clippy::cast_possible_truncation)]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Test utility: wrapping arithmetic on u8 is intentional for pattern generation"
+)]
 fn create_test_icon_pattern(seed: u8) -> Vec<u8> {
     let mut icon = vec![0u8; 4096]; // 32x32 pixels × 4 channels (RGBA)
 

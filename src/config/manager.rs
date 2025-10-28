@@ -103,7 +103,10 @@ impl ConfigManager {
     /// - Requirement 3.3: Load 50 icons in <150ms
     /// - Requirement 3.4: Load 100 icons in <250ms
     /// - Requirement 3.5: Gracefully degrade to sequential on single-core systems
-    #[allow(clippy::unnecessary_wraps)]
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "Returns Result<()> for API consistency with other ConfigManager methods and to allow future error propagation. Current implementation uses graceful degradation (Requirement 5.2) where all errors are logged but don't prevent startup."
+    )]
     fn restore_icons_from_cache(config: &mut AppConfig) -> Result<()> {
         use crate::config::models::MonitoredApp;
         use rayon::prelude::*;
