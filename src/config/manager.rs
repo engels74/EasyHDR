@@ -44,6 +44,7 @@ impl ConfigManager {
     /// Load configuration from disk
     ///
     /// If the configuration file doesn't exist or is corrupt, returns default configuration.
+    /// After loading, restores cached icons from disk in parallel for optimal performance.
     pub fn load() -> Result<AppConfig> {
         use tracing::error;
 
@@ -62,19 +63,137 @@ impl ConfigManager {
             e
         })?;
 
-        match serde_json::from_str(&json) {
+        let mut config = match serde_json::from_str(&json) {
             Ok(config) => {
                 info!("Configuration loaded successfully from {:?}", config_path);
-                Ok(config)
+                config
             }
             Err(e) => {
                 warn!(
                     "Failed to parse configuration from {:?}, using defaults: {}",
                     config_path, e
                 );
-                Ok(AppConfig::default())
+                AppConfig::default()
+            }
+        };
+
+        // Restore icons from cache in parallel (Requirement 1.5)
+        // Graceful degradation: errors are logged but don't prevent startup
+        if let Err(e) = Self::restore_icons_from_cache(&mut config) {
+            warn!(
+                "Failed to restore icons from cache: {}. Continuing without cached icons.",
+                e
+            );
+        }
+
+        Ok(config)
+    }
+
+    /// Restore icons from disk cache in parallel
+    ///
+    /// Loads cached icons for all monitored applications using parallel PNG decoding
+    /// with Rayon. For Win32 apps, validates cache freshness by comparing file modification
+    /// times. Cache failures are logged but don't prevent startup.
+    ///
+    /// # Requirements
+    ///
+    /// - Requirement 1.5: Restore all cached icons using parallel loading
+    /// - Requirement 3.1: Decode PNG files using parallel loading with Rayon
+    /// - Requirement 3.2: Load 10 icons in <50ms
+    /// - Requirement 3.3: Load 50 icons in <150ms
+    /// - Requirement 3.4: Load 100 icons in <250ms
+    /// - Requirement 3.5: Gracefully degrade to sequential on single-core systems
+    fn restore_icons_from_cache(config: &mut AppConfig) -> Result<()> {
+        use crate::config::models::MonitoredApp;
+        use rayon::prelude::*;
+
+        // Early return if no apps to restore
+        if config.monitored_apps.is_empty() {
+            tracing::debug!("No monitored apps to restore icons for");
+            return Ok(());
+        }
+
+        // Initialize icon cache
+        let cache = match crate::utils::IconCache::new(crate::utils::IconCache::default_cache_dir())
+        {
+            Ok(cache) => cache,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to initialize icon cache: {}. Icons will not be restored.",
+                    e
+                );
+                return Ok(()); // Graceful degradation (Requirement 5.2)
+            }
+        };
+
+        tracing::debug!(
+            "Restoring icons from cache for {} apps",
+            config.monitored_apps.len()
+        );
+
+        // Parallel icon loading (Requirement 3.1, 3.5)
+        // Rayon automatically uses available CPU cores and degrades to sequential on single-core systems
+        let icons: Vec<(uuid::Uuid, Vec<u8>)> = config
+            .monitored_apps
+            .par_iter()
+            .filter_map(|app| {
+                // Determine source path for cache validation
+                // Win32 apps: use exe_path for mtime comparison
+                // UWP apps: no source path (no validation)
+                let source_path = match app {
+                    MonitoredApp::Win32(win32) => Some(win32.exe_path.as_path()),
+                    MonitoredApp::Uwp(_) => None,
+                };
+
+                // Load icon from cache with validation
+                match cache.load_icon(*app.id(), source_path) {
+                    Ok(Some(icon_data)) => {
+                        tracing::trace!("Restored icon for app {} from cache", app.id());
+                        Some((*app.id(), icon_data))
+                    }
+                    Ok(None) => {
+                        // Cache miss or stale cache - will need to re-extract
+                        tracing::debug!(
+                            "Cache miss for app {} ({})",
+                            app.display_name(),
+                            app.id()
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        // Log error but continue with other icons (Requirement 5.3)
+                        tracing::warn!(
+                            "Failed to load cached icon for app {} ({}): {}. Icon will need to be re-extracted.",
+                            app.display_name(),
+                            app.id(),
+                            e
+                        );
+                        None
+                    }
+                }
+            })
+            .collect();
+
+        // Apply loaded icons sequentially to avoid mutable iterator issues
+        let restored_count = icons.len();
+        for (app_id, icon_data) in icons {
+            if let Some(app) = config.monitored_apps.iter_mut().find(|a| *a.id() == app_id) {
+                *app.icon_data_mut() = Some(icon_data);
             }
         }
+
+        // Log count of restored icons (Requirement 6.1)
+        if restored_count > 0 {
+            tracing::info!(
+                "Restored {} cached icon{} from disk",
+                restored_count,
+                if restored_count == 1 { "" } else { "s" }
+            );
+        } else {
+            tracing::debug!("No cached icons were restored (cache miss or errors)");
+        }
+
+        Ok(())
     }
 
     /// Save configuration to disk with atomic write
