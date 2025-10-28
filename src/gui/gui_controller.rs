@@ -1488,10 +1488,7 @@ impl GuiController {
 
                     // Update UI with cache info
                     // Safe cast: icon count is unlikely to exceed i32::MAX
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "Icon count is unlikely to exceed i32::MAX in practice"
-                    )]
+                    #[allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
                     {
                         window.set_cache_icon_count(stats.count as i32);
                     }
@@ -1541,7 +1538,7 @@ impl GuiController {
             Ok(cache) => cache,
             Err(e) => {
                 warn!("Failed to initialize icon cache: {}", e);
-                Self::show_error_dialog(&format!("Failed to initialize icon cache:\n\n{}", e));
+                Self::show_error_dialog(&format!("Failed to initialize icon cache:\n\n{e}"));
                 return;
             }
         };
@@ -1562,7 +1559,7 @@ impl GuiController {
             }
             Err(e) => {
                 warn!("Failed to clear icon cache: {}", e);
-                Self::show_error_dialog(&format!("Failed to clear icon cache:\n\n{}", e));
+                Self::show_error_dialog(&format!("Failed to clear icon cache:\n\n{e}"));
             }
         }
     }

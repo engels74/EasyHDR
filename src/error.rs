@@ -28,6 +28,7 @@ impl StringError {
 /// All errors preserve source chains via `#[source]` for full observability
 /// (Requirement 5.1, 5.6: Structured errors with thiserror and source chains).
 #[derive(Debug, Error)]
+#[allow(missing_docs)]
 pub enum IconCacheError {
     /// Invalid icon data size (must be exactly 4096 bytes for 32x32 RGBA)
     /// (Requirement 7.1: Validate RGBA data size)

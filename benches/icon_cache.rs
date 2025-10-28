@@ -37,10 +37,11 @@ use uuid::Uuid;
 ///
 /// # Returns
 ///
-/// Returns a tuple of (TempDir, IconCache, Vec<Uuid>) where:
-/// - TempDir: Must be kept alive to prevent directory deletion
-/// - IconCache: The cache instance to use for benchmarks
-/// - Vec<Uuid>: List of app IDs corresponding to cached icons
+/// Returns a tuple of (`TempDir`, `IconCache`, `Vec<Uuid>`) where:
+/// - `TempDir`: Must be kept alive to prevent directory deletion
+/// - `IconCache`: The cache instance to use for benchmarks
+/// - `Vec<Uuid>`: List of app IDs corresponding to cached icons
+#[allow(clippy::cast_possible_truncation)]
 fn create_populated_cache(icon_count: usize) -> (TempDir, IconCache, Vec<Uuid>) {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
@@ -73,7 +74,7 @@ fn create_populated_cache(icon_count: usize) -> (TempDir, IconCache, Vec<Uuid>) 
 /// # Design
 ///
 /// The benchmark uses Rayon's parallel iterator to decode multiple PNG files
-/// concurrently. This simulates the actual startup behavior where ConfigManager
+/// concurrently. This simulates the actual startup behavior where `ConfigManager`
 /// loads all cached icons in parallel using `restore_icons_from_cache()`.
 ///
 /// # Performance Targets
@@ -201,6 +202,7 @@ fn bench_single_icon_load(c: &mut Criterion) {
 ///
 /// This benchmark measures the time to save a single icon to cache,
 /// including PNG encoding and atomic file write.
+#[allow(clippy::cast_possible_truncation)]
 fn bench_icon_save(c: &mut Criterion) {
     c.bench_function("icon_cache_save", |b| {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");

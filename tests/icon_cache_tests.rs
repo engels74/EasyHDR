@@ -11,8 +11,8 @@
 //! # Running These Tests
 //!
 //! **IMPORTANT**: These tests MUST be run with `--test-threads=1` because:
-//! - Windows icon extraction API (ExtractIconEx) uses global state
-//! - UWP PackageManager has thread-safety constraints
+//! - Windows icon extraction API (`ExtractIconEx`) uses global state
+//! - UWP `PackageManager` has thread-safety constraints
 //! - File modification time checks require sequential execution
 //!
 //! Run with:
@@ -390,6 +390,7 @@ fn test_mixed_win32_and_uwp_icons() {
 /// - Requirement 3.3: Load 50 icons in <150ms
 /// - Requirement 3.5: Gracefully degrade to sequential on single-core systems
 #[test]
+#[allow(clippy::cast_possible_truncation)]
 fn test_parallel_loading_with_many_apps() {
     use rayon::prelude::*;
     use std::time::Instant;
@@ -439,10 +440,7 @@ fn test_parallel_loading_with_many_apps() {
 
     // Verify loading time (Requirement 3.3: <150ms for 50 apps)
     // Note: This is a soft check since performance varies by system
-    println!(
-        "Loaded {} icons in {:?} (target: <150ms)",
-        app_count, duration
-    );
+    println!("Loaded {app_count} icons in {duration:?} (target: <150ms)");
 
     if duration.as_millis() > 150 {
         eprintln!(
@@ -631,13 +629,14 @@ fn test_graceful_fallback_on_cache_corruption() {
 /// Creates a 32x32 RGBA image (4096 bytes) with a repeating pattern
 /// based on the input seed. Different seeds produce different patterns
 /// for testing cache correctness.
+#[allow(clippy::cast_possible_truncation)]
 fn create_test_icon_pattern(seed: u8) -> Vec<u8> {
     let mut icon = vec![0u8; 4096]; // 32x32 pixels × 4 channels (RGBA)
 
-    for i in 0..4096 {
+    for (i, item) in icon.iter_mut().enumerate().take(4096) {
         // Create a pattern that varies with seed and position
         // This ensures different icons are distinguishable
-        icon[i] = ((i as u8).wrapping_mul(seed)).wrapping_add(seed);
+        *item = ((i as u8).wrapping_mul(seed)).wrapping_add(seed);
     }
 
     icon

@@ -639,7 +639,7 @@ impl IconCache {
     /// Pre-allocation of 8192 bytes is based on measured PNG sizes for 32x32 RGBA icons:
     /// - Typical compressed size: 2-6 KB
     /// - 8KB capacity avoids reallocation in most cases
-    /// - Follows Rust guideline: "Pre-allocate (Vec::with_capacity)"
+    /// - Follows Rust guideline: "Pre-allocate (`Vec::with_capacity`)"
     fn encode_rgba_to_png(rgba_bytes: &[u8], app_id: Uuid) -> Result<Vec<u8>> {
         // Requirement 7.1: Validate input size is exactly 4096 bytes (32x32 × 4 channels)
         const EXPECTED_SIZE: usize = 32 * 32 * 4;
@@ -778,6 +778,7 @@ impl CacheStats {
     /// let stats = CacheStats { count: 100, size_bytes: 2_097_152 };
     /// assert_eq!(stats.size_human_readable(), "2.0 MB");
     /// ```
+    #[allow(clippy::cast_precision_loss)]
     pub fn size_human_readable(&self) -> String {
         const KB: u64 = 1024;
         const MB: u64 = 1024 * KB;
@@ -848,8 +849,11 @@ mod tests {
             count: 5,
             size_bytes: 1024,
         };
-        let _copy = stats; // Should be Copy, not Move
-        let _another_copy = stats; // This should also work
+        let copy = stats; // Should be Copy, not Move
+        let another_copy = stats; // This should also work
+        // Use the copies to avoid unused variable warnings
+        assert_eq!(copy.count, stats.count);
+        assert_eq!(another_copy.count, stats.count);
     }
 
     #[test]
@@ -920,13 +924,14 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn png_encoding_decoding_roundtrip() {
         let app_id = Uuid::new_v4();
 
         // Create test RGBA data with a pattern
         let mut rgba_data = vec![0u8; 4096];
-        for i in 0..4096 {
-            rgba_data[i] = (i % 256) as u8;
+        for (i, item) in rgba_data.iter_mut().enumerate().take(4096) {
+            *item = (i % 256) as u8;
         }
 
         // Encode to PNG
@@ -1093,6 +1098,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn save_icon_produces_valid_png_file() {
         use tempfile::TempDir;
 
@@ -1102,8 +1108,8 @@ mod tests {
 
         // Create RGBA data with a pattern
         let mut rgba_data = vec![0u8; 4096];
-        for i in 0..4096 {
-            rgba_data[i] = (i % 256) as u8;
+        for (i, item) in rgba_data.iter_mut().enumerate().take(4096) {
+            *item = (i % 256) as u8;
         }
 
         // Save icon
@@ -1163,6 +1169,7 @@ mod tests {
     // load_icon() tests
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn load_icon_cache_hit() {
         use tempfile::TempDir;
 
@@ -1172,8 +1179,8 @@ mod tests {
 
         // Create test RGBA data with a pattern
         let mut rgba_data = vec![0u8; 4096];
-        for i in 0..4096 {
-            rgba_data[i] = (i % 256) as u8;
+        for (i, item) in rgba_data.iter_mut().enumerate().take(4096) {
+            *item = (i % 256) as u8;
         }
 
         // Save icon first
@@ -1360,6 +1367,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn load_icon_save_load_roundtrip() {
         use tempfile::TempDir;
 
@@ -1369,8 +1377,8 @@ mod tests {
 
         // Create test data with varying pattern
         let mut rgba_data = vec![0u8; 4096];
-        for i in 0..4096 {
-            rgba_data[i] = ((i * 7 + 13) % 256) as u8; // More complex pattern
+        for (i, item) in rgba_data.iter_mut().enumerate().take(4096) {
+            *item = ((i * 7 + 13) % 256) as u8; // More complex pattern
         }
 
         // Save icon
@@ -1669,7 +1677,7 @@ mod tests {
 /// Each test case verifies that encoding to PNG and decoding back to RGBA preserves
 /// the original data byte-for-byte.
 ///
-/// The property being tested: ∀ rgba ∈ valid_rgba_data, decode(encode(rgba)) = rgba
+/// The property being tested: ∀ rgba ∈ `valid_rgba_data`, decode(encode(rgba)) = rgba
 #[cfg(test)]
 mod proptests {
     use super::*;
