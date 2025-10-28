@@ -1470,6 +1470,7 @@ dependencies = [
  "open",
  "parking_lot",
  "proptest",
+ "rayon",
  "reqwest",
  "rfd",
  "semver",
