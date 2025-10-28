@@ -88,12 +88,7 @@ impl ConfigManager {
 
         // Re-extract icons for apps that failed to load from cache
         // This handles the case where the icon cache was cleared
-        if let Err(e) = Self::regenerate_missing_icons(&mut config) {
-            warn!(
-                "Failed to regenerate missing icons: {}. Some icons may not be displayed.",
-                e
-            );
-        }
+        Self::regenerate_missing_icons(&mut config);
 
         Ok(config)
     }
@@ -224,13 +219,17 @@ impl ConfigManager {
     ///
     /// Errors during icon extraction are logged but don't prevent the method from
     /// completing. Apps without icons will display with a default/placeholder icon.
-    fn regenerate_missing_icons(config: &mut AppConfig) -> Result<()> {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Icon regeneration logic requires handling both Win32 and UWP apps with different extraction strategies; splitting would reduce cohesion"
+    )]
+    fn regenerate_missing_icons(config: &mut AppConfig) {
         use crate::config::models::MonitoredApp;
 
         // Early return if no apps to process
         if config.monitored_apps.is_empty() {
             tracing::debug!("No monitored apps to regenerate icons for");
-            return Ok(());
+            return;
         }
 
         // Count apps that need icon regeneration
@@ -248,7 +247,7 @@ impl ConfigManager {
 
         if apps_needing_icons_count == 0 {
             tracing::debug!("All apps have icons loaded, no regeneration needed");
-            return Ok(());
+            return;
         }
 
         tracing::info!(
@@ -289,9 +288,6 @@ impl ConfigManager {
                 }
             }
         };
-
-        #[cfg(not(windows))]
-        let _uwp_packages: Option<Vec<()>> = None;
 
         let mut regenerated_count = 0;
 
@@ -415,8 +411,6 @@ impl ConfigManager {
         } else {
             tracing::debug!("No icons were regenerated");
         }
-
-        Ok(())
     }
 
     /// Save configuration to disk with atomic write
