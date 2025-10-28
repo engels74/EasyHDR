@@ -500,11 +500,12 @@ impl GuiController {
     ///
     /// Converts the monitored applications from the controller configuration
     /// into `AppListItem` instances that can be displayed by the Slint UI.
+    /// The returned list is sorted alphabetically by display name (case-insensitive).
     fn collect_app_list_items(controller: &Arc<Mutex<AppController>>) -> Vec<crate::AppListItem> {
         let controller_guard = controller.lock();
         let config = controller_guard.config.lock();
 
-        let items = config
+        let mut items: Vec<_> = config
             .monitored_apps
             .iter()
             .map(|app| {
@@ -557,6 +558,13 @@ impl GuiController {
 
         drop(config);
         drop(controller_guard);
+
+        // Sort alphabetically by display name (case-insensitive)
+        items.sort_by(|a, b| {
+            a.display_name
+                .to_lowercase()
+                .cmp(&b.display_name.to_lowercase())
+        });
 
         items
     }
