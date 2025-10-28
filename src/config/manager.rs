@@ -86,6 +86,15 @@ impl ConfigManager {
             );
         }
 
+        // Re-extract icons for apps that failed to load from cache
+        // This handles the case where the icon cache was cleared
+        if let Err(e) = Self::regenerate_missing_icons(&mut config) {
+            warn!(
+                "Failed to regenerate missing icons: {}. Some icons may not be displayed.",
+                e
+            );
+        }
+
         Ok(config)
     }
 
@@ -195,6 +204,216 @@ impl ConfigManager {
             );
         } else {
             tracing::debug!("No cached icons were restored (cache miss or errors)");
+        }
+
+        Ok(())
+    }
+
+    /// Re-extract icons for apps that failed to load from cache
+    ///
+    /// This method is called after `restore_icons_from_cache()` to handle cases where
+    /// the icon cache was cleared or icons failed to load. It re-extracts icons from
+    /// the source (exe files for Win32 apps, package metadata for UWP apps).
+    ///
+    /// # Icon Re-extraction Strategy
+    ///
+    /// - **Win32 apps**: Call `ensure_icon_loaded()` to extract from exe file
+    /// - **UWP apps**: Re-enumerate packages to find logo path, then extract icon
+    ///
+    /// # Graceful Degradation
+    ///
+    /// Errors during icon extraction are logged but don't prevent the method from
+    /// completing. Apps without icons will display with a default/placeholder icon.
+    fn regenerate_missing_icons(config: &mut AppConfig) -> Result<()> {
+        use crate::config::models::MonitoredApp;
+
+        // Early return if no apps to process
+        if config.monitored_apps.is_empty() {
+            tracing::debug!("No monitored apps to regenerate icons for");
+            return Ok(());
+        }
+
+        // Count apps that need icon regeneration
+        let apps_needing_icons_count = config
+            .monitored_apps
+            .iter()
+            .filter(|app| {
+                // Check if icon_data is None without borrowing mutably
+                match app {
+                    MonitoredApp::Win32(win32) => win32.icon_data.is_none(),
+                    MonitoredApp::Uwp(uwp) => uwp.icon_data.is_none(),
+                }
+            })
+            .count();
+
+        if apps_needing_icons_count == 0 {
+            tracing::debug!("All apps have icons loaded, no regeneration needed");
+            return Ok(());
+        }
+
+        tracing::info!(
+            "Regenerating icons for {} app{} with missing icons",
+            apps_needing_icons_count,
+            if apps_needing_icons_count == 1 {
+                ""
+            } else {
+                "s"
+            }
+        );
+
+        // Initialize icon cache for saving regenerated icons
+        let cache = match crate::utils::IconCache::new(crate::utils::IconCache::default_cache_dir())
+        {
+            Ok(cache) => Some(cache),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to initialize icon cache for regeneration: {}. Icons will not be cached.",
+                    e
+                );
+                None
+            }
+        };
+
+        // For UWP apps, we need to enumerate packages to get logo paths
+        #[cfg(windows)]
+        let uwp_packages = {
+            use crate::uwp;
+            match uwp::enumerate_packages() {
+                Ok(packages) => Some(packages),
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to enumerate UWP packages for icon regeneration: {}. UWP icons will not be regenerated.",
+                        e
+                    );
+                    None
+                }
+            }
+        };
+
+        #[cfg(not(windows))]
+        let _uwp_packages: Option<Vec<()>> = None;
+
+        let mut regenerated_count = 0;
+
+        // Process each app
+        for app in &mut config.monitored_apps {
+            // Skip apps that already have icons
+            if app.icon_data_mut().is_some() {
+                continue;
+            }
+
+            match app {
+                MonitoredApp::Win32(win32_app) => {
+                    // For Win32 apps, use ensure_icon_loaded() to extract from exe
+                    if win32_app.ensure_icon_loaded().is_some() {
+                        tracing::debug!(
+                            "Regenerated icon for Win32 app '{}' from exe",
+                            win32_app.display_name
+                        );
+
+                        // Cache the regenerated icon
+                        if let (Some(cache), Some(icon_data)) = (&cache, &win32_app.icon_data) {
+                            if let Err(e) = cache.save_icon(win32_app.id, icon_data) {
+                                tracing::warn!(
+                                    "Failed to cache regenerated icon for '{}': {}",
+                                    win32_app.display_name,
+                                    e
+                                );
+                            }
+                        }
+
+                        regenerated_count += 1;
+                    } else {
+                        tracing::warn!(
+                            "Failed to regenerate icon for Win32 app '{}' from {:?}",
+                            win32_app.display_name,
+                            win32_app.exe_path
+                        );
+                    }
+                }
+                MonitoredApp::Uwp(uwp_app) => {
+                    // For UWP apps, we need to find the package and extract the logo
+                    #[cfg(windows)]
+                    if let Some(packages) = &uwp_packages {
+                        // Find the matching package by package_family_name
+                        if let Some(pkg) = packages
+                            .iter()
+                            .find(|p| p.package_family_name == uwp_app.package_family_name)
+                        {
+                            // Extract icon from logo path if available
+                            if let Some(logo_path) = &pkg.logo_path {
+                                use crate::uwp;
+                                match uwp::extract_icon(logo_path) {
+                                    Ok(icon_data) if !icon_data.is_empty() => {
+                                        tracing::debug!(
+                                            "Regenerated icon for UWP app '{}' from package",
+                                            uwp_app.display_name
+                                        );
+
+                                        // Cache the regenerated icon
+                                        if let Some(cache) = &cache {
+                                            if let Err(e) = cache.save_icon(uwp_app.id, &icon_data)
+                                            {
+                                                tracing::warn!(
+                                                    "Failed to cache regenerated UWP icon for '{}': {}",
+                                                    uwp_app.display_name,
+                                                    e
+                                                );
+                                            }
+                                        }
+
+                                        // Record icon in memory profiler
+                                        use crate::utils::memory_profiler;
+                                        memory_profiler::get_profiler()
+                                            .record_icon_cached(icon_data.len());
+
+                                        uwp_app.icon_data = Some(icon_data);
+                                        regenerated_count += 1;
+                                    }
+                                    Ok(_) => {
+                                        tracing::debug!(
+                                            "Icon extraction returned empty data for UWP app '{}'",
+                                            uwp_app.display_name
+                                        );
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "Failed to regenerate icon for UWP app '{}': {}",
+                                            uwp_app.display_name,
+                                            e
+                                        );
+                                    }
+                                }
+                            } else {
+                                tracing::debug!(
+                                    "No logo path available for UWP app '{}'",
+                                    uwp_app.display_name
+                                );
+                            }
+                        } else {
+                            tracing::warn!(
+                                "UWP package '{}' not found during icon regeneration",
+                                uwp_app.package_family_name
+                            );
+                        }
+                    }
+
+                    #[cfg(not(windows))]
+                    {
+                        let _ = uwp_app; // Suppress unused variable warning
+                    }
+                }
+            }
+        }
+
+        if regenerated_count > 0 {
+            tracing::info!(
+                "Successfully regenerated {} icon{} from source",
+                regenerated_count,
+                if regenerated_count == 1 { "" } else { "s" }
+            );
+        } else {
+            tracing::debug!("No icons were regenerated");
         }
 
         Ok(())
