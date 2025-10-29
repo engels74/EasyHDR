@@ -38,6 +38,15 @@ pub enum AppIdentifier {
     Uwp(String),
 }
 
+impl std::fmt::Display for AppIdentifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Win32(name) => write!(f, "Win32: {name}"),
+            Self::Uwp(family_name) => write!(f, "UWP: {family_name}"),
+        }
+    }
+}
+
 /// Events emitted by the process monitor
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessEvent {

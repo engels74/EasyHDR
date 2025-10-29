@@ -15,7 +15,8 @@ use std::process::Command;
 
 fn main() {
     // Compile Slint UI files
-    slint_build::compile("ui/main.slint").unwrap();
+    slint_build::compile("ui/main.slint")
+        .expect("Failed to compile Slint UI files. Check ui/main.slint for syntax errors.");
 
     // Embed version information for runtime access
     println!(
@@ -60,6 +61,7 @@ fn main() {
         res.set("OriginalFilename", "easyhdr.exe");
         res.set("FileVersion", env!("CARGO_PKG_VERSION"));
         res.set("ProductVersion", env!("CARGO_PKG_VERSION"));
-        res.compile().unwrap();
+        res.compile()
+            .expect("Failed to compile Windows resources. Check that assets/icon.ico exists.");
     }
 }

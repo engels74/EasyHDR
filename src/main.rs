@@ -438,8 +438,11 @@ fn initialize_components(
     };
 
     // Create bounded mpsc channels for communication with backpressure
-    // Capacity of 32 is more than sufficient for this low-frequency application
-    // where events occur at most once per second (process monitoring interval)
+    // Channel capacity of 32 provides sufficient buffering for event bursts
+    // (e.g., multiple apps starting simultaneously) while preventing unbounded
+    // memory growth. Typical usage: 1-5 events per second based on monitoring
+    // interval (500-1000ms). Bounded channels provide automatic backpressure
+    // when capacity is reached, ensuring system stability under load.
     let channel_capacity = 32;
     let (process_event_tx, process_event_rx) = mpsc::sync_channel::<ProcessEvent>(channel_capacity);
     let (hdr_state_tx, hdr_state_rx) = mpsc::sync_channel::<HdrStateEvent>(channel_capacity);

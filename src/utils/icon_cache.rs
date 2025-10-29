@@ -596,23 +596,23 @@ mod tests {
         // Test with invalid size (too small)
         let invalid_small = vec![0u8; 100];
         let result = IconCache::encode_rgba_to_png(&invalid_small, app_id);
-        assert!(result.is_err());
-        match result {
-            Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual })) => {
+        let err = result.expect_err("Should fail with InvalidIconSize");
+        match err {
+            EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual }) => {
                 assert_eq!(actual, 100);
             }
-            _ => panic!("Expected InvalidIconSize error"),
+            other => panic!("Expected InvalidIconSize, got: {other:?}"),
         }
 
         // Test with invalid size (too large)
         let invalid_large = vec![0u8; 5000];
         let result = IconCache::encode_rgba_to_png(&invalid_large, app_id);
-        assert!(result.is_err());
-        match result {
-            Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual })) => {
+        let err = result.expect_err("Should fail with InvalidIconSize");
+        match err {
+            EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual }) => {
                 assert_eq!(actual, 5000);
             }
-            _ => panic!("Expected InvalidIconSize error"),
+            other => panic!("Expected InvalidIconSize, got: {other:?}"),
         }
     }
 
@@ -641,15 +641,14 @@ mod tests {
         let invalid_png = vec![0u8; 100];
         let result = IconCache::decode_png_to_rgba(&invalid_png, app_id);
 
-        assert!(result.is_err(), "Invalid PNG data should produce error");
-        match result {
-            Err(EasyHdrError::IconCache(IconCacheError::PngDecodingError {
-                app_id: error_id,
-                ..
-            })) => {
+        let err = result.expect_err("Invalid PNG data should produce error");
+        match err {
+            EasyHdrError::IconCache(IconCacheError::PngDecodingError {
+                app_id: error_id, ..
+            }) => {
                 assert_eq!(error_id, app_id, "Error should include correct app UUID");
             }
-            _ => panic!("Expected PngDecodingError"),
+            other => panic!("Expected PngDecodingError, got: {other:?}"),
         }
     }
 
@@ -667,12 +666,12 @@ mod tests {
         let invalid_rgba = vec![0u8; 100];
         let result = cache.save_icon(app_id, &invalid_rgba);
 
-        assert!(result.is_err(), "Invalid size should produce error");
-        match result {
-            Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual })) => {
+        let err = result.expect_err("Invalid size should produce error");
+        match err {
+            EasyHdrError::IconCache(IconCacheError::InvalidIconSize { actual }) => {
                 assert_eq!(actual, 100);
             }
-            _ => panic!("Expected InvalidIconSize error"),
+            other => panic!("Expected InvalidIconSize, got: {other:?}"),
         }
     }
 
@@ -956,15 +955,14 @@ mod tests {
         // Load icon - should return error for corrupted PNG
         let result = cache.load_icon(app_id, None);
 
-        assert!(result.is_err(), "Should return error for corrupted PNG");
-        match result {
-            Err(EasyHdrError::IconCache(IconCacheError::PngDecodingError {
-                app_id: error_id,
-                ..
-            })) => {
+        let err = result.expect_err("Should return error for corrupted PNG");
+        match err {
+            EasyHdrError::IconCache(IconCacheError::PngDecodingError {
+                app_id: error_id, ..
+            }) => {
                 assert_eq!(error_id, app_id, "Error should include correct app UUID");
             }
-            _ => panic!("Expected PngDecodingError"),
+            other => panic!("Expected PngDecodingError, got: {other:?}"),
         }
     }
 

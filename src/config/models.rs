@@ -54,6 +54,15 @@ pub enum MonitoredApp {
     Uwp(UwpApp),
 }
 
+impl std::fmt::Display for MonitoredApp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Win32(app) => write!(f, "Win32: {} ({})", app.display_name, app.process_name),
+            Self::Uwp(app) => write!(f, "UWP: {} ({})", app.display_name, app.package_family_name),
+        }
+    }
+}
+
 impl Win32App {
     /// Create a Win32 app from an executable path
     ///
@@ -455,6 +464,18 @@ impl Serialize for MonitoredApp {
 impl AsRef<std::path::Path> for Win32App {
     fn as_ref(&self) -> &std::path::Path {
         &self.exe_path
+    }
+}
+
+impl From<Win32App> for MonitoredApp {
+    fn from(app: Win32App) -> Self {
+        Self::Win32(app)
+    }
+}
+
+impl From<UwpApp> for MonitoredApp {
+    fn from(app: UwpApp) -> Self {
+        Self::Uwp(app)
     }
 }
 

@@ -33,6 +33,19 @@ pub struct DisplayTarget {
     pub supports_hdr: bool,
 }
 
+impl std::fmt::Display for DisplayTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Display(adapter={:#x}:{:#x}, target={}, HDR={})",
+            self.adapter_id.LowPart,
+            self.adapter_id.HighPart,
+            self.target_id,
+            if self.supports_hdr { "yes" } else { "no" }
+        )
+    }
+}
+
 /// HDR controller
 pub struct HdrController {
     /// Windows version
