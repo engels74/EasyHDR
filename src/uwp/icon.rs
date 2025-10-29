@@ -211,6 +211,7 @@ pub fn extract_icon(_logo_path: &Path) -> Result<Vec<u8>> {
 /// # }
 /// ```
 #[cfg(windows)]
+#[allow(clippy::too_many_lines)]
 pub fn extract_icon_from_stream(
     stream_ref: &windows::Storage::Streams::RandomAccessStreamReference,
 ) -> Result<Vec<u8>> {
@@ -274,7 +275,18 @@ pub fn extract_icon_from_stream(
     };
 
     // Load data into the reader's buffer
-    match reader.LoadAsync(size as u32) {
+    let size_u32 = match u32::try_from(size) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(
+                "Icon stream size {} exceeds u32::MAX: {}. Using placeholder icon.",
+                size, e
+            );
+            return Ok(create_placeholder_rgba());
+        }
+    };
+
+    match reader.LoadAsync(size_u32) {
         Ok(async_op) => match async_op.join() {
             Ok(_bytes_loaded) => {
                 debug!("Successfully loaded {} bytes into DataReader", size);
@@ -288,10 +300,21 @@ pub fn extract_icon_from_stream(
             warn!("Failed to call LoadAsync: {}. Using placeholder icon.", e);
             return Ok(create_placeholder_rgba());
         }
-    };
+    }
 
     // Read bytes from the buffer
-    let mut buffer = vec![0u8; size as usize];
+    let size_usize = match usize::try_from(size) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(
+                "Icon stream size {} cannot be converted to usize: {}. Using placeholder icon.",
+                size, e
+            );
+            return Ok(create_placeholder_rgba());
+        }
+    };
+
+    let mut buffer = vec![0u8; size_usize];
     if let Err(e) = reader.ReadBytes(&mut buffer) {
         warn!("Failed to read bytes: {}. Using placeholder icon.", e);
         return Ok(create_placeholder_rgba());
@@ -305,10 +328,10 @@ pub fn extract_icon_from_stream(
     // Decode image and convert to RGBA
     let img = match ImageReader::new(Cursor::new(buffer))
         .with_guessed_format()
-        .map_err(|e| EasyHdrError::UwpIconExtractionError(format!("Failed to guess format: {}", e)))
+        .map_err(|e| EasyHdrError::UwpIconExtractionError(format!("Failed to guess format: {e}")))
         .and_then(|reader| {
             reader.decode().map_err(|e| {
-                EasyHdrError::UwpIconExtractionError(format!("Failed to decode image: {}", e))
+                EasyHdrError::UwpIconExtractionError(format!("Failed to decode image: {e}"))
             })
         }) {
         Ok(img) => img,

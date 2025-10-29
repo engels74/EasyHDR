@@ -211,7 +211,7 @@ fn extract_package_info(
     }))
 }
 
-/// Get app logo stream using Windows Runtime AppListEntry API
+/// Get app logo stream using Windows Runtime `AppListEntry` API
 ///
 /// Uses the recommended `AppListEntry.DisplayInfo.GetLogo()` API to retrieve
 /// a logo stream reference. This approach automatically handles:
