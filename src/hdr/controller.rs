@@ -305,22 +305,10 @@ impl HdrController {
                     );
 
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
-                    let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-                        header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                            type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
-                            #[expect(
-                                clippy::cast_possible_truncation,
-                                reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant that fits in u32"
-                            )]
-                            size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() as u32,
-                            adapterId: target.adapter_id,
-                            id: target.target_id,
-                        },
-                        value: 0,
-                        colorEncoding: 0,
-                        bitsPerColorChannel: 0,
-                        activeColorMode: 0,
-                    };
+                    let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2::new(
+                        target.adapter_id,
+                        target.target_id,
+                    );
 
                     unsafe {
                         let result = DisplayConfigGetDeviceInfo(
@@ -425,21 +413,8 @@ impl HdrController {
     fn is_hdr_supported_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
-        let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
-            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32"
-                )]
-                size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
-                adapterId: target.adapter_id,
-                id: target.target_id,
-            },
-            value: 0,
-            colorEncoding: 0,
-            bitsPerColorChannel: 0,
-        };
+        let mut color_info =
+            DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO::new(target.adapter_id, target.target_id);
 
         unsafe {
             let result =
@@ -515,22 +490,10 @@ impl HdrController {
             match self.windows_version {
                 WindowsVersion::Windows11_24H2 => {
                     // Windows 11 24H2+: Try DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 first
-                    let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-                        header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                            type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
-                            #[expect(
-                                clippy::cast_possible_truncation,
-                                reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() is a compile-time constant (48 bytes) that fits in u32"
-                            )]
-                            size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2>() as u32,
-                            adapterId: target.adapter_id,
-                            id: target.target_id,
-                        },
-                        value: 0,
-                        colorEncoding: 0,
-                        bitsPerColorChannel: 0,
-                        activeColorMode: 0,
-                    };
+                    let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2::new(
+                        target.adapter_id,
+                        target.target_id,
+                    );
 
                     unsafe {
                         let result = DisplayConfigGetDeviceInfo(
@@ -593,21 +556,8 @@ impl HdrController {
     fn is_hdr_enabled_legacy(&self, target: &DisplayTarget) -> Result<bool> {
         use tracing::debug;
 
-        let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
-            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                #[expect(
-                    clippy::cast_possible_truncation,
-                    reason = "size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() is a compile-time constant (40 bytes) that fits in u32"
-                )]
-                size: std::mem::size_of::<DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO>() as u32,
-                adapterId: target.adapter_id,
-                id: target.target_id,
-            },
-            value: 0,
-            colorEncoding: 0,
-            bitsPerColorChannel: 0,
-        };
+        let mut color_info =
+            DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO::new(target.adapter_id, target.target_id);
 
         unsafe {
             let result =

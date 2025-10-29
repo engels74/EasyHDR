@@ -139,6 +139,25 @@ pub struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
 }
 
 impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
+    /// Create a new structure for querying HDR capabilities (legacy)
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
+    pub fn new(adapter_id: LUID, target_id: u32) -> Self {
+        Self {
+            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
+                size: std::mem::size_of::<Self>() as u32,
+                adapterId: adapter_id,
+                id: target_id,
+            },
+            value: 0,
+            colorEncoding: 0,
+            bitsPerColorChannel: 0,
+        }
+    }
+
     /// Check if advanced color (HDR) is supported
     pub fn advancedColorSupported(&self) -> bool {
         (self.value & 0x1) != 0
@@ -247,6 +266,26 @@ pub struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
 }
 
 impl DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
+    /// Create a new structure for querying HDR capabilities (Windows 11 24H2+)
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
+    )]
+    pub fn new(adapter_id: LUID, target_id: u32) -> Self {
+        Self {
+            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
+                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
+                size: std::mem::size_of::<Self>() as u32,
+                adapterId: adapter_id,
+                id: target_id,
+            },
+            value: 0,
+            colorEncoding: 0,
+            bitsPerColorChannel: 0,
+            activeColorMode: 0,
+        }
+    }
+
     /// Check if advanced color is supported (bit 0)
     pub fn advancedColorSupported(&self) -> bool {
         (self.value & 0x1) != 0
@@ -667,44 +706,27 @@ pub unsafe fn DisplayConfigSetDeviceInfo(
 
 /// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
-    )]
     fn default() -> Self {
-        Self {
-            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO,
-                size: std::mem::size_of::<Self>() as u32,
-                adapterId: LUID { LowPart: 0, HighPart: 0 },
-                id: 0,
+        Self::new(
+            LUID {
+                LowPart: 0,
+                HighPart: 0,
             },
-            value: 0,
-            colorEncoding: 0,
-            bitsPerColorChannel: 0,
-        }
+            0,
+        )
     }
 }
 
 /// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Structure size is a compile-time constant (size_of::<Self>()) which is always less than u32::MAX"
-    )]
     fn default() -> Self {
-        Self {
-            header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
-                type_: DISPLAYCONFIG_DEVICE_INFO_TYPE::DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2,
-                size: std::mem::size_of::<Self>() as u32,
-                adapterId: LUID { LowPart: 0, HighPart: 0 },
-                id: 0,
+        Self::new(
+            LUID {
+                LowPart: 0,
+                HighPart: 0,
             },
-            value: 0,
-            colorEncoding: 0,
-            bitsPerColorChannel: 0,
-            activeColorMode: 0,
-        }
+            0,
+        )
     }
 }
 
