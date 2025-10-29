@@ -174,22 +174,35 @@ fn extract_package_info(
         .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?
         .to_string();
 
-    // Get logo URI and convert to PathBuf
+    // Get logo path by resolving URI to filesystem path
     let logo_path = match package.Logo() {
         Ok(uri) => {
-            // Convert URI to local path
+            // Convert URI to string
             let uri_str = uri
                 .ToString()
                 .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?
                 .to_string();
 
-            // WinRT URIs for UWP packages use the ms-appx:/// scheme
-            // We need to resolve them to actual file paths
-            // For now, store the raw URI and let icon extraction handle it
             if uri_str.is_empty() {
                 None
             } else {
-                Some(PathBuf::from(uri_str))
+                // Resolve ms-appx:/// URI to actual filesystem path
+                // Get the package installation directory
+                let installed_path = package
+                    .InstalledPath()
+                    .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?
+                    .to_string();
+
+                // Extract relative path from URI (remove ms-appx:/// prefix)
+                const MS_APPX_PREFIX: &str = "ms-appx:///";
+                if let Some(relative_path) = uri_str.strip_prefix(MS_APPX_PREFIX) {
+                    // Combine installed path with relative path to get full filesystem path
+                    let full_path = PathBuf::from(installed_path).join(relative_path);
+                    Some(full_path)
+                } else {
+                    // URI doesn't use expected ms-appx scheme, store as-is for fallback
+                    Some(PathBuf::from(uri_str))
+                }
             }
         }
         Err(_) => None, // Logo is optional
