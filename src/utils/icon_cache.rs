@@ -65,30 +65,12 @@ pub struct IconCache {
 impl IconCache {
     /// Create a new icon cache manager
     ///
-    /// Creates the cache directory if it does not exist. Accepts flexible path types
-    /// via `impl Into<PathBuf>` for ergonomic API design (Rust guideline: API Design).
-    ///
-    /// # Arguments
-    ///
-    /// * `cache_dir` - Directory path for icon cache storage
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(IconCache)` on success, or `Err` if directory creation fails.
+    /// Creates the cache directory if it does not exist.
     ///
     /// # Errors
     ///
     /// Returns `IconCacheError::CacheDirectoryCreationFailed` if the cache directory
     /// cannot be created (e.g., permission denied, disk full).
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    ///
-    /// let cache = IconCache::new("/path/to/cache")?;
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
     pub fn new(cache_dir: impl Into<PathBuf>) -> Result<Self> {
         let cache_dir = cache_dir.into();
 
@@ -105,26 +87,11 @@ impl IconCache {
         Ok(Self { cache_dir })
     }
 
-    /// Get the default cache directory path
-    ///
-    /// Returns `%APPDATA%\EasyHDR\icon_cache` on Windows.
-    ///
-    /// # Returns
-    ///
-    /// Returns the default cache directory path.
+    /// Get the default cache directory path (`%APPDATA%\EasyHDR\icon_cache` on Windows)
     ///
     /// # Panics
     ///
-    /// Panics if `%APPDATA%` environment variable is not set (should never happen on Windows).
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    ///
-    /// let cache_dir = IconCache::default_cache_dir();
-    /// println!("Cache directory: {}", cache_dir.display());
-    /// ```
+    /// Panics if `%APPDATA%` environment variable is not set.
     pub fn default_cache_dir() -> PathBuf {
         let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
         let mut path = PathBuf::from(appdata);
@@ -135,45 +102,13 @@ impl IconCache {
 
     /// Load an icon from cache with validation
     ///
-    /// Loads a cached icon for the specified application. For Win32 apps, validates
-    /// cache freshness by comparing file modification times. Returns `Ok(None)` on
-    /// cache miss or stale cache.
-    ///
-    /// # Arguments
-    ///
-    /// * `app_id` - Unique identifier for the application
-    /// * `source_path` - Optional source file path for cache validation (Win32 apps only)
-    ///
-    /// # Returns
-    ///
-    /// - `Ok(Some(Vec<u8>))` - Icon data loaded successfully (32x32 RGBA, 4096 bytes)
-    /// - `Ok(None)` - Cache miss or stale cache (re-extraction needed)
-    /// - `Err` - I/O error or PNG decoding error
+    /// For Win32 apps, validates cache freshness by comparing file modification times.
+    /// Returns `Ok(None)` on cache miss or stale cache.
     ///
     /// # Errors
     ///
-    /// Returns `IconCacheError` if:
-    /// - Cache file cannot be read (I/O error)
-    /// - PNG decoding fails (corrupted cache file)
-    /// - File metadata cannot be accessed
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    /// use uuid::Uuid;
-    /// use std::path::Path;
-    ///
-    /// let cache = IconCache::new(IconCache::default_cache_dir())?;
-    /// let app_id = Uuid::new_v4();
-    /// let exe_path = Path::new("C:\\Program Files\\App\\app.exe");
-    ///
-    /// match cache.load_icon(app_id, Some(exe_path))? {
-    ///     Some(icon_data) => println!("Icon loaded from cache"),
-    ///     None => println!("Cache miss, need to extract icon"),
-    /// }
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Returns `IconCacheError` if cache file cannot be read, PNG decoding fails,
+    /// or file metadata cannot be accessed.
     pub fn load_icon(&self, app_id: Uuid, source_path: Option<&Path>) -> Result<Option<Vec<u8>>> {
         let cache_path = self.cache_path(app_id);
 
@@ -255,39 +190,13 @@ impl IconCache {
 
     /// Save an icon to cache with atomic write
     ///
-    /// Encodes RGBA data to PNG format and saves to cache using atomic write operations.
-    /// The icon data must be exactly 4096 bytes (32x32 pixels × 4 channels).
-    ///
-    /// # Arguments
-    ///
-    /// * `app_id` - Unique identifier for the application
-    /// * `rgba_bytes` - RGBA pixel data (must be exactly 4096 bytes)
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err` if validation or write fails.
+    /// Encodes RGBA data (must be exactly 4096 bytes for 32x32 pixels) to PNG format
+    /// and saves atomically to cache.
     ///
     /// # Errors
     ///
-    /// Returns `IconCacheError` if:
-    /// - Input size is not 4096 bytes (`InvalidIconSize`)
-    /// - PNG encoding fails (`PngEncodingError`)
-    /// - Temporary file creation fails (`TempFileCreationFailed`)
-    /// - Atomic persist fails (`AtomicPersistFailed`)
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    /// use uuid::Uuid;
-    ///
-    /// let cache = IconCache::new(IconCache::default_cache_dir())?;
-    /// let app_id = Uuid::new_v4();
-    /// let rgba_data = vec![0u8; 4096]; // 32x32 RGBA
-    ///
-    /// cache.save_icon(app_id, &rgba_data)?;
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Returns `IconCacheError` if input size is not 4096 bytes, PNG encoding fails,
+    /// temporary file creation fails, or atomic persist fails.
     pub fn save_icon(&self, app_id: Uuid, rgba_bytes: &[u8]) -> Result<()> {
         // Step 1 & 2: Validate size and encode RGBA to PNG
         // (validation happens inside encode_rgba_to_png)
@@ -344,35 +253,11 @@ impl IconCache {
         Ok(())
     }
 
-    /// Remove a single icon from cache
-    ///
-    /// Deletes the cached icon file for the specified application.
-    ///
-    /// # Arguments
-    ///
-    /// * `app_id` - Unique identifier for the application
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err` if deletion fails.
+    /// Remove a single icon from cache (idempotent)
     ///
     /// # Errors
     ///
     /// Returns `IconCacheError::IconRemovalFailed` if the file cannot be deleted.
-    /// Returns `Ok(())` if the file does not exist (idempotent operation).
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    /// use uuid::Uuid;
-    ///
-    /// let cache = IconCache::new(IconCache::default_cache_dir())?;
-    /// let app_id = Uuid::new_v4();
-    ///
-    /// cache.remove_icon(app_id)?;
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
     pub fn remove_icon(&self, app_id: Uuid) -> Result<()> {
         let cache_path = self.cache_path(app_id);
 
@@ -405,28 +290,12 @@ impl IconCache {
 
     /// Clear entire cache directory
     ///
-    /// Removes all PNG files from the cache directory. The directory itself is not deleted.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` on success, or `Err` if directory traversal or deletion fails.
+    /// Removes all PNG files from the cache directory.
     ///
     /// # Errors
     ///
-    /// Returns `IconCacheError::CacheClearFailed` if:
-    /// - Directory cannot be read
-    /// - Any file cannot be deleted
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    ///
-    /// let cache = IconCache::new(IconCache::default_cache_dir())?;
-    /// cache.clear_cache()?;
-    /// println!("Cache cleared successfully");
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
+    /// Returns `IconCacheError::CacheClearFailed` if directory cannot be read
+    /// or any file cannot be deleted.
     pub fn clear_cache(&self) -> Result<()> {
         // Remove all PNG files from cache directory
 
@@ -478,28 +347,11 @@ impl IconCache {
         Ok(())
     }
 
-    /// Get cache statistics
-    ///
-    /// Calculates the number of cached icons and total size in bytes.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(CacheStats)` with icon count and total size, or `Err` if traversal fails.
+    /// Get cache statistics (icon count and total size in bytes)
     ///
     /// # Errors
     ///
     /// Returns `IconCacheError::CacheStatsFailed` if the cache directory cannot be read.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    ///
-    /// let cache = IconCache::new(IconCache::default_cache_dir())?;
-    /// let stats = cache.get_cache_stats()?;
-    /// println!("Cached icons: {} ({})", stats.count, stats.size_human_readable());
-    /// # Ok::<(), easyhdr::error::EasyHdrError>(())
-    /// ```
     pub fn get_cache_stats(&self) -> Result<CacheStats> {
         // Calculate icon count and total size in bytes
 
@@ -572,31 +424,7 @@ impl IconCache {
 
     /// Cache icon data to disk with graceful error handling
     ///
-    /// Attempts to save icon data to the default cache directory. Failures are logged
-    /// but do not propagate errors, allowing the application to continue with in-memory
-    /// icons only. This implements graceful degradation for icon caching.
-    ///
-    /// # Arguments
-    ///
-    /// * `id` - Unique identifier for the application
-    /// * `data` - RGBA icon data (must be exactly 4096 bytes)
-    /// * `display_name` - Application display name for logging
-    ///
-    /// # Design
-    ///
-    /// This helper consolidates the icon caching pattern used in both `Win32App::from_exe_path`
-    /// and `UwpApp::from_package_info`, eliminating ~35 lines of duplication.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use easyhdr::utils::icon_cache::IconCache;
-    /// use uuid::Uuid;
-    ///
-    /// let app_id = Uuid::new_v4();
-    /// let rgba_data = vec![0u8; 4096]; // 32x32 RGBA
-    /// IconCache::cache_icon_gracefully(app_id, &rgba_data, "My App");
-    /// ```
+    /// Failures are logged but do not propagate errors (graceful degradation).
     pub fn cache_icon_gracefully(id: Uuid, data: &[u8], display_name: &str) {
         if let Ok(cache) = Self::new(Self::default_cache_dir()) {
             if let Err(e) = cache.save_icon(id, data) {
@@ -618,30 +446,11 @@ impl IconCache {
 
     /// Encode RGBA data to PNG format
     ///
-    /// Encodes raw RGBA pixel data (32x32 pixels) to PNG format for disk storage.
-    /// Pre-allocates output buffer with 8192 bytes capacity for efficient encoding.
-    ///
-    /// # Arguments
-    ///
-    /// * `rgba_bytes` - Raw RGBA pixel data (must be exactly 4096 bytes)
-    /// * `app_id` - Application UUID for error context
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(Vec<u8>)` containing PNG-encoded data on success.
+    /// Pre-allocates 8KB buffer (typical PNG size: 2-6KB for 32x32 RGBA).
     ///
     /// # Errors
     ///
-    /// Returns `IconCacheError` if:
-    /// - Input size is not exactly 4096 bytes (`InvalidIconSize`)
-    /// - PNG encoding fails (`PngEncodingError`)
-    ///
-    /// # Design
-    ///
-    /// Pre-allocation of 8192 bytes is based on measured PNG sizes for 32x32 RGBA icons:
-    /// - Typical compressed size: 2-6 KB
-    /// - 8KB capacity avoids reallocation in most cases
-    /// - Follows Rust guideline: "Pre-allocate (`Vec::with_capacity`)"
+    /// Returns `IconCacheError` if input size is not exactly 4096 bytes or PNG encoding fails.
     fn encode_rgba_to_png(rgba_bytes: &[u8], app_id: Uuid) -> Result<Vec<u8>> {
         // Validate input size is exactly 4096 bytes (32x32 × 4 channels)
         const EXPECTED_SIZE: usize = 32 * 32 * 4;
@@ -675,30 +484,11 @@ impl IconCache {
 
     /// Decode PNG data to RGBA format
     ///
-    /// Decodes PNG image data and resizes to exactly 32x32 pixels using Lanczos3
-    /// resampling for high-quality results.
-    ///
-    /// # Arguments
-    ///
-    /// * `png_bytes` - PNG-encoded image data
-    /// * `app_id` - Application UUID for error context
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(Vec<u8>)` containing exactly 4096 bytes of RGBA data (32x32 pixels).
+    /// Resizes to exactly 32x32 pixels using Lanczos3 resampling.
     ///
     /// # Errors
     ///
-    /// Returns `IconCacheError` if:
-    /// - PNG decoding fails (`PngDecodingError`)
-    /// - Image cannot be resized
-    ///
-    /// # Design
-    ///
-    /// Uses Lanczos3 resampling filter for high-quality downscaling:
-    /// - Preserves sharp edges better than bilinear
-    /// - Reduces aliasing artifacts
-    /// - Industry standard for icon resampling
+    /// Returns `IconCacheError` if PNG decoding or resizing fails.
     fn decode_png_to_rgba(png_bytes: &[u8], app_id: Uuid) -> Result<Vec<u8>> {
         // Decode PNG from memory buffer
         let img = ImageReader::new(Cursor::new(png_bytes))
@@ -749,25 +539,7 @@ pub struct CacheStats {
 }
 
 impl CacheStats {
-    /// Format size as human-readable string
-    ///
-    /// Converts byte size to KB or MB format for display in UI.
-    ///
-    /// # Returns
-    ///
-    /// Returns a formatted string like "42 KB" or "1.5 MB".
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use easyhdr::utils::icon_cache::CacheStats;
-    ///
-    /// let stats = CacheStats { count: 10, size_bytes: 40960 };
-    /// assert_eq!(stats.size_human_readable(), "40 KB");
-    ///
-    /// let stats = CacheStats { count: 100, size_bytes: 2_097_152 };
-    /// assert_eq!(stats.size_human_readable(), "2.0 MB");
-    /// ```
+    /// Format size as human-readable string (e.g., "42 KB" or "1.5 MB")
     #[expect(
         clippy::cast_precision_loss,
         reason = "Precision loss is acceptable for human-readable display formatting; exact byte values aren't needed for UI presentation"
@@ -1420,17 +1192,7 @@ mod tests {
 
 /// Property-based tests for PNG encoding/decoding
 ///
-/// These tests use Proptest to verify that PNG encoding/decoding roundtrip
-/// preserves data for arbitrary RGBA input vectors. This validates the correctness
-/// of the PNG codec implementation across a wide range of input patterns.
-///
-/// # Design
-///
-/// Uses `proptest` to generate arbitrary 4096-byte RGBA vectors (32x32 pixels × 4 channels).
-/// Each test case verifies that encoding to PNG and decoding back to RGBA preserves
-/// the original data byte-for-byte.
-///
-/// The property being tested: ∀ rgba ∈ `valid_rgba_data`, decode(encode(rgba)) = rgba
+/// Verifies that PNG encoding/decoding roundtrip preserves data for arbitrary RGBA inputs.
 #[cfg(test)]
 mod proptests {
     use super::*;
@@ -1439,30 +1201,7 @@ mod proptests {
     proptest! {
         /// Property test: PNG encoding/decoding roundtrip preserves data
         ///
-        /// Tests that for any arbitrary 4096-byte RGBA input vector, encoding to PNG
-        /// and decoding back to RGBA produces exactly the original data.
-        ///
-        /// This property test validates:
-        /// 1. The encoder produces valid PNG data for all possible RGBA inputs
-        /// 2. The decoder correctly interprets the encoded PNG data
-        /// 3. No data loss occurs during the encoding/decoding cycle
-        /// 4. The image crate's PNG codec is lossless for our use case
-        ///
-        /// # Test Strategy
-        ///
-        /// - Generates arbitrary 4096-byte vectors (32x32 pixels × RGBA)
-        /// - Tests encode → decode roundtrip
-        /// - Verifies byte-for-byte equality
-        ///
-
-        ///
-        /// # Rationale
-        ///
-        /// Property-based testing is superior to example-based testing for this use case:
-        /// - Explores edge cases that manual tests might miss
-        /// - Provides high confidence in correctness across all inputs
-        /// - Shrinks failing cases to minimal reproducible examples
-        /// - Complements unit tests with broader coverage
+        /// Verifies that encode → decode roundtrip preserves RGBA data byte-for-byte.
         #[test]
         fn png_encoding_roundtrip_preserves_data(
             rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)
@@ -1485,20 +1224,7 @@ mod proptests {
                 "Roundtrip should preserve RGBA data byte-for-byte");
         }
 
-        /// Property test: PNG decoding produces consistent output size
-        ///
-        /// Tests that decoding always produces exactly 4096 bytes (32x32 × RGBA),
-        /// regardless of the input RGBA pattern. This validates the resizing logic.
-        ///
-        /// # Test Strategy
-        ///
-        /// - Generates arbitrary 4096-byte RGBA vectors
-        /// - Encodes to PNG (which may vary in size due to compression)
-        /// - Decodes back and verifies output is always 4096 bytes
-        ///
-        /// # Requirements
-        ///
-
+        /// Property test: PNG decoding produces consistent output size (always 4096 bytes)
         #[test]
         fn png_decoding_always_produces_correct_size(
             rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)
@@ -1518,23 +1244,7 @@ mod proptests {
                 "Decoded data must always be exactly 4096 bytes");
         }
 
-        /// Property test: PNG encoding produces valid PNG data
-        ///
-        /// Tests that encoding always produces data that starts with the PNG file signature,
-        /// regardless of the input RGBA pattern. This validates that the encoder produces
-        /// well-formed PNG files.
-        ///
-        /// # Test Strategy
-        ///
-        /// - Generates arbitrary 4096-byte RGBA vectors
-        /// - Encodes to PNG
-        /// - Verifies PNG signature (magic bytes)
-        ///
-        /// # PNG Signature
-        ///
-        /// Valid PNG files start with: 137 80 78 71 13 10 26 10 (0x89 'P' 'N' 'G' \\r \\n 0x1a \\n)
-        ///
-
+        /// Property test: PNG encoding produces valid PNG signature
         #[test]
         fn png_encoding_produces_valid_png_signature(
             rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)

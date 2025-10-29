@@ -122,11 +122,7 @@ impl MemoryProfiler {
     ///
     /// # Safety
     ///
-    /// `GetCurrentProcess()` returns valid pseudo-handle (no close needed).
-    /// `PROCESS_MEMORY_COUNTERS` initialized with correct `cb` size to prevent buffer
-    /// overruns. `&raw mut pmc` creates valid aligned pointer to stack variable. Size
-    /// parameter matches structure size. Result checked via `match`; success reads valid
-    /// `WorkingSetSize`, error returns 0 with warning.
+    /// Uses Windows FFI (`GetProcessMemoryInfo`). Structure is correctly sized and aligned.
     #[cfg(windows)]
     #[expect(
         unsafe_code,
@@ -201,30 +197,7 @@ pub fn get_profiler() -> &'static MemoryProfiler {
     &MEMORY_PROFILER
 }
 
-/// Record icon cached with conditional compilation
-///
-/// This is a convenience wrapper that handles the `#[cfg(windows)]` conditional
-/// compilation internally, eliminating the need for callers to duplicate this
-/// pattern. On non-Windows platforms, this function is a no-op.
-///
-/// # Arguments
-///
-/// * `size` - Size of the icon data in bytes
-///
-/// # Design
-///
-/// This helper consolidates the memory profiler integration pattern used across
-/// multiple locations in `src/config/models.rs`, eliminating ~15 lines of
-/// conditional compilation duplication.
-///
-/// # Example
-///
-/// ```no_run
-/// use easyhdr::utils::memory_profiler;
-///
-/// let icon_data = vec![0u8; 4096];
-/// memory_profiler::record_icon_cached_safe(icon_data.len());
-/// ```
+/// Records cached icon size in bytes (Windows only, no-op on other platforms)
 #[inline]
 pub fn record_icon_cached_safe(size: usize) {
     #[cfg(windows)]
@@ -237,30 +210,7 @@ pub fn record_icon_cached_safe(size: usize) {
     }
 }
 
-/// Record icon removed with conditional compilation
-///
-/// This is a convenience wrapper that handles the `#[cfg(windows)]` conditional
-/// compilation internally, eliminating the need for callers to duplicate this
-/// pattern. On non-Windows platforms, this function is a no-op.
-///
-/// # Arguments
-///
-/// * `size` - Size of the icon data in bytes
-///
-/// # Design
-///
-/// This helper consolidates the memory profiler integration pattern used across
-/// multiple locations in `src/config/models.rs`, eliminating ~15 lines of
-/// conditional compilation duplication.
-///
-/// # Example
-///
-/// ```no_run
-/// use easyhdr::utils::memory_profiler;
-///
-/// let icon_data = vec![0u8; 4096];
-/// memory_profiler::record_icon_removed_safe(icon_data.len());
-/// ```
+/// Records removed icon size in bytes (Windows only, no-op on other platforms)
 #[inline]
 pub fn record_icon_removed_safe(size: usize) {
     #[cfg(windows)]
