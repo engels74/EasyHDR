@@ -200,12 +200,12 @@ impl ProcessMonitor {
                             }
                             Ok(None) => {
                                 // Win32 app - extract process name from szExeFile
-                                let process_name = extract_process_name(&entry.szExeFile);
-                                if let Some(name) = process_name {
-                                    let name_lower = extract_filename_without_extension(&name);
-                                    debug!("Found Win32 process (PID {}): {}", pid, name_lower);
-                                    current_processes.insert(AppIdentifier::Win32(name_lower));
-                                }
+                                extract_and_insert_win32_process(
+                                    &entry.szExeFile,
+                                    pid,
+                                    "Found Win32 process (PID",
+                                    &mut current_processes,
+                                );
                             }
                             Err(e) => {
                                 // UWP detection failed - log error with context but continue
@@ -216,12 +216,12 @@ impl ProcessMonitor {
                                 );
 
                                 // Fallback to Win32 detection
-                                let process_name = extract_process_name(&entry.szExeFile);
-                                if let Some(name) = process_name {
-                                    let name_lower = extract_filename_without_extension(&name);
-                                    debug!("Fallback to Win32 for PID {}: {}", pid, name_lower);
-                                    current_processes.insert(AppIdentifier::Win32(name_lower));
-                                }
+                                extract_and_insert_win32_process(
+                                    &entry.szExeFile,
+                                    pid,
+                                    "Fallback to Win32 for PID",
+                                    &mut current_processes,
+                                );
                             }
                         }
                     }
@@ -231,15 +231,12 @@ impl ProcessMonitor {
                         debug!("Failed to open process handle for PID {}: {}", pid, e);
 
                         // Fallback to Win32 detection using process name
-                        let process_name = extract_process_name(&entry.szExeFile);
-                        if let Some(name) = process_name {
-                            let name_lower = extract_filename_without_extension(&name);
-                            debug!(
-                                "Fallback to Win32 for PID {} (no handle): {}",
-                                pid, name_lower
-                            );
-                            current_processes.insert(AppIdentifier::Win32(name_lower));
-                        }
+                        extract_and_insert_win32_process(
+                            &entry.szExeFile,
+                            pid,
+                            "Fallback to Win32 for PID (no handle)",
+                            &mut current_processes,
+                        );
                     }
                 }
 
@@ -417,6 +414,24 @@ impl Drop for ProcessHandleGuard {
         unsafe {
             let _ = CloseHandle(self.0);
         }
+    }
+}
+
+/// Helper to extract and insert Win32 process into the current processes set
+///
+/// Extracts the process name from szExeFile, converts it to lowercase without extension,
+/// logs a debug message, and inserts it into the current_processes set.
+#[cfg(windows)]
+fn extract_and_insert_win32_process(
+    sz_exe_file: &[u16; 260],
+    pid: u32,
+    context: &str,
+    current_processes: &mut HashSet<AppIdentifier>,
+) {
+    if let Some(name) = extract_process_name(sz_exe_file) {
+        let name_lower = extract_filename_without_extension(&name);
+        debug!("{} {}: {}", context, pid, name_lower);
+        current_processes.insert(AppIdentifier::Win32(name_lower));
     }
 }
 

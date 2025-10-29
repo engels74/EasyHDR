@@ -260,6 +260,18 @@ impl UwpApp {
             icon_data,
         }
     }
+
+    /// Release icon data from memory
+    ///
+    /// Removes the icon data from memory and updates the memory profiler.
+    /// This is typically called during shutdown or when the application is removed.
+    pub fn release_icon(&mut self) {
+        if let Some(icon_data) = self.icon_data.take() {
+            // Record icon removal in memory profiler
+            crate::utils::memory_profiler::record_icon_removed_safe(icon_data.len());
+            tracing::debug!("Released icon data for {}", self.display_name);
+        }
+    }
 }
 
 impl MonitoredApp {
@@ -312,13 +324,7 @@ impl MonitoredApp {
     pub fn release_icon(&mut self) {
         match self {
             Self::Win32(app) => app.release_icon(),
-            Self::Uwp(app) => {
-                if let Some(icon_data) = app.icon_data.take() {
-                    // Record icon removal in memory profiler
-                    crate::utils::memory_profiler::record_icon_removed_safe(icon_data.len());
-                    tracing::debug!("Released icon data for {}", app.display_name);
-                }
-            }
+            Self::Uwp(app) => app.release_icon(),
         }
     }
 

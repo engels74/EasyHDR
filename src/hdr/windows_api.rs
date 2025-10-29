@@ -707,26 +707,14 @@ pub unsafe fn DisplayConfigSetDeviceInfo(
 /// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO {
     fn default() -> Self {
-        Self::new(
-            LUID {
-                LowPart: 0,
-                HighPart: 0,
-            },
-            0,
-        )
+        Self::new(LUID::default(), 0)
     }
 }
 
 /// Default implementation for `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2`
 impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
     fn default() -> Self {
-        Self::new(
-            LUID {
-                LowPart: 0,
-                HighPart: 0,
-            },
-            0,
-        )
+        Self::new(LUID::default(), 0)
     }
 }
 

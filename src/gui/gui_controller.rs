@@ -1148,12 +1148,7 @@ impl GuiController {
         let mut released_count = 0;
         for app in &mut config.monitored_apps {
             // Check if icon data exists using helper method
-            let has_icon = match app {
-                MonitoredApp::Win32(win32_app) => win32_app.icon_data.is_some(),
-                MonitoredApp::Uwp(uwp_app) => uwp_app.icon_data.is_some(),
-            };
-
-            if has_icon {
+            if app.icon_data().is_some() {
                 app.release_icon();
                 released_count += 1;
             }

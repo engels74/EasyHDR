@@ -100,6 +100,53 @@ impl AppController {
         self.hdr_state_receiver.take()
     }
 
+    /// Core event loop logic shared between `run()` and `spawn_event_loop()`.
+    ///
+    /// Processes events from both process and HDR state receivers, calling the
+    /// provided handlers for each event type. Returns `false` when the process
+    /// event channel disconnects, signaling the loop should exit.
+    fn process_event_loop_iteration<F, G>(
+        event_receiver: &mpsc::Receiver<ProcessEvent>,
+        hdr_state_receiver: &mpsc::Receiver<HdrStateEvent>,
+        process_handler: &mut F,
+        hdr_handler: &mut G,
+    ) -> bool
+    where
+        F: FnMut(ProcessEvent),
+        G: FnMut(HdrStateEvent),
+    {
+        use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
+        use std::time::Duration;
+        use tracing::warn;
+
+        // Check for process events with timeout to allow periodic HDR state checks
+        match event_receiver.recv_timeout(Duration::from_millis(100)) {
+            Ok(event) => process_handler(event),
+            Err(RecvTimeoutError::Timeout) => {
+                // Timeout is normal - just continue to check HDR state events
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                warn!("Process event receiver channel disconnected. Exiting event loop.");
+                return false;
+            }
+        }
+
+        // Check for HDR state events (non-blocking, drain all available)
+        loop {
+            match hdr_state_receiver.try_recv() {
+                Ok(event) => hdr_handler(event),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    warn!("HDR state receiver channel disconnected.");
+                    // Continue processing process events even if HDR monitor stops
+                    break;
+                }
+            }
+        }
+
+        true // Continue loop
+    }
+
     /// Run the main event loop to receive process and HDR state events.
     /// Uses 100ms timeout to ensure prompt HDR state change detection.
     pub fn run(&mut self) {
@@ -169,43 +216,21 @@ impl AppController {
         };
 
         std::thread::spawn(move || {
-            use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
-            use std::time::Duration;
-            use tracing::{info, warn};
+            use tracing::info;
 
             info!("Entering main event loop (process events + HDR state events)");
-            loop {
-                // Check for process events with timeout to allow periodic HDR state checks
-                match event_receiver.recv_timeout(Duration::from_millis(100)) {
-                    Ok(event) => {
-                        let mut controller_guard = controller.lock();
-                        controller_guard.handle_process_event(event);
-                    }
-                    Err(RecvTimeoutError::Timeout) => {
-                        // Timeout is normal - just continue to check HDR state events
-                    }
-                    Err(RecvTimeoutError::Disconnected) => {
-                        warn!("Process event receiver channel disconnected. Exiting event loop.");
-                        break;
-                    }
-                }
-
-                // Check for HDR state events (non-blocking, drain all available)
-                loop {
-                    match hdr_state_receiver.try_recv() {
-                        Ok(event) => {
-                            let mut controller_guard = controller.lock();
-                            controller_guard.handle_hdr_state_event(event);
-                        }
-                        Err(TryRecvError::Empty) => break,
-                        Err(TryRecvError::Disconnected) => {
-                            warn!("HDR state receiver channel disconnected.");
-                            // Continue processing process events even if HDR monitor stops
-                            break;
-                        }
-                    }
-                }
-            }
+            while Self::process_event_loop_iteration(
+                &event_receiver,
+                &hdr_state_receiver,
+                &mut |event| {
+                    let mut controller_guard = controller.lock();
+                    controller_guard.handle_process_event(event);
+                },
+                &mut |event| {
+                    let mut controller_guard = controller.lock();
+                    controller_guard.handle_hdr_state_event(event);
+                },
+            ) {}
             info!("Main event loop exited");
         })
     }
