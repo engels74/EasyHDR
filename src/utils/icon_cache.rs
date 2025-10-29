@@ -81,8 +81,6 @@ impl IconCache {
     /// Returns `IconCacheError::CacheDirectoryCreationFailed` if the cache directory
     /// cannot be created (e.g., permission denied, disk full).
     ///
-
-    ///
     /// # Example
     ///
     /// ```no_run
@@ -158,8 +156,6 @@ impl IconCache {
     /// - Cache file cannot be read (I/O error)
     /// - PNG decoding fails (corrupted cache file)
     /// - File metadata cannot be accessed
-    ///
-
     ///
     /// # Example
     ///
@@ -279,8 +275,6 @@ impl IconCache {
     /// - Temporary file creation fails (`TempFileCreationFailed`)
     /// - Atomic persist fails (`AtomicPersistFailed`)
     ///
-
-    ///
     /// # Example
     ///
     /// ```no_run
@@ -367,8 +361,6 @@ impl IconCache {
     /// Returns `IconCacheError::IconRemovalFailed` if the file cannot be deleted.
     /// Returns `Ok(())` if the file does not exist (idempotent operation).
     ///
-
-    ///
     /// # Example
     ///
     /// ```no_run
@@ -424,8 +416,6 @@ impl IconCache {
     /// Returns `IconCacheError::CacheClearFailed` if:
     /// - Directory cannot be read
     /// - Any file cannot be deleted
-    ///
-
     ///
     /// # Example
     ///
@@ -499,8 +489,6 @@ impl IconCache {
     /// # Errors
     ///
     /// Returns `IconCacheError::CacheStatsFailed` if the cache directory cannot be read.
-    ///
-
     ///
     /// # Example
     ///
@@ -648,8 +636,6 @@ impl IconCache {
     /// - Input size is not exactly 4096 bytes (`InvalidIconSize`)
     /// - PNG encoding fails (`PngEncodingError`)
     ///
-
-    ///
     /// # Design
     ///
     /// Pre-allocation of 8192 bytes is based on measured PNG sizes for 32x32 RGBA icons:
@@ -706,8 +692,6 @@ impl IconCache {
     /// Returns `IconCacheError` if:
     /// - PNG decoding fails (`PngDecodingError`)
     /// - Image cannot be resized
-    ///
-
     ///
     /// # Design
     ///
@@ -772,8 +756,6 @@ impl CacheStats {
     /// # Returns
     ///
     /// Returns a formatted string like "42 KB" or "1.5 MB".
-    ///
-
     ///
     /// # Example
     ///
@@ -1441,8 +1423,6 @@ mod tests {
 /// These tests use Proptest to verify that PNG encoding/decoding roundtrip
 /// preserves data for arbitrary RGBA input vectors. This validates the correctness
 /// of the PNG codec implementation across a wide range of input patterns.
-///
-
 ///
 /// # Design
 ///

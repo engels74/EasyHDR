@@ -1466,8 +1466,6 @@ impl GuiController {
     ///
     /// Reads cache statistics from the icon cache and updates the UI display
     /// with the current icon count and human-readable size.
-    ///
-
     fn update_cache_info(window: &MainWindow) {
         use easyhdr::utils::icon_cache::IconCache;
         use tracing::{info, warn};

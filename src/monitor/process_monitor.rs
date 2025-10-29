@@ -428,6 +428,8 @@ fn extract_and_insert_win32_process(
     context: &str,
     current_processes: &mut HashSet<AppIdentifier>,
 ) {
+    use tracing::debug;
+
     if let Some(name) = extract_process_name(sz_exe_file) {
         let name_lower = extract_filename_without_extension(&name);
         debug!("{} {}: {}", context, pid, name_lower);
