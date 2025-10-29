@@ -187,14 +187,15 @@ fn extract_package_info(
                 None
             } else {
                 // Resolve ms-appx:/// URI to actual filesystem path
+                // Extract relative path from URI (remove ms-appx:/// prefix)
+                const MS_APPX_PREFIX: &str = "ms-appx:///";
+
                 // Get the package installation directory
                 let installed_path = package
                     .InstalledPath()
                     .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?
                     .to_string();
 
-                // Extract relative path from URI (remove ms-appx:/// prefix)
-                const MS_APPX_PREFIX: &str = "ms-appx:///";
                 if let Some(relative_path) = uri_str.strip_prefix(MS_APPX_PREFIX) {
                     // Combine installed path with relative path to get full filesystem path
                     let full_path = PathBuf::from(installed_path).join(relative_path);
