@@ -1429,7 +1429,6 @@ mod tests {
         assert_eq!(stats.count, 0, "Empty cache should have count 0");
         assert_eq!(stats.size_bytes, 0, "Empty cache should have size 0");
     }
-
 }
 
 /// Property-based tests for PNG encoding/decoding
