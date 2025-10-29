@@ -308,10 +308,14 @@ fn get_app_logo_stream(
         }
     };
 
-    // Request logo at 32x32 size (standard icon size)
+    // Request logo at 48x48 size for higher quality
+    // Windows returns the largest available icon that fits in the requested size.
+    // By requesting 48x48, we ensure Windows provides higher-resolution icons
+    // (avoiding small 16x16 or 24x24 variants) which are then downscaled to 32x32
+    // in icon.rs for consistent, high-quality display across all apps.
     let size = Size {
-        Width: 32.0,
-        Height: 32.0,
+        Width: 48.0,
+        Height: 48.0,
     };
 
     match display_info.GetLogo(size) {
