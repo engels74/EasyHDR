@@ -34,8 +34,6 @@ EasyHDR monitors running processes at regular intervals (500-1000ms). When a con
 
 The application uses Windows Display Configuration APIs to control HDR state, with version-specific implementations for Windows 10, Windows 11, and Windows 11 24H2+.
 
-**Note:** Currently, only traditional applications (`.exe` files) are supported. Universal Windows Platform (UWP) apps from the Microsoft Store are not yet supported, but I hope to add this in a future release ([#12](https://github.com/engels74/EasyHDR/issues/12)).
-
 ## Installation
 
 **Requirements:**
