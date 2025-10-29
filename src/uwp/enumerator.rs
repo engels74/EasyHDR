@@ -314,7 +314,7 @@ fn get_app_logo_stream(
         Height: 32.0,
     };
 
-    match display_info.GetLogo(&size) {
+    match display_info.GetLogo(size) {
         Ok(logo_stream) => {
             debug!(
                 "Successfully retrieved logo stream for package '{}'",
