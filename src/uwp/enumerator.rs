@@ -252,8 +252,8 @@ fn get_app_logo_stream(
         }
     };
 
-    // Block on the async operation using .get()
-    let entries = match entries_async.get() {
+    // Block on the async operation using .join()
+    let entries = match entries_async.join() {
         Ok(entries) => entries,
         Err(e) => {
             debug!(

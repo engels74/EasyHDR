@@ -220,9 +220,9 @@ pub fn extract_icon_from_stream(
     use tracing::{debug, warn};
     use windows::Storage::Streams::DataReader;
 
-    // Open the stream (async operation, use blocking get())
+    // Open the stream (async operation, use blocking join())
     let stream = match stream_ref.OpenReadAsync() {
-        Ok(async_op) => match async_op.get() {
+        Ok(async_op) => match async_op.join() {
             Ok(stream) => stream,
             Err(e) => {
                 warn!(
@@ -275,7 +275,7 @@ pub fn extract_icon_from_stream(
 
     // Load data into the reader's buffer
     match reader.LoadAsync(size as u32) {
-        Ok(async_op) => match async_op.get() {
+        Ok(async_op) => match async_op.join() {
             Ok(_bytes_loaded) => {
                 debug!("Successfully loaded {} bytes into DataReader", size);
             }

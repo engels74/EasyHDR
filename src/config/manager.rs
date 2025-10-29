@@ -335,9 +335,9 @@ impl ConfigManager {
                             .iter()
                             .find(|p| p.package_family_name == uwp_app.package_family_name)
                         {
-                            // Extract icon from logo path if available
-                            if let Some(logo_path) = &pkg.logo_path {
-                                match uwp::extract_icon(logo_path) {
+                            // Extract icon from logo stream if available
+                            if let Some(logo_stream) = &pkg.logo_stream {
+                                match uwp::extract_icon_from_stream(logo_stream) {
                                     Ok(icon_data) if !icon_data.is_empty() => {
                                         tracing::debug!(
                                             "Regenerated icon for UWP app '{}' from package",
