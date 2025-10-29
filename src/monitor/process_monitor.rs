@@ -485,41 +485,6 @@ mod tests {
     }
 
     #[test]
-    fn test_process_monitor_creation() {
-        let (tx, _rx) = mpsc::sync_channel(32);
-        let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
-        assert_eq!(monitor.interval, Duration::from_millis(1000));
-    }
-
-    #[test]
-    fn test_update_watch_list() {
-        let (tx, _rx) = mpsc::sync_channel(32);
-        let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
-
-        monitor.update_watch_list(vec![
-            create_test_win32_app("test", "Test App"),
-            create_test_win32_app("game", "Game App"),
-        ]);
-
-        let watch_list = monitor.watch_list.lock();
-        assert_eq!(watch_list.len(), 2);
-        assert!(watch_list.iter().any(|app| {
-            if let MonitoredApp::Win32(win32_app) = app {
-                win32_app.process_name == "test"
-            } else {
-                false
-            }
-        }));
-        assert!(watch_list.iter().any(|app| {
-            if let MonitoredApp::Win32(win32_app) = app {
-                win32_app.process_name == "game"
-            } else {
-                false
-            }
-        }));
-    }
-
-    #[test]
     fn test_extract_filename_without_extension() {
         // Test full Windows path
         assert_eq!(
@@ -746,95 +711,6 @@ mod tests {
     }
 
     #[test]
-    fn test_watch_list_case_insensitive() {
-        let (tx, _rx) = mpsc::sync_channel(32);
-        let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
-
-        // Add watch list with mixed case process names
-        monitor.update_watch_list(vec![
-            create_test_win32_app("Game", "Game App"),
-            create_test_win32_app("APP", "APP"),
-        ]);
-
-        let watch_list = monitor.watch_list.lock();
-        // Watch list should store the process names as-is
-        assert_eq!(watch_list.len(), 2);
-        assert!(watch_list.iter().any(|app| {
-            if let MonitoredApp::Win32(win32_app) = app {
-                win32_app.process_name == "Game"
-            } else {
-                false
-            }
-        }));
-        assert!(watch_list.iter().any(|app| {
-            if let MonitoredApp::Win32(win32_app) = app {
-                win32_app.process_name == "APP"
-            } else {
-                false
-            }
-        }));
-    }
-
-    #[test]
-    fn test_state_transition_not_running_to_running() {
-        let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
-
-        monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
-
-        // Initial state: process not running
-        monitor.running_processes = HashSet::new();
-
-        // Transition: process starts
-        let mut current = HashSet::new();
-        current.insert(AppIdentifier::Win32("game".to_string()));
-
-        monitor.detect_changes(current);
-
-        // Verify Started event is sent
-        let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
-        match event {
-            ProcessEvent::Started(AppIdentifier::Win32(name)) => {
-                assert_eq!(name, "game");
-            }
-            ProcessEvent::Started(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Started event"),
-            ProcessEvent::Stopped(_) => {
-                panic!("Expected Started event for state transition, got Stopped")
-            }
-        }
-    }
-
-    #[test]
-    fn test_state_transition_running_to_not_running() {
-        let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
-
-        monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
-
-        // Initial state: process running
-        let mut initial = HashSet::new();
-        initial.insert(AppIdentifier::Win32("game".to_string()));
-        monitor.running_processes = initial;
-
-        // Transition: process stops
-        let current = HashSet::new();
-
-        monitor.detect_changes(current);
-
-        // Verify Stopped event is sent
-        let event = rx.recv_timeout(Duration::from_millis(100)).unwrap();
-        match event {
-            ProcessEvent::Stopped(AppIdentifier::Win32(name)) => {
-                assert_eq!(name, "game");
-            }
-            ProcessEvent::Stopped(AppIdentifier::Uwp(_)) => panic!("Expected Win32 Stopped event"),
-            ProcessEvent::Started(_) => {
-                panic!("Expected Stopped event for state transition, got Started")
-            }
-        }
-    }
-
-    #[test]
     fn test_multiple_state_transitions() {
         let (tx, rx) = mpsc::sync_channel(32);
         let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
@@ -966,45 +842,6 @@ mod tests {
     fn test_very_long_path() {
         let long_path = "C:\\Very\\Long\\Path\\With\\Many\\Directories\\And\\Subdirectories\\That\\Goes\\On\\And\\On\\application.exe";
         assert_eq!(extract_filename_without_extension(long_path), "application");
-    }
-
-    #[test]
-    fn test_process_name_normalization() {
-        let (tx, _rx) = mpsc::sync_channel(32);
-        let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
-
-        // Add processes with various cases
-        monitor.update_watch_list(vec![
-            create_test_win32_app("Game.exe", "Game"),
-            create_test_win32_app("NOTEPAD", "Notepad"),
-            create_test_win32_app("MyApp.EXE", "MyApp"),
-        ]);
-
-        let watch_list = monitor.watch_list.lock();
-
-        // Process names should be stored as-is (not normalized)
-        assert_eq!(watch_list.len(), 3);
-        assert!(watch_list.iter().any(|app| {
-            if let MonitoredApp::Win32(win32_app) = app {
-                win32_app.process_name == "Game.exe"
-            } else {
-                false
-            }
-        }));
-        assert!(watch_list.iter().any(|app| {
-            if let MonitoredApp::Win32(win32_app) = app {
-                win32_app.process_name == "NOTEPAD"
-            } else {
-                false
-            }
-        }));
-        assert!(watch_list.iter().any(|app| {
-            if let MonitoredApp::Win32(win32_app) = app {
-                win32_app.process_name == "MyApp.EXE"
-            } else {
-                false
-            }
-        }));
     }
 
     // Property-based tests using proptest

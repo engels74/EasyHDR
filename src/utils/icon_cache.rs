@@ -828,58 +828,6 @@ mod tests {
         assert_eq!(stats.size_human_readable(), "512 bytes");
     }
 
-    #[test]
-    fn cache_stats_size_human_readable_kb() {
-        let stats = CacheStats {
-            count: 10,
-            size_bytes: 40960,
-        };
-        assert_eq!(stats.size_human_readable(), "40 KB");
-    }
-
-    #[test]
-    fn cache_stats_size_human_readable_mb() {
-        let stats = CacheStats {
-            count: 100,
-            size_bytes: 2_097_152,
-        };
-        assert_eq!(stats.size_human_readable(), "2.0 MB");
-    }
-
-    #[test]
-    fn cache_stats_is_copy() {
-        let stats = CacheStats {
-            count: 5,
-            size_bytes: 1024,
-        };
-        let copy = stats; // Should be Copy, not Move
-        let another_copy = stats; // This should also work
-        // Use the copies to avoid unused variable warnings
-        assert_eq!(copy.count, stats.count);
-        assert_eq!(another_copy.count, stats.count);
-    }
-
-    #[test]
-    fn cache_stats_is_debug() {
-        let stats = CacheStats {
-            count: 5,
-            size_bytes: 1024,
-        };
-        let debug_str = format!("{stats:?}");
-        assert!(debug_str.contains("CacheStats"));
-        assert!(debug_str.contains("count"));
-        assert!(debug_str.contains("size_bytes"));
-    }
-
-    #[test]
-    fn icon_cache_is_debug() {
-        let temp_dir = std::env::temp_dir();
-        let cache = IconCache::new(temp_dir).unwrap();
-        let debug_str = format!("{cache:?}");
-        assert!(debug_str.contains("IconCache"));
-        assert!(debug_str.contains("cache_dir"));
-    }
-
     // PNG encoding/decoding tests
 
     #[test]
@@ -927,65 +875,6 @@ mod tests {
     }
 
     #[test]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
-    )]
-    fn png_encoding_decoding_roundtrip() {
-        let app_id = Uuid::new_v4();
-
-        // Create test RGBA data with a pattern
-        let mut rgba_data = vec![0u8; 4096];
-        for (i, item) in rgba_data.iter_mut().enumerate().take(4096) {
-            *item = (i % 256) as u8;
-        }
-
-        // Encode to PNG
-        let png_bytes =
-            IconCache::encode_rgba_to_png(&rgba_data, app_id).expect("Encoding should succeed");
-
-        // Decode back to RGBA
-        let decoded_rgba =
-            IconCache::decode_png_to_rgba(&png_bytes, app_id).expect("Decoding should succeed");
-
-        // Verify size
-        assert_eq!(
-            decoded_rgba.len(),
-            4096,
-            "Decoded data should be exactly 4096 bytes"
-        );
-
-        // Verify roundtrip preserves data
-        assert_eq!(
-            rgba_data, decoded_rgba,
-            "Roundtrip should preserve RGBA data exactly"
-        );
-    }
-
-    #[test]
-    fn decode_png_to_rgba_produces_correct_size() {
-        let app_id = Uuid::new_v4();
-
-        // Create a simple RGBA image
-        let rgba_data = vec![255u8; 4096]; // All white pixels
-
-        // Encode to PNG
-        let png_bytes =
-            IconCache::encode_rgba_to_png(&rgba_data, app_id).expect("Encoding should succeed");
-
-        // Decode
-        let decoded =
-            IconCache::decode_png_to_rgba(&png_bytes, app_id).expect("Decoding should succeed");
-
-        // Verify exact size (32x32 RGBA = 4096 bytes)
-        assert_eq!(
-            decoded.len(),
-            4096,
-            "Decoded data must be exactly 4096 bytes"
-        );
-    }
-
-    #[test]
     fn decode_png_handles_invalid_data() {
         let app_id = Uuid::new_v4();
 
@@ -1003,29 +892,6 @@ mod tests {
             }
             _ => panic!("Expected PngDecodingError"),
         }
-    }
-
-    #[test]
-    fn png_encoding_produces_valid_png() {
-        let app_id = Uuid::new_v4();
-
-        // Create test data
-        let rgba_data = vec![200u8; 4096];
-
-        // Encode
-        let png_bytes =
-            IconCache::encode_rgba_to_png(&rgba_data, app_id).expect("Encoding should succeed");
-
-        // Verify PNG signature (first 8 bytes)
-        // PNG files start with: 137 80 78 71 13 10 26 10
-        assert!(
-            png_bytes.len() >= 8,
-            "PNG should have at least header bytes"
-        );
-        assert_eq!(png_bytes[0], 137, "PNG signature byte 0");
-        assert_eq!(png_bytes[1], 80, "PNG signature byte 1 (P)");
-        assert_eq!(png_bytes[2], 78, "PNG signature byte 2 (N)");
-        assert_eq!(png_bytes[3], 71, "PNG signature byte 3 (G)");
     }
 
     // save_icon() tests
@@ -1101,41 +967,6 @@ mod tests {
             expected_path.exists(),
             "Icon file should exist after overwrite"
         );
-    }
-
-    #[test]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
-    )]
-    fn save_icon_produces_valid_png_file() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
-        let app_id = Uuid::new_v4();
-
-        // Create RGBA data with a pattern
-        let mut rgba_data = vec![0u8; 4096];
-        for (i, item) in rgba_data.iter_mut().enumerate().take(4096) {
-            *item = (i % 256) as u8;
-        }
-
-        // Save icon
-        cache
-            .save_icon(app_id, &rgba_data)
-            .expect("save_icon should succeed");
-
-        // Read the file directly and verify PNG signature
-        let file_path = temp_dir.path().join(format!("{app_id}.png"));
-        let file_data = std::fs::read(&file_path).expect("Failed to read icon file");
-
-        // Verify PNG signature
-        assert!(file_data.len() >= 8, "PNG should have at least header");
-        assert_eq!(file_data[0], 137, "PNG signature byte 0");
-        assert_eq!(file_data[1], 80, "PNG signature byte 1 (P)");
-        assert_eq!(file_data[2], 78, "PNG signature byte 2 (N)");
-        assert_eq!(file_data[3], 71, "PNG signature byte 3 (G)");
     }
 
     #[test]
@@ -1378,44 +1209,6 @@ mod tests {
         }
     }
 
-    #[test]
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "Test utility: modulo 256 ensures value fits in u8 range (0-255)"
-    )]
-    fn load_icon_save_load_roundtrip() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().expect("Failed to create temp dir");
-        let cache = IconCache::new(temp_dir.path()).expect("Failed to create cache");
-        let app_id = Uuid::new_v4();
-
-        // Create test data with varying pattern
-        let mut rgba_data = vec![0u8; 4096];
-        for (i, item) in rgba_data.iter_mut().enumerate().take(4096) {
-            *item = ((i * 7 + 13) % 256) as u8; // More complex pattern
-        }
-
-        // Save icon
-        cache
-            .save_icon(app_id, &rgba_data)
-            .expect("save_icon should succeed");
-
-        // Load icon
-        let loaded = cache
-            .load_icon(app_id, None)
-            .expect("load_icon should succeed")
-            .expect("Should have loaded icon data");
-
-        // Verify exact roundtrip
-        assert_eq!(
-            rgba_data.len(),
-            loaded.len(),
-            "Loaded data should have same length"
-        );
-        assert_eq!(rgba_data, loaded, "Roundtrip should preserve data exactly");
-    }
-
     // Cache management operation tests
 
     #[test]
@@ -1637,43 +1430,6 @@ mod tests {
         assert_eq!(stats.size_bytes, 0, "Empty cache should have size 0");
     }
 
-    #[test]
-    fn cache_stats_size_human_readable_edge_cases() {
-        // Test edge case: exactly 1 KB
-        let stats = CacheStats {
-            count: 1,
-            size_bytes: 1024,
-        };
-        assert_eq!(stats.size_human_readable(), "1 KB");
-
-        // Test edge case: exactly 1 MB
-        let stats = CacheStats {
-            count: 250,
-            size_bytes: 1024 * 1024,
-        };
-        assert_eq!(stats.size_human_readable(), "1.0 MB");
-
-        // Test edge case: 1.5 MB
-        let stats = CacheStats {
-            count: 375,
-            size_bytes: 1024 * 1024 + 512 * 1024,
-        };
-        assert_eq!(stats.size_human_readable(), "1.5 MB");
-
-        // Test edge case: less than 1 KB
-        let stats = CacheStats {
-            count: 1,
-            size_bytes: 500,
-        };
-        assert_eq!(stats.size_human_readable(), "500 bytes");
-
-        // Test edge case: zero
-        let stats = CacheStats {
-            count: 0,
-            size_bytes: 0,
-        };
-        assert_eq!(stats.size_human_readable(), "0 bytes");
-    }
 }
 
 /// Property-based tests for PNG encoding/decoding

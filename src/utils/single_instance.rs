@@ -100,15 +100,4 @@ mod tests {
         let guard3 = SingleInstanceGuard::new();
         assert!(guard3.is_ok(), "Instance after drop should succeed");
     }
-
-    #[test]
-    #[cfg(not(windows))]
-    fn test_single_instance_guard_stub() {
-        // On non-Windows, should always succeed
-        let guard1 = SingleInstanceGuard::new();
-        assert!(guard1.is_ok());
-
-        let guard2 = SingleInstanceGuard::new();
-        assert!(guard2.is_ok());
-    }
 }

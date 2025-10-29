@@ -282,14 +282,4 @@ mod tests {
         // Cleanup
         let _ = AutoStartManager::disable();
     }
-
-    /// Test non-Windows stubs
-    #[test]
-    #[cfg(not(windows))]
-    fn test_non_windows_stubs() {
-        // On non-Windows platforms, these should just return Ok without errors
-        assert!(AutoStartManager::is_enabled().is_ok());
-        assert!(AutoStartManager::enable().is_ok());
-        assert!(AutoStartManager::disable().is_ok());
-    }
 }

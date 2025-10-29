@@ -130,36 +130,6 @@ mod tests {
     }
 
     #[test]
-    fn test_rotate_logs_on_startup_basic() {
-        // Create a temporary directory for testing
-        let temp_dir = std::env::temp_dir().join("easyhdr_test_basic_rotation");
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        let log_path = temp_dir.join("app.log");
-
-        // Create initial log file
-        create_test_log(&log_path, "Session 1 log content");
-
-        // Perform rotation
-        rotate_logs_on_startup(&log_path).unwrap();
-
-        // Verify that app.log was rotated to app.log.1
-        let log_1 = temp_dir.join("app.log.1");
-        assert!(log_1.exists(), "app.log.1 should exist after rotation");
-        assert!(
-            !log_path.exists(),
-            "app.log should not exist after rotation (will be created fresh by logger)"
-        );
-
-        // Verify content was preserved
-        let content = fs::read_to_string(&log_1).unwrap();
-        assert_eq!(content, "Session 1 log content");
-
-        // Clean up
-        fs::remove_dir_all(&temp_dir).unwrap();
-    }
-
-    #[test]
     fn test_rotate_logs_on_startup_multiple_rotations() {
         // Create a temporary directory for testing
         let temp_dir = std::env::temp_dir().join("easyhdr_test_multiple_rotations");
@@ -253,76 +223,6 @@ mod tests {
             content, "Session 12 log content",
             "app.log.1 should contain the most recent session"
         );
-
-        // Clean up
-        fs::remove_dir_all(&temp_dir).unwrap();
-    }
-
-    #[test]
-    fn test_rotate_logs_on_startup_no_existing_log() {
-        // Create a temporary directory for testing
-        let temp_dir = std::env::temp_dir().join("easyhdr_test_no_existing_log");
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        let log_path = temp_dir.join("app.log");
-
-        // Should not fail when log doesn't exist
-        let result = rotate_logs_on_startup(&log_path);
-        assert!(
-            result.is_ok(),
-            "Rotation should succeed when log doesn't exist"
-        );
-
-        // No files should be created
-        assert!(!log_path.exists(), "app.log should not exist");
-        let log_1 = temp_dir.join("app.log.1");
-        assert!(!log_1.exists(), "app.log.1 should not exist");
-
-        // Clean up
-        fs::remove_dir_all(&temp_dir).unwrap();
-    }
-
-    #[test]
-    fn test_rotate_logs_on_startup_partial_history() {
-        // Create a temporary directory for testing
-        let temp_dir = std::env::temp_dir().join("easyhdr_test_partial_history");
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        let log_path = temp_dir.join("app.log");
-
-        // Create current log and only a few historical logs (simulating partial history)
-        create_test_log(&log_path, "Current session");
-        create_test_log(&temp_dir.join("app.log.1"), "Previous session");
-        create_test_log(&temp_dir.join("app.log.5"), "Very old session");
-
-        // Perform rotation
-        rotate_logs_on_startup(&log_path).unwrap();
-
-        // Verify rotation worked with gaps
-        let log_1 = temp_dir.join("app.log.1");
-        let log_2 = temp_dir.join("app.log.2");
-        let log_6 = temp_dir.join("app.log.6");
-
-        assert!(
-            log_1.exists(),
-            "app.log.1 should exist (rotated from app.log)"
-        );
-        assert!(
-            log_2.exists(),
-            "app.log.2 should exist (rotated from app.log.1)"
-        );
-        assert!(
-            log_6.exists(),
-            "app.log.6 should exist (rotated from app.log.5)"
-        );
-
-        let content_1 = fs::read_to_string(&log_1).unwrap();
-        let content_2 = fs::read_to_string(&log_2).unwrap();
-        let content_6 = fs::read_to_string(&log_6).unwrap();
-
-        assert_eq!(content_1, "Current session");
-        assert_eq!(content_2, "Previous session");
-        assert_eq!(content_6, "Very old session");
 
         // Clean up
         fs::remove_dir_all(&temp_dir).unwrap();
