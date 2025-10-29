@@ -69,8 +69,10 @@ windows = { version = "0.62", features = [
     "Win32_Storage_Packaging_Appx",  # GetPackageFullName API
     "Management_Deployment",          # PackageManager (WinRT)
     "ApplicationModel",               # Package types
-    "ApplicationModel_Core",          # Core app model
+    "ApplicationModel_Core",          # Core app model (AppListEntry)
     "Storage",                        # Package storage access
+    "Storage_Streams",                # RandomAccessStreamReference, DataReader
+    "Foundation",                     # Size type for GetLogo
 ] }
 winreg = "0.55"
 tray-icon = "0.21"

@@ -2,7 +2,7 @@
 //!
 //! This module provides enumeration of installed UWP applications using the `WinRT`
 //! `PackageManager` API. It discovers UWP packages installed for the current user
-//! and extracts metadata including display names, package identifiers, and icon paths.
+//! and extracts metadata including display names, package identifiers, and icon streams.
 //!
 //! # Package Discovery
 //!
@@ -13,7 +13,14 @@
 //!    - `Package.Id.FamilyName` - Stable identifier
 //!    - `Package.DisplayName` - User-visible name
 //!    - `Package.PublisherDisplayName` - Publisher/vendor
-//!    - `Package.Logo` - Path to icon asset
+//!    - `AppListEntry.DisplayInfo.GetLogo()` - Icon stream reference
+//!
+//! # Icon Loading Strategy
+//!
+//! Icons are loaded via the `AppListEntry.DisplayInfo.GetLogo()` API rather than
+//! direct filesystem access. This ensures Windows Runtime automatically selects
+//! the appropriate scale variant (100%, 125%, 150%, 200%, etc.) based on system
+//! DPI settings, and handles all edge cases (missing files, permissions, etc.).
 //!
 //! # Scope and Permissions
 //!
@@ -30,12 +37,20 @@
 //! user-installable applications.
 
 use crate::Result;
-use std::path::PathBuf;
+
+#[cfg(windows)]
+use windows::Storage::Streams::RandomAccessStreamReference;
 
 /// Metadata for an installed UWP package
 ///
 /// Contains information needed to display and monitor a UWP application.
 /// The `package_family_name` serves as the stable identifier for process detection.
+///
+/// # Icon Handling
+///
+/// Icons are represented as `RandomAccessStreamReference` rather than filesystem paths.
+/// This allows the Windows Runtime to automatically select the correct scale variant
+/// (e.g., `Square44x44Logo.scale-200.png`) based on system DPI settings.
 #[derive(Debug, Clone)]
 pub struct UwpPackageInfo {
     /// User-visible display name (e.g., "Calculator")
@@ -50,8 +65,13 @@ pub struct UwpPackageInfo {
     /// Publisher display name (e.g., "Microsoft Corporation")
     pub publisher_display_name: String,
 
-    /// Optional path to logo/icon file in package directory
-    pub logo_path: Option<PathBuf>,
+    /// Optional stream reference to logo/icon (Windows Runtime API)
+    #[cfg(windows)]
+    pub logo_stream: Option<RandomAccessStreamReference>,
+
+    /// Placeholder for non-Windows platforms
+    #[cfg(not(windows))]
+    pub logo_stream: Option<()>,
 }
 
 /// Enumerate all installed UWP packages for the current user
@@ -174,40 +194,9 @@ fn extract_package_info(
         .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?
         .to_string();
 
-    // Get logo path by resolving URI to filesystem path
-    let logo_path = match package.Logo() {
-        Ok(uri) => {
-            // Convert URI to string
-            let uri_str = uri
-                .ToString()
-                .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?
-                .to_string();
-
-            if uri_str.is_empty() {
-                None
-            } else {
-                // Resolve ms-appx:/// URI to actual filesystem path
-                // Extract relative path from URI (remove ms-appx:/// prefix)
-                const MS_APPX_PREFIX: &str = "ms-appx:///";
-
-                // Get the package installation directory
-                let installed_path = package
-                    .InstalledPath()
-                    .map_err(|e| EasyHdrError::UwpEnumerationError(Box::new(e)))?
-                    .to_string();
-
-                if let Some(relative_path) = uri_str.strip_prefix(MS_APPX_PREFIX) {
-                    // Combine installed path with relative path to get full filesystem path
-                    let full_path = PathBuf::from(installed_path).join(relative_path);
-                    Some(full_path)
-                } else {
-                    // URI doesn't use expected ms-appx scheme, store as-is for fallback
-                    Some(PathBuf::from(uri_str))
-                }
-            }
-        }
-        Err(_) => None, // Logo is optional
-    };
+    // Get logo stream reference using AppListEntry API
+    // This is the recommended approach that automatically handles scale variants
+    let logo_stream = get_app_logo_stream(package);
 
     // App ID is typically "App" for the main application
     // This could be extracted from the package manifest, but "App" is the standard
@@ -218,8 +207,130 @@ fn extract_package_info(
         package_family_name,
         app_id,
         publisher_display_name,
-        logo_path,
+        logo_stream,
     }))
+}
+
+/// Get app logo stream using Windows Runtime AppListEntry API
+///
+/// Uses the recommended `AppListEntry.DisplayInfo.GetLogo()` API to retrieve
+/// a logo stream reference. This approach automatically handles:
+/// - Scale variant selection (100%, 125%, 150%, 200%, etc.) based on system DPI
+/// - Missing icon files (returns None instead of failing)
+/// - Permission issues (gracefully degrades to None)
+///
+/// # Arguments
+///
+/// * `package` - Reference to the Windows Runtime Package object
+///
+/// # Returns
+///
+/// `Option<RandomAccessStreamReference>` - Stream reference if logo is available
+///
+/// # Implementation Note
+///
+/// Uses blocking `.get()` on async operations rather than requiring an async runtime.
+/// This is acceptable because icon loading happens during enumeration, not in
+/// performance-critical paths.
+#[cfg(windows)]
+fn get_app_logo_stream(
+    package: &windows::ApplicationModel::Package,
+) -> Option<RandomAccessStreamReference> {
+    use tracing::{debug, warn};
+    use windows::Foundation::Size;
+
+    // Try to get the first AppListEntry for this package
+    let entries_async = match package.GetAppListEntriesAsync() {
+        Ok(async_op) => async_op,
+        Err(e) => {
+            debug!(
+                "Failed to call GetAppListEntriesAsync for package '{}': {}",
+                package.DisplayName().unwrap_or_default().to_string_lossy(),
+                e
+            );
+            return None;
+        }
+    };
+
+    // Block on the async operation using .get()
+    let entries = match entries_async.get() {
+        Ok(entries) => entries,
+        Err(e) => {
+            debug!(
+                "Failed to await GetAppListEntriesAsync for package '{}': {}",
+                package.DisplayName().unwrap_or_default().to_string_lossy(),
+                e
+            );
+            return None;
+        }
+    };
+
+    // Check if we have at least one entry
+    let entry_count = match entries.Size() {
+        Ok(count) => count,
+        Err(e) => {
+            debug!("Failed to get entry count: {}", e);
+            return None;
+        }
+    };
+
+    if entry_count == 0 {
+        debug!(
+            "Package '{}' has no app list entries",
+            package.DisplayName().unwrap_or_default().to_string_lossy()
+        );
+        return None;
+    }
+
+    // Get the first entry
+    let entry = match entries.GetAt(0) {
+        Ok(entry) => entry,
+        Err(e) => {
+            warn!(
+                "Failed to get first entry for package '{}': {}",
+                package.DisplayName().unwrap_or_default().to_string_lossy(),
+                e
+            );
+            return None;
+        }
+    };
+
+    // Get DisplayInfo
+    let display_info = match entry.DisplayInfo() {
+        Ok(info) => info,
+        Err(e) => {
+            debug!(
+                "Failed to get DisplayInfo for package '{}': {}",
+                package.DisplayName().unwrap_or_default().to_string_lossy(),
+                e
+            );
+            return None;
+        }
+    };
+
+    // Request logo at 32x32 size (standard icon size)
+    let size = Size {
+        Width: 32.0,
+        Height: 32.0,
+    };
+
+    match display_info.GetLogo(&size) {
+        Ok(logo_stream) => {
+            debug!(
+                "Successfully retrieved logo stream for package '{}'",
+                package.DisplayName().unwrap_or_default().to_string_lossy()
+            );
+            Some(logo_stream)
+        }
+        Err(e) => {
+            debug!(
+                "Failed to get logo for package '{}': {}. This is normal for some system packages.",
+                package.DisplayName().unwrap_or_default().to_string_lossy(),
+                e
+            );
+            None
+        }
+    }
 }
 
 #[cfg(not(windows))]

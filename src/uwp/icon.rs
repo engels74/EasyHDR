@@ -165,6 +165,196 @@ pub fn extract_icon(_logo_path: &Path) -> Result<Vec<u8>> {
     Ok(create_placeholder_rgba())
 }
 
+/// Extract icon data from a Windows Runtime stream reference
+///
+/// Uses the Windows Runtime `RandomAccessStreamReference` API to read image bytes
+/// from a UWP app logo. This is the recommended approach for loading UWP icons
+/// because it automatically handles:
+/// - Scale variant selection (100%, 125%, 150%, 200%, etc.) based on system DPI
+/// - Missing icon files (returns placeholder instead of failing)
+/// - Permission issues (gracefully degrades to placeholder)
+///
+/// The stream is read using the `DataReader` API, then decoded from PNG format
+/// and converted to raw RGBA bytes (32x32 pixels, 4096 bytes total), matching
+/// the format used by Win32 icon extraction.
+///
+/// # Arguments
+///
+/// * `stream_ref` - Reference to a Windows Runtime stream containing the icon image
+///
+/// # Returns
+///
+/// Raw RGBA bytes (32x32 pixels = 4096 bytes) for the application icon
+///
+/// # Errors
+///
+/// Returns placeholder icon on any errors rather than propagating them. This ensures
+/// robust fallback behavior for missing or inaccessible icons.
+///
+/// # Implementation Note
+///
+/// Uses blocking `.get()` on async operations rather than requiring an async runtime.
+/// This is acceptable because icon loading happens during enumeration or on-demand
+/// loading, not in performance-critical paths.
+///
+/// # Example
+///
+/// ```no_run
+/// # #[cfg(windows)]
+/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// use windows::Storage::Streams::RandomAccessStreamReference;
+///
+/// let stream_ref: RandomAccessStreamReference = /* obtained from AppListEntry */;
+/// let icon_data = easyhdr::uwp::extract_icon_from_stream(&stream_ref)?;
+/// assert_eq!(icon_data.len(), 32 * 32 * 4); // 4096 bytes (RGBA)
+/// # Ok(())
+/// # }
+/// ```
+#[cfg(windows)]
+pub fn extract_icon_from_stream(
+    stream_ref: &windows::Storage::Streams::RandomAccessStreamReference,
+) -> Result<Vec<u8>> {
+    use crate::EasyHdrError;
+    use image::ImageReader;
+    use std::io::Cursor;
+    use tracing::{debug, warn};
+    use windows::Storage::Streams::DataReader;
+
+    // Open the stream (async operation, use blocking get())
+    let stream = match stream_ref.OpenReadAsync() {
+        Ok(async_op) => match async_op.get() {
+            Ok(stream) => stream,
+            Err(e) => {
+                warn!(
+                    "Failed to await OpenReadAsync: {}. Using placeholder icon.",
+                    e
+                );
+                return Ok(create_placeholder_rgba());
+            }
+        },
+        Err(e) => {
+            warn!(
+                "Failed to call OpenReadAsync: {}. Using placeholder icon.",
+                e
+            );
+            return Ok(create_placeholder_rgba());
+        }
+    };
+
+    // Get stream size
+    let size = match stream.Size() {
+        Ok(size) => size,
+        Err(e) => {
+            warn!("Failed to get stream size: {}. Using placeholder icon.", e);
+            return Ok(create_placeholder_rgba());
+        }
+    };
+
+    debug!("Icon stream size: {} bytes", size);
+
+    // Validate size is reasonable (between 1 KB and 10 MB)
+    if size == 0 || size > 10_000_000 {
+        warn!(
+            "Icon stream size {} is invalid (expected 1KB-10MB). Using placeholder icon.",
+            size
+        );
+        return Ok(create_placeholder_rgba());
+    }
+
+    // Create DataReader from the stream
+    let reader = match DataReader::CreateDataReader(&stream) {
+        Ok(reader) => reader,
+        Err(e) => {
+            warn!(
+                "Failed to create DataReader: {}. Using placeholder icon.",
+                e
+            );
+            return Ok(create_placeholder_rgba());
+        }
+    };
+
+    // Load data into the reader's buffer
+    match reader.LoadAsync(size as u32) {
+        Ok(async_op) => match async_op.get() {
+            Ok(_bytes_loaded) => {
+                debug!("Successfully loaded {} bytes into DataReader", size);
+            }
+            Err(e) => {
+                warn!("Failed to await LoadAsync: {}. Using placeholder icon.", e);
+                return Ok(create_placeholder_rgba());
+            }
+        },
+        Err(e) => {
+            warn!("Failed to call LoadAsync: {}. Using placeholder icon.", e);
+            return Ok(create_placeholder_rgba());
+        }
+    };
+
+    // Read bytes from the buffer
+    let mut buffer = vec![0u8; size as usize];
+    if let Err(e) = reader.ReadBytes(&mut buffer) {
+        warn!("Failed to read bytes: {}. Using placeholder icon.", e);
+        return Ok(create_placeholder_rgba());
+    }
+
+    debug!(
+        "Successfully read {} bytes from stream, decoding image",
+        buffer.len()
+    );
+
+    // Decode image and convert to RGBA
+    let img = match ImageReader::new(Cursor::new(buffer))
+        .with_guessed_format()
+        .map_err(|e| EasyHdrError::UwpIconExtractionError(format!("Failed to guess format: {}", e)))
+        .and_then(|reader| {
+            reader.decode().map_err(|e| {
+                EasyHdrError::UwpIconExtractionError(format!("Failed to decode image: {}", e))
+            })
+        }) {
+        Ok(img) => img,
+        Err(e) => {
+            warn!("{:?}. Using placeholder icon.", e);
+            return Ok(create_placeholder_rgba());
+        }
+    };
+
+    let rgba_img = img.to_rgba8();
+    let (width, height) = rgba_img.dimensions();
+
+    debug!("Decoded image: {}x{} pixels", width, height);
+
+    // Resize to 32x32 if needed
+    let rgba_data = if width != ICON_SIZE || height != ICON_SIZE {
+        debug!(
+            "Resizing icon from {}x{} to {}x{}",
+            width, height, ICON_SIZE, ICON_SIZE
+        );
+        let resized = image::imageops::resize(
+            &rgba_img,
+            ICON_SIZE,
+            ICON_SIZE,
+            image::imageops::FilterType::Lanczos3,
+        );
+        resized.into_raw()
+    } else {
+        rgba_img.into_raw()
+    };
+
+    debug!(
+        "Icon converted to RGBA: {} bytes (expected {})",
+        rgba_data.len(),
+        ICON_SIZE * ICON_SIZE * 4
+    );
+
+    Ok(rgba_data)
+}
+
+/// Stub implementation for non-Windows platforms
+#[cfg(not(windows))]
+pub fn extract_icon_from_stream(_stream_ref: &()) -> Result<Vec<u8>> {
+    Ok(create_placeholder_rgba())
+}
+
 /// Create a placeholder icon as RGBA bytes (32x32 pixels, 4096 bytes)
 ///
 /// Returns a simple gray square with a border, matching the format used by

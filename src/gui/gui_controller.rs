@@ -437,8 +437,8 @@ impl GuiController {
                     .into_iter()
                     .map(|pkg| {
                         // Load icon if available (returns 32x32 RGBA bytes)
-                        let icon_data = if let Some(logo_path) = &pkg.logo_path {
-                            uwp::extract_icon(logo_path).ok()
+                        let icon_data = if let Some(logo_stream) = &pkg.logo_stream {
+                            uwp::extract_icon_from_stream(logo_stream).ok()
                         } else {
                             None
                         };

@@ -22,4 +22,4 @@ pub use detector::{detect_uwp_process, extract_package_family_name};
 pub use enumerator::{UwpPackageInfo, enumerate_packages};
 
 #[cfg(windows)]
-pub use icon::extract_icon;
+pub use icon::{extract_icon, extract_icon_from_stream};
