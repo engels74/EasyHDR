@@ -420,7 +420,7 @@ impl Drop for ProcessHandleGuard {
 /// Helper to extract and insert Win32 process into the current processes set
 ///
 /// Extracts the process name from szExeFile, converts it to lowercase without extension,
-/// logs a debug message, and inserts it into the current_processes set.
+/// logs a debug message, and inserts it into the `current_processes` set.
 #[cfg(windows)]
 fn extract_and_insert_win32_process(
     sz_exe_file: &[u16; 260],
