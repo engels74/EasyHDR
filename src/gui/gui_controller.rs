@@ -510,10 +510,7 @@ impl GuiController {
             .iter()
             .map(|app| {
                 // Get icon data using helper method
-                let icon_data_ref = match app {
-                    MonitoredApp::Win32(win32_app) => &win32_app.icon_data,
-                    MonitoredApp::Uwp(uwp_app) => &uwp_app.icon_data,
-                };
+                let icon_data_ref = app.icon_data();
 
                 let icon = if let Some(icon_data) = icon_data_ref {
                     // Validate icon data size (32x32 RGBA = 4096 bytes)

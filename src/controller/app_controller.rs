@@ -453,7 +453,7 @@ impl AppController {
     /// Add application to config, save to disk, and update `ProcessMonitor` watch list.
     /// Logs warning and continues with in-memory config if save fails.
     pub fn add_application(&mut self, app: MonitoredApp) -> Result<()> {
-        use tracing::{info, warn};
+        use tracing::info;
 
         match &app {
             MonitoredApp::Win32(win32_app) => {
@@ -477,15 +477,7 @@ impl AppController {
         }
 
         // Save configuration - if this fails, we continue with in-memory config
-        let config = self.config.lock();
-        if let Err(e) = ConfigManager::save(&config) {
-            warn!(
-                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
-                 Changes will be lost on application restart.",
-                e
-            );
-        }
-        drop(config);
+        self.save_config_gracefully();
 
         // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
@@ -524,15 +516,7 @@ impl AppController {
         }
 
         // Save configuration - if this fails, we continue with in-memory config
-        let config = self.config.lock();
-        if let Err(e) = ConfigManager::save(&config) {
-            warn!(
-                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
-                 Changes will be lost on application restart.",
-                e
-            );
-        }
-        drop(config);
+        self.save_config_gracefully();
 
         // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
@@ -547,7 +531,7 @@ impl AppController {
     /// Toggle application enabled state by UUID, save to disk, and update `ProcessMonitor` watch list.
     /// Logs warning and continues with in-memory config if save fails.
     pub fn toggle_app_enabled(&mut self, id: Uuid, enabled: bool) -> Result<()> {
-        use tracing::{info, warn};
+        use tracing::info;
 
         info!("Toggling application {} to enabled={}", id, enabled);
 
@@ -555,23 +539,12 @@ impl AppController {
         {
             let mut config = self.config.lock();
             if let Some(app) = config.monitored_apps.iter_mut().find(|app| app.id() == &id) {
-                match app {
-                    MonitoredApp::Win32(win32_app) => win32_app.enabled = enabled,
-                    MonitoredApp::Uwp(uwp_app) => uwp_app.enabled = enabled,
-                }
+                app.set_enabled(enabled);
             }
         }
 
         // Save configuration - if this fails, we continue with in-memory config
-        let config = self.config.lock();
-        if let Err(e) = ConfigManager::save(&config) {
-            warn!(
-                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
-                 Changes will be lost on application restart.",
-                e
-            );
-        }
-        drop(config);
+        self.save_config_gracefully();
 
         // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
@@ -586,7 +559,7 @@ impl AppController {
     /// Update user preferences and save to disk.
     /// Logs warning and continues with in-memory config if save fails.
     pub fn update_preferences(&mut self, prefs: UserPreferences) -> Result<()> {
-        use tracing::{info, warn};
+        use tracing::info;
 
         info!("Updating user preferences");
 
@@ -597,15 +570,7 @@ impl AppController {
         }
 
         // Save configuration - if this fails, we continue with in-memory config
-        let config = self.config.lock();
-        if let Err(e) = ConfigManager::save(&config) {
-            warn!(
-                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
-                 Changes will be lost on application restart.",
-                e
-            );
-        }
-        drop(config);
+        self.save_config_gracefully();
 
         info!("User preferences updated successfully");
         Ok(())
@@ -629,6 +594,30 @@ impl AppController {
             displays.iter().filter(|d| d.supports_hdr).count()
         );
         Ok(())
+    }
+
+    /// Save configuration with graceful error handling
+    ///
+    /// Attempts to save the current configuration to disk. Failures are logged
+    /// but do not propagate errors, allowing the application to continue with
+    /// in-memory configuration. This implements graceful degradation for config
+    /// persistence.
+    ///
+    /// # Design
+    ///
+    /// This helper consolidates the config save pattern used across multiple
+    /// methods in `AppController`, eliminating ~20 lines of duplication.
+    fn save_config_gracefully(&self) {
+        use tracing::warn;
+
+        let config = self.config.lock();
+        if let Err(e) = ConfigManager::save(&config) {
+            warn!(
+                "Failed to save configuration to disk: {}. Continuing with in-memory config. \
+                 Changes will be lost on application restart.",
+                e
+            );
+        }
     }
 
     /// Update `ProcessMonitor` watch list with enabled monitored applications from config

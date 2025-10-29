@@ -200,3 +200,75 @@ static MEMORY_PROFILER: std::sync::LazyLock<MemoryProfiler> =
 pub fn get_profiler() -> &'static MemoryProfiler {
     &MEMORY_PROFILER
 }
+
+/// Record icon cached with conditional compilation
+///
+/// This is a convenience wrapper that handles the `#[cfg(windows)]` conditional
+/// compilation internally, eliminating the need for callers to duplicate this
+/// pattern. On non-Windows platforms, this function is a no-op.
+///
+/// # Arguments
+///
+/// * `size` - Size of the icon data in bytes
+///
+/// # Design
+///
+/// This helper consolidates the memory profiler integration pattern used across
+/// multiple locations in `src/config/models.rs`, eliminating ~15 lines of
+/// conditional compilation duplication.
+///
+/// # Example
+///
+/// ```no_run
+/// use easyhdr::utils::memory_profiler;
+///
+/// let icon_data = vec![0u8; 4096];
+/// memory_profiler::record_icon_cached_safe(icon_data.len());
+/// ```
+#[inline]
+pub fn record_icon_cached_safe(size: usize) {
+    #[cfg(windows)]
+    {
+        get_profiler().record_icon_cached(size);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = size; // Suppress unused warning
+    }
+}
+
+/// Record icon removed with conditional compilation
+///
+/// This is a convenience wrapper that handles the `#[cfg(windows)]` conditional
+/// compilation internally, eliminating the need for callers to duplicate this
+/// pattern. On non-Windows platforms, this function is a no-op.
+///
+/// # Arguments
+///
+/// * `size` - Size of the icon data in bytes
+///
+/// # Design
+///
+/// This helper consolidates the memory profiler integration pattern used across
+/// multiple locations in `src/config/models.rs`, eliminating ~15 lines of
+/// conditional compilation duplication.
+///
+/// # Example
+///
+/// ```no_run
+/// use easyhdr::utils::memory_profiler;
+///
+/// let icon_data = vec![0u8; 4096];
+/// memory_profiler::record_icon_removed_safe(icon_data.len());
+/// ```
+#[inline]
+pub fn record_icon_removed_safe(size: usize) {
+    #[cfg(windows)]
+    {
+        get_profiler().record_icon_removed(size);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = size; // Suppress unused warning
+    }
+}

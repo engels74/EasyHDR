@@ -103,32 +103,11 @@ impl Win32App {
         let icon_data = match extract_icon_from_exe(&exe_path) {
             Ok(data) if !data.is_empty() => {
                 // Record icon in memory profiler
-                #[cfg(windows)]
-                {
-                    use crate::utils::memory_profiler;
-                    memory_profiler::get_profiler().record_icon_cached(data.len());
-                }
+                crate::utils::memory_profiler::record_icon_cached_safe(data.len());
 
                 // Cache icon to disk for persistence across restarts (Requirement 1.2)
                 // Graceful degradation: Cache failures don't prevent app addition (Requirement 5.2)
-                if let Ok(cache) =
-                    crate::utils::IconCache::new(crate::utils::IconCache::default_cache_dir())
-                {
-                    if let Err(e) = cache.save_icon(id, &data) {
-                        tracing::warn!(
-                            "Failed to cache icon for '{}' ({}): {}. Icon will remain in memory only.",
-                            display_name,
-                            id,
-                            e
-                        );
-                    } else {
-                        tracing::debug!(
-                            "Successfully cached icon for '{}' ({}) to disk",
-                            display_name,
-                            id
-                        );
-                    }
-                }
+                crate::utils::IconCache::cache_icon_gracefully(id, &data, &display_name);
 
                 Some(data)
             }
@@ -159,11 +138,7 @@ impl Win32App {
             match extract_icon_from_exe(&self.exe_path) {
                 Ok(data) if !data.is_empty() => {
                     // Record icon in memory profiler
-                    #[cfg(windows)]
-                    {
-                        use crate::utils::memory_profiler;
-                        memory_profiler::get_profiler().record_icon_cached(data.len());
-                    }
+                    crate::utils::memory_profiler::record_icon_cached_safe(data.len());
                     self.icon_data = Some(data);
                 }
                 Ok(_) => {
@@ -184,14 +159,9 @@ impl Win32App {
     ///
     /// Clears cached icon data to reduce memory usage. Can be reloaded with `ensure_icon_loaded()`.
     pub fn release_icon(&mut self) {
-        #[cfg_attr(not(windows), allow(unused_variables))]
         if let Some(icon_data) = self.icon_data.take() {
             // Record icon removal in memory profiler
-            #[cfg(windows)]
-            {
-                use crate::utils::memory_profiler;
-                memory_profiler::get_profiler().record_icon_removed(icon_data.len());
-            }
+            crate::utils::memory_profiler::record_icon_removed_safe(icon_data.len());
             tracing::debug!("Released icon data for {}", self.display_name);
         }
     }
@@ -238,8 +208,7 @@ impl UwpApp {
                 match uwp::extract_icon(path) {
                     Ok(data) if !data.is_empty() => {
                         // Record icon in memory profiler
-                        use crate::utils::memory_profiler;
-                        memory_profiler::get_profiler().record_icon_cached(data.len());
+                        crate::utils::memory_profiler::record_icon_cached_safe(data.len());
 
                         tracing::debug!(
                             "Extracted icon for UWP app '{}' ({} bytes)",
@@ -249,24 +218,7 @@ impl UwpApp {
 
                         // Cache icon to disk for persistence across restarts (Requirement 1.3)
                         // Graceful degradation: Cache failures don't prevent app addition (Requirement 5.2)
-                        if let Ok(cache) = crate::utils::IconCache::new(
-                            crate::utils::IconCache::default_cache_dir(),
-                        ) {
-                            if let Err(e) = cache.save_icon(id, &data) {
-                                tracing::warn!(
-                                    "Failed to cache UWP icon for '{}' ({}): {}. Icon will remain in memory only.",
-                                    display_name,
-                                    id,
-                                    e
-                                );
-                            } else {
-                                tracing::debug!(
-                                    "Successfully cached UWP icon for '{}' ({}) to disk",
-                                    display_name,
-                                    id
-                                );
-                            }
-                        }
+                        crate::utils::IconCache::cache_icon_gracefully(id, &data, &display_name);
 
                         Some(data)
                     }
@@ -361,17 +313,51 @@ impl MonitoredApp {
         match self {
             Self::Win32(app) => app.release_icon(),
             Self::Uwp(app) => {
-                #[cfg_attr(not(windows), allow(unused_variables))]
                 if let Some(icon_data) = app.icon_data.take() {
                     // Record icon removal in memory profiler
-                    #[cfg(windows)]
-                    {
-                        use crate::utils::memory_profiler;
-                        memory_profiler::get_profiler().record_icon_removed(icon_data.len());
-                    }
+                    crate::utils::memory_profiler::record_icon_removed_safe(icon_data.len());
                     tracing::debug!("Released icon data for {}", app.display_name);
                 }
             }
+        }
+    }
+
+    /// Set enabled state
+    ///
+    /// Updates the enabled flag for the application, controlling whether it should
+    /// trigger HDR state changes when started or stopped.
+    ///
+    /// # Arguments
+    ///
+    /// * `enabled` - New enabled state
+    ///
+    /// # Design
+    ///
+    /// This helper consolidates the pattern matching logic used across multiple
+    /// locations, eliminating ~40 lines of duplication.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        match self {
+            Self::Win32(app) => app.enabled = enabled,
+            Self::Uwp(app) => app.enabled = enabled,
+        }
+    }
+
+    /// Get icon data reference
+    ///
+    /// Returns a reference to the cached icon data if available.
+    ///
+    /// # Returns
+    ///
+    /// Returns `&Option<Vec<u8>>` containing the icon data, or `None` if no icon is cached.
+    ///
+    /// # Design
+    ///
+    /// This helper consolidates the pattern matching logic used across multiple
+    /// locations, eliminating ~20 lines of duplication.
+    pub fn icon_data(&self) -> &Option<Vec<u8>> {
+        match self {
+            Self::Win32(app) => &app.icon_data,
+            Self::Uwp(app) => &app.icon_data,
         }
     }
 }

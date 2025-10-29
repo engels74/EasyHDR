@@ -607,6 +607,52 @@ impl IconCache {
         self.cache_dir.join(format!("{app_id}.png"))
     }
 
+    /// Cache icon data to disk with graceful error handling
+    ///
+    /// Attempts to save icon data to the default cache directory. Failures are logged
+    /// but do not propagate errors, allowing the application to continue with in-memory
+    /// icons only. This implements graceful degradation for icon caching (Requirement 5.2).
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Unique identifier for the application
+    /// * `data` - RGBA icon data (must be exactly 4096 bytes)
+    /// * `display_name` - Application display name for logging
+    ///
+    /// # Design
+    ///
+    /// This helper consolidates the icon caching pattern used in both `Win32App::from_exe_path`
+    /// and `UwpApp::from_package_info`, eliminating ~35 lines of duplication.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use easyhdr::utils::icon_cache::IconCache;
+    /// use uuid::Uuid;
+    ///
+    /// let app_id = Uuid::new_v4();
+    /// let rgba_data = vec![0u8; 4096]; // 32x32 RGBA
+    /// IconCache::cache_icon_gracefully(app_id, &rgba_data, "My App");
+    /// ```
+    pub fn cache_icon_gracefully(id: Uuid, data: &[u8], display_name: &str) {
+        if let Ok(cache) = Self::new(Self::default_cache_dir()) {
+            if let Err(e) = cache.save_icon(id, data) {
+                tracing::warn!(
+                    "Failed to cache icon for '{}' ({}): {}. Icon will remain in memory only.",
+                    display_name,
+                    id,
+                    e
+                );
+            } else {
+                tracing::debug!(
+                    "Successfully cached icon for '{}' ({}) to disk",
+                    display_name,
+                    id
+                );
+            }
+        }
+    }
+
     /// Encode RGBA data to PNG format
     ///
     /// Encodes raw RGBA pixel data (32x32 pixels) to PNG format for disk storage.
