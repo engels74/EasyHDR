@@ -1515,8 +1515,6 @@ impl GuiController {
     ///
     /// Removes all cached icons from the cache directory, updates the UI display,
     /// and shows a success notification to the user.
-    ///
-
     #[cfg(windows)]
     fn clear_icon_cache(window: &slint::Weak<MainWindow>) {
         use easyhdr::utils::icon_cache::IconCache;
