@@ -103,21 +103,30 @@ pub fn extract_icon(logo_path: &Path) -> Result<Vec<u8>> {
                         height
                     );
 
+                    // Crop transparent padding to ensure icon fills the final 32x32 space
+                    let cropped_img = crop_transparent_padding(&rgba_img);
+                    let (cropped_width, cropped_height) = cropped_img.dimensions();
+
+                    debug!(
+                        "After cropping transparent padding: {}x{} pixels (original: {}x{})",
+                        cropped_width, cropped_height, width, height
+                    );
+
                     // Resize to standard icon size if needed
-                    let rgba_data = if width != ICON_SIZE || height != ICON_SIZE {
+                    let rgba_data = if cropped_width != ICON_SIZE || cropped_height != ICON_SIZE {
                         debug!(
                             "Resizing icon from {}x{} to {}x{}",
-                            width, height, ICON_SIZE, ICON_SIZE
+                            cropped_width, cropped_height, ICON_SIZE, ICON_SIZE
                         );
                         let resized = image::imageops::resize(
-                            &rgba_img,
+                            &cropped_img,
                             ICON_SIZE,
                             ICON_SIZE,
                             image::imageops::FilterType::Lanczos3,
                         );
                         resized.into_raw()
                     } else {
-                        rgba_img.into_raw()
+                        cropped_img.into_raw()
                     };
 
                     debug!(
@@ -346,21 +355,30 @@ pub fn extract_icon_from_stream(
 
     debug!("Decoded image: {}x{} pixels", width, height);
 
+    // Crop transparent padding to ensure icon fills the final 32x32 space
+    let cropped_img = crop_transparent_padding(&rgba_img);
+    let (cropped_width, cropped_height) = cropped_img.dimensions();
+
+    debug!(
+        "After cropping transparent padding: {}x{} pixels (original: {}x{})",
+        cropped_width, cropped_height, width, height
+    );
+
     // Resize to 32x32 if needed
-    let rgba_data = if width != ICON_SIZE || height != ICON_SIZE {
+    let rgba_data = if cropped_width != ICON_SIZE || cropped_height != ICON_SIZE {
         debug!(
             "Resizing icon from {}x{} to {}x{}",
-            width, height, ICON_SIZE, ICON_SIZE
+            cropped_width, cropped_height, ICON_SIZE, ICON_SIZE
         );
         let resized = image::imageops::resize(
-            &rgba_img,
+            &cropped_img,
             ICON_SIZE,
             ICON_SIZE,
             image::imageops::FilterType::Lanczos3,
         );
         resized.into_raw()
     } else {
-        rgba_img.into_raw()
+        cropped_img.into_raw()
     };
 
     debug!(
@@ -376,6 +394,64 @@ pub fn extract_icon_from_stream(
 #[cfg(not(windows))]
 pub fn extract_icon_from_stream(_stream_ref: &()) -> Result<Vec<u8>> {
     Ok(create_placeholder_rgba())
+}
+
+/// Crop transparent padding from an icon image
+///
+/// Finds the bounding box of non-transparent pixels and crops the image to that box.
+/// This ensures that icon artwork fills the available space rather than being small
+/// with excessive transparent borders.
+///
+/// If the image is entirely transparent or the cropping would result in an invalid
+/// image, returns the original image unchanged.
+///
+/// # Arguments
+///
+/// * `img` - RGBA8 image to crop
+///
+/// # Returns
+///
+/// Cropped image containing only the non-transparent content, or original if cropping fails
+fn crop_transparent_padding(img: &image::RgbaImage) -> image::RgbaImage {
+    let (width, height) = img.dimensions();
+
+    // Find bounding box of non-transparent pixels
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0;
+    let mut max_y = 0;
+
+    // Scan all pixels to find the bounding box
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = img.get_pixel(x, y);
+            // Check if pixel has any opacity (alpha > threshold)
+            // Use threshold of 10 to ignore nearly-transparent pixels
+            if pixel[3] > 10 {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+
+    // If no non-transparent pixels found, return original image
+    if min_x > max_x || min_y > max_y {
+        return img.clone();
+    }
+
+    // Calculate crop dimensions
+    let crop_width = max_x - min_x + 1;
+    let crop_height = max_y - min_y + 1;
+
+    // Avoid degenerate cases (too small or invalid dimensions)
+    if crop_width < 4 || crop_height < 4 {
+        return img.clone();
+    }
+
+    // Crop the image to the bounding box
+    image::imageops::crop_imm(img, min_x, min_y, crop_width, crop_height).to_image()
 }
 
 /// Create a placeholder icon as RGBA bytes (32x32 pixels, 4096 bytes)
@@ -524,5 +600,99 @@ mod tests {
         assert_eq!(placeholder[idx + 1], 128); // G
         assert_eq!(placeholder[idx + 2], 128); // B
         assert_eq!(placeholder[idx + 3], 255); // A
+    }
+
+    #[test]
+    fn test_crop_transparent_padding_removes_padding() {
+        use image::{Rgba, RgbaImage};
+
+        // Create a 48x48 image with a 16x16 opaque square in the center
+        let mut img = RgbaImage::new(48, 48);
+
+        // Fill entire image with transparent pixels
+        for pixel in img.pixels_mut() {
+            *pixel = Rgba([0, 0, 0, 0]);
+        }
+
+        // Draw a 16x16 red square in the center (starting at x=16, y=16)
+        for y in 16..32 {
+            for x in 16..32 {
+                img.put_pixel(x, y, Rgba([255, 0, 0, 255]));
+            }
+        }
+
+        // Crop the padding
+        let cropped = crop_transparent_padding(&img);
+
+        // Should be cropped to 16x16
+        assert_eq!(cropped.dimensions(), (16, 16));
+
+        // All pixels in the cropped image should be opaque red
+        for pixel in cropped.pixels() {
+            assert_eq!(pixel[0], 255); // R
+            assert_eq!(pixel[1], 0); // G
+            assert_eq!(pixel[2], 0); // B
+            assert_eq!(pixel[3], 255); // A
+        }
+    }
+
+    #[test]
+    fn test_crop_transparent_padding_preserves_fully_opaque_image() {
+        use image::{Rgba, RgbaImage};
+
+        // Create a 32x32 fully opaque image
+        let mut img = RgbaImage::new(32, 32);
+
+        // Fill with opaque blue
+        for pixel in img.pixels_mut() {
+            *pixel = Rgba([0, 0, 255, 255]);
+        }
+
+        // Crop should return the same dimensions
+        let cropped = crop_transparent_padding(&img);
+        assert_eq!(cropped.dimensions(), (32, 32));
+    }
+
+    #[test]
+    fn test_crop_transparent_padding_handles_fully_transparent_image() {
+        use image::{Rgba, RgbaImage};
+
+        // Create a fully transparent image
+        let mut img = RgbaImage::new(32, 32);
+
+        // Fill with transparent pixels
+        for pixel in img.pixels_mut() {
+            *pixel = Rgba([0, 0, 0, 0]);
+        }
+
+        // Should return original image unchanged
+        let cropped = crop_transparent_padding(&img);
+        assert_eq!(cropped.dimensions(), (32, 32));
+    }
+
+    #[test]
+    fn test_crop_transparent_padding_handles_asymmetric_padding() {
+        use image::{Rgba, RgbaImage};
+
+        // Create a 40x40 image with a 10x20 opaque rectangle at (5, 10)
+        let mut img = RgbaImage::new(40, 40);
+
+        // Fill with transparent pixels
+        for pixel in img.pixels_mut() {
+            *pixel = Rgba([0, 0, 0, 0]);
+        }
+
+        // Draw a 10x20 green rectangle at (5, 10)
+        for y in 10..30 {
+            for x in 5..15 {
+                img.put_pixel(x, y, Rgba([0, 255, 0, 255]));
+            }
+        }
+
+        // Crop the padding
+        let cropped = crop_transparent_padding(&img);
+
+        // Should be cropped to 10x20
+        assert_eq!(cropped.dimensions(), (10, 20));
     }
 }
