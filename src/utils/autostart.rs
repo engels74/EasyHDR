@@ -160,7 +160,8 @@ impl AutoStartManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    #[cfg(windows)]
+    use super::{APP_NAME, AutoStartManager, RUN_KEY_PATH};
 
     /// Test that auto-start can be enabled and disabled
     ///

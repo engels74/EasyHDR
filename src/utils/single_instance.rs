@@ -80,7 +80,8 @@ impl SingleInstanceGuard {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    #[cfg(windows)]
+    use super::SingleInstanceGuard;
 
     #[test]
     #[cfg(windows)]
