@@ -5,10 +5,10 @@
 //!
 //! # Design Principles
 //!
-//! - **Thread Safety**: `IconCache` is `Send + Sync` for concurrent access (Requirement 6.1)
-//! - **Immutable API**: All methods use `&self` to enable lock-free concurrent reads (Requirement 9.2)
-//! - **Graceful Degradation**: Cache failures never prevent application operation (Requirement 5.2)
-//! - **Structured Errors**: Uses `IconCacheError` with `thiserror` for matchable errors (Requirement 5.1)
+//! - **Thread Safety**: `IconCache` is `Send + Sync` for concurrent access
+//! - **Immutable API**: All methods use `&self` to enable lock-free concurrent reads
+//! - **Graceful Degradation**: Cache failures never prevent application operation
+//! - **Structured Errors**: Uses `IconCacheError` with `thiserror` for matchable errors
 //!
 //! # Architecture
 //!
@@ -55,11 +55,7 @@ pub type Result<T> = std::result::Result<T, EasyHdrError>;
 /// - Concurrent writes use unique file paths (UUID-based) to avoid conflicts
 /// - Atomic writes via `tempfile::NamedTempFile::persist()` prevent partial writes
 ///
-/// # Requirements
-///
-/// - Requirement 6.1: Marked as `Send + Sync` for safe concurrent access
-/// - Requirement 9.2: All methods use immutable `&self` references
-/// - Requirement 9.4: Implements `Debug` trait for diagnostics
+
 #[derive(Debug)]
 pub struct IconCache {
     /// Cache directory path (typically `%APPDATA%\EasyHDR\icon_cache`)
@@ -85,11 +81,7 @@ impl IconCache {
     /// Returns `IconCacheError::CacheDirectoryCreationFailed` if the cache directory
     /// cannot be created (e.g., permission denied, disk full).
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.1: Creates cache directory if it does not exist
-    /// - Requirement 5.1: Returns structured error on failure
-    /// - Requirement 9.1: Accepts `impl Into<PathBuf>` for flexibility
+
     ///
     /// # Example
     ///
@@ -102,7 +94,7 @@ impl IconCache {
     pub fn new(cache_dir: impl Into<PathBuf>) -> Result<Self> {
         let cache_dir = cache_dir.into();
 
-        // Create cache directory if it doesn't exist (Requirement 1.1)
+        // Create cache directory if it doesn't exist
         if !cache_dir.exists() {
             std::fs::create_dir_all(&cache_dir).map_err(|source| {
                 EasyHdrError::IconCache(IconCacheError::CacheDirectoryCreationFailed {
@@ -167,12 +159,7 @@ impl IconCache {
     /// - PNG decoding fails (corrupted cache file)
     /// - File metadata cannot be accessed
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 2.1: Compares cache mtime with executable mtime
-    /// - Requirement 2.2: Returns Ok(None) if executable is newer
-    /// - Requirement 2.4: Skips validation for UWP apps (no source path)
-    /// - Requirement 2.5: Returns Ok(None) if cache file does not exist
+
     ///
     /// # Example
     ///
@@ -194,13 +181,13 @@ impl IconCache {
     pub fn load_icon(&self, app_id: Uuid, source_path: Option<&Path>) -> Result<Option<Vec<u8>>> {
         let cache_path = self.cache_path(app_id);
 
-        // Requirement 2.5: Return Ok(None) if cache file does not exist
+        // Return Ok(None) if cache file does not exist
         if !cache_path.exists() {
             tracing::debug!("Cache miss for app {}: file does not exist", app_id);
             return Ok(None);
         }
 
-        // Requirements 2.1, 2.2, 2.4: Cache validation for Win32 apps
+        // Cache validation for Win32 apps
         if let Some(source) = source_path {
             // Get cache file metadata
             let cache_metadata = std::fs::metadata(&cache_path).map_err(|source| {
@@ -218,7 +205,7 @@ impl IconCache {
                 })
             })?;
 
-            // Compare modification times (Requirement 2.1)
+            // Compare modification times
             let cache_mtime = cache_metadata.modified().map_err(|cache_err| {
                 EasyHdrError::IconCache(IconCacheError::MetadataError {
                     path: cache_path.clone(),
@@ -233,7 +220,7 @@ impl IconCache {
                 })
             })?;
 
-            // Requirement 2.2: Return Ok(None) if executable is newer than cache
+            // Return Ok(None) if executable is newer than cache
             if source_mtime > cache_mtime {
                 tracing::debug!(
                     "Cache miss for app {}: source file is newer (source: {:?}, cache: {:?})",
@@ -244,7 +231,7 @@ impl IconCache {
                 return Ok(None);
             }
         } else {
-            // Requirement 2.4: Skip validation for UWP apps (no source path)
+            // Skip validation for UWP apps (no source path)
             tracing::trace!("Loading cached icon for UWP app {} (no validation)", app_id);
         }
 
@@ -292,12 +279,7 @@ impl IconCache {
     /// - Temporary file creation fails (`TempFileCreationFailed`)
     /// - Atomic persist fails (`AtomicPersistFailed`)
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.2, 1.3: Encodes RGBA to PNG and saves to cache
-    /// - Requirement 1.4: Uses atomic write operations
-    /// - Requirement 7.1: Validates input size is exactly 4096 bytes
-    /// - Requirement 7.3: Uses `tempfile::NamedTempFile::persist()` for atomic writes
+
     ///
     /// # Example
     ///
@@ -314,14 +296,14 @@ impl IconCache {
     /// ```
     pub fn save_icon(&self, app_id: Uuid, rgba_bytes: &[u8]) -> Result<()> {
         // Step 1 & 2: Validate size and encode RGBA to PNG
-        // (Requirement 7.1: validation happens inside encode_rgba_to_png)
+        // (validation happens inside encode_rgba_to_png)
         let png_bytes = Self::encode_rgba_to_png(rgba_bytes, app_id)?;
 
         // Get the final cache file path
         let cache_file_path = self.cache_path(app_id);
 
         // Step 3: Use tempfile::NamedTempFile::persist() for atomic write
-        // (Requirement 1.4, 7.3: Atomic writes via tempfile)
+        // (Atomic writes via tempfile)
         //
         // Create temporary file in the same directory as the cache file.
         // This is critical for atomic rename to work correctly on Windows:
@@ -385,9 +367,7 @@ impl IconCache {
     /// Returns `IconCacheError::IconRemovalFailed` if the file cannot be deleted.
     /// Returns `Ok(())` if the file does not exist (idempotent operation).
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.4: Deletes the corresponding cached icon file
+
     ///
     /// # Example
     ///
@@ -445,9 +425,7 @@ impl IconCache {
     /// - Directory cannot be read
     /// - Any file cannot be deleted
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.2, 4.3: Removes all PNG files from cache directory
+
     ///
     /// # Example
     ///
@@ -460,7 +438,7 @@ impl IconCache {
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
     pub fn clear_cache(&self) -> Result<()> {
-        // Requirement 4.2, 4.3: Remove all PNG files from cache directory
+        // Remove all PNG files from cache directory
 
         // If directory doesn't exist, nothing to clear (idempotent)
         if !self.cache_dir.exists() {
@@ -522,10 +500,7 @@ impl IconCache {
     ///
     /// Returns `IconCacheError::CacheStatsFailed` if the cache directory cannot be read.
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.1: Retrieves cache statistics (count and total size)
-    /// - Requirement 9.3: Returns concrete type (not `impl Trait`)
+
     ///
     /// # Example
     ///
@@ -538,7 +513,7 @@ impl IconCache {
     /// # Ok::<(), easyhdr::error::EasyHdrError>(())
     /// ```
     pub fn get_cache_stats(&self) -> Result<CacheStats> {
-        // Requirement 4.1: Calculate icon count and total size in bytes
+        // Calculate icon count and total size in bytes
 
         // If directory doesn't exist, return zero stats
         if !self.cache_dir.exists() {
@@ -611,7 +586,7 @@ impl IconCache {
     ///
     /// Attempts to save icon data to the default cache directory. Failures are logged
     /// but do not propagate errors, allowing the application to continue with in-memory
-    /// icons only. This implements graceful degradation for icon caching (Requirement 5.2).
+    /// icons only. This implements graceful degradation for icon caching.
     ///
     /// # Arguments
     ///
@@ -656,8 +631,7 @@ impl IconCache {
     /// Encode RGBA data to PNG format
     ///
     /// Encodes raw RGBA pixel data (32x32 pixels) to PNG format for disk storage.
-    /// Pre-allocates output buffer with 8192 bytes capacity for efficient encoding
-    /// (Requirement 7.5: Pre-allocate PNG buffers).
+    /// Pre-allocates output buffer with 8192 bytes capacity for efficient encoding.
     ///
     /// # Arguments
     ///
@@ -674,11 +648,7 @@ impl IconCache {
     /// - Input size is not exactly 4096 bytes (`InvalidIconSize`)
     /// - PNG encoding fails (`PngEncodingError`)
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.1: Validates input size is exactly 4096 bytes
-    /// - Requirement 7.4: Returns structured error with app UUID context
-    /// - Requirement 7.5: Pre-allocates with `Vec::with_capacity(8192)`
+
     ///
     /// # Design
     ///
@@ -687,7 +657,7 @@ impl IconCache {
     /// - 8KB capacity avoids reallocation in most cases
     /// - Follows Rust guideline: "Pre-allocate (`Vec::with_capacity`)"
     fn encode_rgba_to_png(rgba_bytes: &[u8], app_id: Uuid) -> Result<Vec<u8>> {
-        // Requirement 7.1: Validate input size is exactly 4096 bytes (32x32 × 4 channels)
+        // Validate input size is exactly 4096 bytes (32x32 × 4 channels)
         const EXPECTED_SIZE: usize = 32 * 32 * 4;
         if rgba_bytes.len() != EXPECTED_SIZE {
             return Err(EasyHdrError::IconCache(IconCacheError::InvalidIconSize {
@@ -695,7 +665,7 @@ impl IconCache {
             }));
         }
 
-        // Requirement 7.5: Pre-allocate PNG buffer with 8192 bytes capacity
+        // Pre-allocate PNG buffer with 8192 bytes capacity
         // Based on measured PNG sizes: typically 2-6KB for 32x32 RGBA
         let mut png_bytes = Vec::with_capacity(8192);
 
@@ -710,7 +680,7 @@ impl IconCache {
             ImageFormat::Png,
         )
         .map_err(|source| {
-            // Requirement 7.4: Return structured error with app UUID context
+            // Return structured error with app UUID context
             EasyHdrError::IconCache(IconCacheError::PngEncodingError { app_id, source })
         })?;
 
@@ -720,7 +690,7 @@ impl IconCache {
     /// Decode PNG data to RGBA format
     ///
     /// Decodes PNG image data and resizes to exactly 32x32 pixels using Lanczos3
-    /// resampling for high-quality results (Requirement 7.2).
+    /// resampling for high-quality results.
     ///
     /// # Arguments
     ///
@@ -737,10 +707,7 @@ impl IconCache {
     /// - PNG decoding fails (`PngDecodingError`)
     /// - Image cannot be resized
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 7.2: Resizes images to exactly 32x32 pixels
-    /// - Requirement 7.4: Returns structured error with app UUID context
+
     ///
     /// # Design
     ///
@@ -753,7 +720,7 @@ impl IconCache {
         let img = ImageReader::new(Cursor::new(png_bytes))
             .with_guessed_format()
             .map_err(|source| {
-                // Requirement 7.4: Return structured error with app UUID context
+                // Return structured error with app UUID context
                 EasyHdrError::IconCache(IconCacheError::PngDecodingError {
                     app_id,
                     source: image::ImageError::IoError(source),
@@ -761,11 +728,11 @@ impl IconCache {
             })?
             .decode()
             .map_err(|source| {
-                // Requirement 7.4: Return structured error with app UUID context
+                // Return structured error with app UUID context
                 EasyHdrError::IconCache(IconCacheError::PngDecodingError { app_id, source })
             })?;
 
-        // Requirement 7.2: Resize to exactly 32x32 pixels using Lanczos3 filter
+        // Resize to exactly 32x32 pixels using Lanczos3 filter
         // Lanczos3 provides high-quality resampling with sharp edges
         let resized = img.resize_exact(32, 32, FilterType::Lanczos3);
 
@@ -788,10 +755,7 @@ impl IconCache {
 ///
 /// Contains metadata about the icon cache including count and total size.
 ///
-/// # Requirements
-///
-/// - Requirement 9.3: Concrete return type for cache statistics
-/// - Requirement 9.4: Implements `Debug` trait
+
 #[derive(Debug, Clone, Copy)]
 pub struct CacheStats {
     /// Number of cached icons
@@ -809,9 +773,7 @@ impl CacheStats {
     ///
     /// Returns a formatted string like "42 KB" or "1.5 MB".
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.5: Display human-readable size in UI
+
     ///
     /// # Example
     ///
@@ -852,10 +814,7 @@ mod tests {
     /// If `IconCache` ever becomes non-Send or non-Sync, this test will fail
     /// to compile, preventing regressions.
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 6.1: `IconCache` must be marked as `Send + Sync`
-    /// - Requirement 6.6: Include compile-time thread safety assertions
+
     #[test]
     fn icon_cache_is_send_sync() {
         fn assert_send<T: Send>() {}
@@ -1483,9 +1442,7 @@ mod tests {
 /// preserves data for arbitrary RGBA input vectors. This validates the correctness
 /// of the PNG codec implementation across a wide range of input patterns.
 ///
-/// # Requirements
-///
-/// - Requirement 10.2: Property-based tests using Proptest for PNG encoding/decoding
+
 ///
 /// # Design
 ///
@@ -1517,9 +1474,7 @@ mod proptests {
         /// - Tests encode → decode roundtrip
         /// - Verifies byte-for-byte equality
         ///
-        /// # Requirements
-        ///
-        /// - Requirement 10.2: Property-based tests for PNG encoding/decoding roundtrip
+
         ///
         /// # Rationale
         ///
@@ -1563,8 +1518,7 @@ mod proptests {
         ///
         /// # Requirements
         ///
-        /// - Requirement 7.2: Decoding resizes to exactly 32x32 pixels
-        /// - Requirement 10.2: Property-based tests for PNG encoding/decoding
+
         #[test]
         fn png_decoding_always_produces_correct_size(
             rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)
@@ -1600,9 +1554,7 @@ mod proptests {
         ///
         /// Valid PNG files start with: 137 80 78 71 13 10 26 10 (0x89 'P' 'N' 'G' \\r \\n 0x1a \\n)
         ///
-        /// # Requirements
-        ///
-        /// - Requirement 10.2: Property-based tests for PNG encoding/decoding
+
         #[test]
         fn png_encoding_produces_valid_png_signature(
             rgba_bytes in prop::collection::vec(any::<u8>(), 4096..=4096)

@@ -20,9 +20,6 @@
 //! cargo test --test icon_cache_tests -- --test-threads=1
 //! ```
 //!
-//! # Requirements
-//!
-//! - Requirement 10.5: Integration tests that validate full config save/load cycles with icon persistence
 
 use easyhdr::{
     config::{
@@ -46,11 +43,7 @@ use uuid::Uuid;
 /// 3. Simulate restart by loading configuration
 /// 4. Verify icons are restored from cache
 ///
-/// # Requirements
-///
-/// - Requirement 1.2, 1.3: Icons saved to cache during app creation
-/// - Requirement 1.5: Icons restored from cache during config load
-/// - Requirement 10.5: Full config save/load cycle integration test
+
 #[test]
 fn test_icons_persist_across_restarts() {
     // Create temporary directories for config and cache
@@ -193,11 +186,7 @@ fn test_icons_persist_across_restarts() {
 /// 3. Verify cache returns miss (stale cache)
 /// 4. Verify re-extraction is triggered
 ///
-/// # Requirements
-///
-/// - Requirement 2.1: Compare cache mtime with executable mtime
-/// - Requirement 2.2: Return cache miss if executable is newer
-/// - Requirement 2.3: Re-extract icon on cache miss
+
 #[test]
 fn test_cache_invalidation_on_exe_update() {
     // Create temporary directories
@@ -284,11 +273,7 @@ fn test_cache_invalidation_on_exe_update() {
 /// 3. Save icons to cache
 /// 4. Load icons and verify correct validation behavior
 ///
-/// # Requirements
-///
-/// - Requirement 1.2: Cache Win32 app icons
-/// - Requirement 1.3: Cache UWP app icons
-/// - Requirement 2.4: Skip validation for UWP apps (no source path)
+
 #[test]
 fn test_mixed_win32_and_uwp_icons() {
     // Create temporary directories
@@ -384,11 +369,7 @@ fn test_mixed_win32_and_uwp_icons() {
 /// 4. Verify all icons are loaded correctly
 /// 5. Measure loading time (should be <150ms for 50 apps)
 ///
-/// # Requirements
-///
-/// - Requirement 3.1: Decode PNG files using parallel loading with Rayon
-/// - Requirement 3.3: Load 50 icons in <150ms
-/// - Requirement 3.5: Gracefully degrade to sequential on single-core systems
+
 #[test]
 #[expect(
     clippy::cast_possible_truncation,
@@ -441,7 +422,7 @@ fn test_parallel_loading_with_many_apps() {
         "All icons should be loaded from cache"
     );
 
-    // Verify loading time (Requirement 3.3: <150ms for 50 apps)
+    // Verify loading time (<150ms for 50 apps)
     // Note: This is a soft check since performance varies by system
     println!("Loaded {app_count} icons in {duration:?} (target: <150ms)");
 
@@ -473,9 +454,7 @@ fn test_parallel_loading_with_many_apps() {
 /// 2. Remove apps
 /// 3. Verify cached icon files are deleted
 ///
-/// # Requirements
-///
-/// - Requirement 4.4: Delete corresponding cached icon file on app removal
+
 #[test]
 fn test_cache_cleanup_on_app_removal() {
     // Create temporary directories
@@ -553,11 +532,7 @@ fn test_cache_cleanup_on_app_removal() {
 /// 4. Verify error is handled gracefully (returns error, doesn't crash)
 /// 5. Verify app can continue operation
 ///
-/// # Requirements
-///
-/// - Requirement 5.3: Re-extract icon on cache load failure
-/// - Requirement 5.5: Return cache miss on cache corruption
-/// - Requirement 5.6: Preserve error source chains
+
 #[test]
 fn test_graceful_fallback_on_cache_corruption() {
     // Create temporary directories

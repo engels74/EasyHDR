@@ -11,7 +11,7 @@
 //! cargo test --test uwp_process_detection_tests -- --test-threads=1
 //! ```
 //!
-//! **Test Requirements**:
+//! **Test Prerequisites**:
 //! - Windows 10 21H2+ or Windows 11
 //! - Calculator app must be installed (Microsoft.WindowsCalculator)
 //! - Tests may require user interaction to close Calculator if process doesn't terminate
@@ -67,8 +67,6 @@ fn create_test_uwp_app(
 ///
 /// This test monitors the Windows Calculator app (a standard UWP app) and verifies
 /// that a `ProcessEvent::Started` event is emitted when it's running.
-///
-/// **Requirements Tested**: 2.1, 2.2, 2.3, 2.4
 #[test]
 #[cfg(windows)]
 fn test_uwp_app_detection_calculator_started() {
@@ -181,8 +179,6 @@ fn test_uwp_app_detection_calculator_started() {
 /// This test attempts to detect when Calculator closes. Due to the complexity
 /// of programmatically closing UWP apps, this test may require manual intervention
 /// or may be skipped if Calculator cannot be reliably controlled.
-///
-/// **Requirements Tested**: 2.1, 2.2, 2.3, 2.5
 #[test]
 #[cfg(windows)]
 #[ignore = "Requires Calculator to be running and then closed"]
@@ -296,8 +292,6 @@ fn test_uwp_app_detection_calculator_stopped() {
 ///
 /// This test adds both notepad.exe (Win32) and Calculator (UWP) to the watch list
 /// and verifies that the monitor can detect both types of applications.
-///
-/// **Requirements Tested**: 2.1, 2.2, 2.3, 2.4, 2.5
 #[test]
 #[cfg(windows)]
 fn test_mixed_win32_and_uwp_detection() {
@@ -395,8 +389,6 @@ fn test_mixed_win32_and_uwp_detection() {
 ///
 /// This test verifies that the monitor uses the correct `AppIdentifier` variant
 /// for each application type.
-///
-/// **Requirements Tested**: 2.1, 2.2, 2.3
 #[test]
 #[cfg(windows)]
 fn test_app_identifier_discrimination() {

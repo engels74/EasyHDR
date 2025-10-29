@@ -527,7 +527,7 @@ impl AppController {
             config.monitored_apps.retain(|app| app.id() != &id);
         }
 
-        // Clean up cached icon (Requirement 4.4: graceful failure)
+        // Clean up cached icon (graceful failure)
         if let Ok(cache) = crate::utils::icon_cache::IconCache::new(
             crate::utils::icon_cache::IconCache::default_cache_dir(),
         ) {
@@ -1594,7 +1594,6 @@ mod tests {
     }
 
     /// Test that `AppController` correctly handles UWP application started event.
-    /// Verifies requirement 3.1: UWP app starts and HDR enables.
     #[test]
     fn test_handle_uwp_app_started() {
         let mut config = AppConfig::default();
@@ -1632,7 +1631,6 @@ mod tests {
     }
 
     /// Test that `AppController` correctly handles UWP application stopped event.
-    /// Verifies requirement 3.2: Last UWP app stops and HDR disables after debounce.
     #[test]
     fn test_handle_uwp_app_stopped() {
         let mut config = AppConfig::default();
@@ -1680,7 +1678,6 @@ mod tests {
     }
 
     /// Test that `AppController` handles both Win32 and UWP apps running simultaneously.
-    /// Verifies requirement 3.3: Both Win32 and UWP monitored apps running maintains HDR enabled.
     #[test]
     fn test_handle_mixed_win32_and_uwp_apps_simultaneously() {
         let mut config = AppConfig::default();
@@ -1745,7 +1742,6 @@ mod tests {
     }
 
     /// Test that the last monitored application stops regardless of type.
-    /// Verifies requirement 3.4: Last app stops (regardless of Win32/UWP) disables HDR after debounce.
     #[test]
     fn test_last_app_stops_regardless_of_type() {
         let mut config = AppConfig::default();
@@ -1832,7 +1828,6 @@ mod tests {
     }
 
     /// Test that counter-based logic works identically for Win32 and UWP apps.
-    /// Verifies requirement 3.5: `AppController` uses same counter-based logic for both app types.
     #[test]
     fn test_counter_based_logic_works_for_both_app_types() {
         let mut config = AppConfig::default();

@@ -119,7 +119,7 @@ impl GuiController {
             info!("Settings properties initialized from config");
         }
 
-        // Initialize cache info from icon cache (Requirement 4.5)
+        // Initialize cache info from icon cache
         Self::update_cache_info(&main_window);
 
         // Set version and build ID from compile-time environment variables
@@ -1026,7 +1026,7 @@ impl GuiController {
                 }
                 Err(e) => {
                     warn!("Update check failed (failing silently): {}", e);
-                    // Fail silently as per requirements
+                    // Fail silently
                 }
             }
         });
@@ -1467,10 +1467,7 @@ impl GuiController {
     /// Reads cache statistics from the icon cache and updates the UI display
     /// with the current icon count and human-readable size.
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.1: Retrieves cache statistics
-    /// - Requirement 4.5: Displays cache statistics in settings dialog
+
     fn update_cache_info(window: &MainWindow) {
         use easyhdr::utils::icon_cache::IconCache;
         use tracing::{info, warn};
@@ -1521,11 +1518,7 @@ impl GuiController {
     /// Removes all cached icons from the cache directory, updates the UI display,
     /// and shows a success notification to the user.
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 4.2: Provides method to clear all cached icons
-    /// - Requirement 4.3: Removes all PNG files from cache directory
-    /// - Requirement 4.5: Updates cache info display after clearing
+
     #[cfg(windows)]
     fn clear_icon_cache(window: &slint::Weak<MainWindow>) {
         use easyhdr::utils::icon_cache::IconCache;
@@ -1554,10 +1547,10 @@ impl GuiController {
             Ok(()) => {
                 info!("Icon cache cleared successfully");
 
-                // Update cache info display (Requirement 4.5)
+                // Update cache info display
                 Self::update_cache_info(&window);
 
-                // Show success notification (Requirement 4.5)
+                // Show success notification
                 Self::show_info_notification(
                     "Cache Cleared",
                     "Icon cache has been cleared successfully",

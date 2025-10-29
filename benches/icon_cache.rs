@@ -2,19 +2,11 @@
 //!
 //! This benchmark measures the performance of parallel icon loading using Rayon.
 //! It validates that loading 10, 50, and 100 cached icons meets the performance
-//! targets defined in the requirements:
+//! targets:
 //!
 //! - 10 apps: <50ms
 //! - 50 apps: <150ms
 //! - 100 apps: <250ms
-//!
-//! # Requirements
-//!
-//! - Requirement 3.2: 10 cached icons loaded within 50ms
-//! - Requirement 3.3: 50 cached icons loaded within 150ms
-//! - Requirement 3.4: 100 cached icons loaded within 250ms
-//! - Requirement 8.6: Validated using Criterion benchmarks
-//! - Requirement 10.3: Criterion benchmarks for parallel icon loading
 
 #![allow(missing_docs)]
 
@@ -82,22 +74,13 @@ fn create_populated_cache(icon_count: usize) -> (TempDir, IconCache, Vec<Uuid>) 
 ///
 /// # Performance Targets
 ///
-/// Based on requirements 3.2, 3.3, 3.4:
 /// - 10 apps: <50ms (3-4x faster than sequential ~100ms)
 /// - 50 apps: <150ms (3-4x faster than sequential ~500ms)
 /// - 100 apps: <250ms (3-4x faster than sequential ~1000ms)
-///
-/// # Requirement Mapping
-///
-/// - Requirement 3.2: Benchmarks 10 icons (target <50ms)
-/// - Requirement 3.3: Benchmarks 50 icons (target <150ms)
-/// - Requirement 3.4: Benchmarks 100 icons (target <250ms)
-/// - Requirement 8.6: Uses Criterion for statistical rigor
-/// - Requirement 10.3: Validates parallel loading performance
 fn bench_parallel_icon_loading(c: &mut Criterion) {
     let mut group = c.benchmark_group("icon_cache_parallel_load");
 
-    // Benchmark for 10, 50, and 100 apps as specified in requirements
+    // Benchmark for 10, 50, and 100 apps
     for &app_count in &[10, 50, 100] {
         group.bench_with_input(
             BenchmarkId::new("parallel_load", app_count),

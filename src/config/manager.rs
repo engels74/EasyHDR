@@ -77,7 +77,7 @@ impl ConfigManager {
             }
         };
 
-        // Restore icons from cache in parallel (Requirement 1.5)
+        // Restore icons from cache in parallel
         // Graceful degradation: errors are logged but don't prevent startup
         if let Err(e) = Self::restore_icons_from_cache(&mut config) {
             warn!(
@@ -99,17 +99,13 @@ impl ConfigManager {
     /// with Rayon. For Win32 apps, validates cache freshness by comparing file modification
     /// times. Cache failures are logged but don't prevent startup.
     ///
-    /// # Requirements
-    ///
-    /// - Requirement 1.5: Restore all cached icons using parallel loading
-    /// - Requirement 3.1: Decode PNG files using parallel loading with Rayon
-    /// - Requirement 3.2: Load 10 icons in <50ms
-    /// - Requirement 3.3: Load 50 icons in <150ms
-    /// - Requirement 3.4: Load 100 icons in <250ms
-    /// - Requirement 3.5: Gracefully degrade to sequential on single-core systems
+    /// Performance targets:
+    /// - Load 10 icons in <50ms
+    /// - Load 50 icons in <150ms
+    /// - Load 100 icons in <250ms
     #[expect(
         clippy::unnecessary_wraps,
-        reason = "Returns Result<()> for API consistency with other ConfigManager methods and to allow future error propagation. Current implementation uses graceful degradation (Requirement 5.2) where all errors are logged but don't prevent startup."
+        reason = "Returns Result<()> for API consistency with other ConfigManager methods and to allow future error propagation. Current implementation uses graceful degradation where all errors are logged but don't prevent startup."
     )]
     fn restore_icons_from_cache(config: &mut AppConfig) -> Result<()> {
         use crate::config::models::MonitoredApp;
@@ -130,7 +126,7 @@ impl ConfigManager {
                     "Failed to initialize icon cache: {}. Icons will not be restored.",
                     e
                 );
-                return Ok(()); // Graceful degradation (Requirement 5.2)
+                return Ok(()); // Graceful degradation
             }
         };
 
@@ -139,7 +135,7 @@ impl ConfigManager {
             config.monitored_apps.len()
         );
 
-        // Parallel icon loading (Requirement 3.1, 3.5)
+        // Parallel icon loading
         // Rayon automatically uses available CPU cores and degrades to sequential on single-core systems
         let icons: Vec<(uuid::Uuid, Vec<u8>)> = config
             .monitored_apps
@@ -169,7 +165,7 @@ impl ConfigManager {
                         None
                     }
                     Err(e) => {
-                        // Log error but continue with other icons (Requirement 5.3)
+                        // Log error but continue with other icons
                         tracing::warn!(
                             "Failed to load cached icon for app {} ({}): {}. Icon will need to be re-extracted.",
                             app.display_name(),
@@ -190,7 +186,7 @@ impl ConfigManager {
             }
         }
 
-        // Log count of restored icons (Requirement 6.1)
+        // Log count of restored icons
         if restored_count > 0 {
             tracing::info!(
                 "Restored {} cached icon{} from disk",
@@ -950,10 +946,6 @@ mod tests {
     }
 
     /// Test `ConfigManager` save/load with mixed Win32 and UWP apps
-    ///
-    /// Verifies Requirement 1.3: Store UWP application entries in configuration file
-    /// Verifies Requirement 5.2: Include `app_type` field for all monitored applications
-    /// Verifies Requirement 5.4: Successfully deserialize mixed Win32 and UWP entries
     #[test]
     fn test_save_and_load_mixed_win32_and_uwp_apps() {
         use crate::config::models::UwpApp;
@@ -1061,9 +1053,6 @@ mod tests {
     }
 
     /// Test `ConfigManager` load with legacy config format (automatic migration)
-    ///
-    /// Verifies Requirement 5.1: Deserialize legacy entries as Win32 applications
-    /// Verifies Requirement 5.3: Preserve all existing fields for migrated Win32 apps
     #[test]
     fn test_load_legacy_config_automatic_migration() {
         let test_dir = create_test_dir();

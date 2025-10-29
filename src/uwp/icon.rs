@@ -147,7 +147,7 @@ pub fn extract_icon(logo_path: &Path) -> Result<Vec<u8>> {
             );
 
             // For logging purposes, we could create an error but we don't return it
-            // since the requirement is to gracefully handle failures with placeholder
+            // since we gracefully handle failures with placeholder
             let _error = EasyHdrError::UwpIconExtractionError(format!(
                 "Failed to open icon from '{}': {}",
                 logo_path.display(),

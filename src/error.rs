@@ -25,8 +25,7 @@ impl StringError {
 /// Icon cache error types
 ///
 /// Structured error types for icon cache operations following thiserror pattern.
-/// All errors preserve source chains via `#[source]` for full observability
-/// (Requirement 5.1, 5.6: Structured errors with thiserror and source chains).
+/// All errors preserve source chains via `#[source]` for full observability.
 #[derive(Debug, Error)]
 #[expect(
     missing_docs,
@@ -34,13 +33,11 @@ impl StringError {
 )]
 pub enum IconCacheError {
     /// Invalid icon data size (must be exactly 4096 bytes for 32x32 RGBA)
-    /// (Requirement 7.1: Validate RGBA data size)
     #[error("Invalid icon data size: expected 4096 bytes, got {actual}")]
     InvalidIconSize { actual: usize },
 
     /// Failed to create icon cache directory
     /// Preserves the underlying I/O error source
-    /// (Requirement 5.6: Preserve error source chains)
     #[error("Failed to create icon cache directory at {path}")]
     CacheDirectoryCreationFailed {
         path: PathBuf,
@@ -50,7 +47,6 @@ pub enum IconCacheError {
 
     /// Failed to read cached icon file
     /// Includes app UUID and path context for debugging
-    /// (Requirement 5.6: Preserve error source chains)
     #[error("Failed to read cached icon for app {app_id} from {path}")]
     CacheReadError {
         app_id: Uuid,
@@ -61,7 +57,6 @@ pub enum IconCacheError {
 
     /// Failed to write cached icon file
     /// Includes app UUID and path context for debugging
-    /// (Requirement 5.6: Preserve error source chains)
     #[error("Failed to write cached icon for app {app_id} to {path}")]
     CacheWriteError {
         app_id: Uuid,
@@ -72,7 +67,6 @@ pub enum IconCacheError {
 
     /// PNG encoding failed
     /// Includes app UUID context for debugging
-    /// (Requirement 7.4: Return structured error with app UUID)
     #[error("Failed to encode icon to PNG for app {app_id}")]
     PngEncodingError {
         app_id: Uuid,
@@ -82,7 +76,6 @@ pub enum IconCacheError {
 
     /// PNG decoding failed
     /// Includes app UUID context for debugging
-    /// (Requirement 7.4: Return structured error with app UUID)
     #[error("Failed to decode PNG icon for app {app_id}")]
     PngDecodingError {
         app_id: Uuid,
@@ -91,7 +84,6 @@ pub enum IconCacheError {
     },
 
     /// Failed to create temporary file for atomic write
-    /// (Requirement 7.3: Use atomic write operations)
     #[error("Failed to create temporary file for icon {app_id}")]
     TempFileCreationFailed {
         app_id: Uuid,
@@ -100,7 +92,6 @@ pub enum IconCacheError {
     },
 
     /// Failed to persist temporary file (atomic rename)
-    /// (Requirement 7.3: Use atomic write operations)
     #[error("Failed to atomically persist icon for app {app_id} to {path}")]
     AtomicPersistFailed {
         app_id: Uuid,
@@ -211,7 +202,6 @@ pub enum EasyHdrError {
 
     /// Icon cache error
     /// Preserves the underlying icon cache error for full error chain transparency
-    /// (Requirement 5.1, 5.6: Structured errors with source chains)
     #[error("Icon cache error: {0}")]
     IconCache(#[from] IconCacheError),
 }

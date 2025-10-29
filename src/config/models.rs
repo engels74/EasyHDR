@@ -96,7 +96,7 @@ impl Win32App {
 
         // Generate unique UUID for this app
         // Thread safety: Each call generates a unique UUID, preventing file path conflicts
-        // in concurrent icon cache writes (Requirement 6.3, 6.4)
+        // in concurrent icon cache writes
         let id = Uuid::new_v4();
 
         // Extract icon from executable (gracefully handles failures)
@@ -105,8 +105,8 @@ impl Win32App {
                 // Record icon in memory profiler
                 crate::utils::memory_profiler::record_icon_cached_safe(data.len());
 
-                // Cache icon to disk for persistence across restarts (Requirement 1.2)
-                // Graceful degradation: Cache failures don't prevent app addition (Requirement 5.2)
+                // Cache icon to disk for persistence across restarts
+                // Graceful degradation: Cache failures don't prevent app addition
                 crate::utils::IconCache::cache_icon_gracefully(id, &data, &display_name);
 
                 Some(data)
@@ -197,7 +197,7 @@ impl UwpApp {
     ) -> Self {
         // Generate unique UUID for this app
         // Thread safety: Each call generates a unique UUID, preventing file path conflicts
-        // in concurrent icon cache writes (Requirement 6.3, 6.4)
+        // in concurrent icon cache writes
         let id = Uuid::new_v4();
 
         // Extract icon if logo_path is provided
@@ -216,8 +216,8 @@ impl UwpApp {
                             data.len()
                         );
 
-                        // Cache icon to disk for persistence across restarts (Requirement 1.3)
-                        // Graceful degradation: Cache failures don't prevent app addition (Requirement 5.2)
+                        // Cache icon to disk for persistence across restarts
+                        // Graceful degradation: Cache failures don't prevent app addition
                         crate::utils::IconCache::cache_icon_gracefully(id, &data, &display_name);
 
                         Some(data)
@@ -480,8 +480,8 @@ pub struct AppConfig {
 
 /// Custom deserializer for `AppConfig` that handles partial failures in `monitored_apps`
 ///
-/// This implementation satisfies Requirement 5.5: when deserialization fails for an
-/// individual app entry, it logs the error and continues loading other valid entries.
+/// When deserialization fails for an individual app entry, it logs the error and
+/// continues loading other valid entries.
 impl<'de> Deserialize<'de> for AppConfig {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where

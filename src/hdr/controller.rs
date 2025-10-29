@@ -1462,7 +1462,7 @@ mod tests {
             assert!(result.is_ok(), "HDR toggle should succeed");
 
             // Should complete within 500ms (allowing some margin for test environment)
-            // The requirement is 100-300ms, but we allow up to 500ms for slower test systems
+            // Target is 100-300ms, but we allow up to 500ms for slower test systems
             assert!(
                 duration.as_millis() <= 500,
                 "HDR toggle should complete within 500ms, took {}ms",

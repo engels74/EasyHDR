@@ -334,7 +334,6 @@ fn test_uwp_config_memory_estimation() {
 #[test]
 fn test_mixed_app_types_config_memory() {
     // Test config memory with mixed Win32 and UWP apps
-    // This validates Requirement 7.2: memory usage <50MB with mixed app types
     let mut config = AppConfig::default();
 
     // Add 10 Win32 apps
@@ -377,7 +376,7 @@ fn test_mixed_app_types_config_memory() {
 
 #[test]
 fn test_uwp_metadata_memory_overhead() {
-    // Test Requirement 7.5: UWP metadata should use <10KB additional memory
+    // Test UWP metadata memory overhead
     // UWP-specific fields: package_family_name + app_id
     // Compared to Win32 fields: exe_path + process_name
 
@@ -438,7 +437,6 @@ fn test_mixed_app_types_with_icons_memory() {
 #[test]
 fn test_large_mixed_app_list_memory() {
     // Test worst-case scenario: many apps of both types with icons
-    // Validates Requirement 7.2: total memory <50MB
     let mut config = AppConfig::default();
     let profiler = memory_profiler::MemoryProfiler::new();
 

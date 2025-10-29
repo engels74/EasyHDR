@@ -1,8 +1,8 @@
 //! Benchmarks for UWP detection and package family name extraction
 //!
-//! These benchmarks validate performance requirements:
-//! - Requirement 2.6: UWP detection overhead <2ms per polling cycle
-//! - Requirement 7.3: UWP detection for 150-250 processes within 1.25ms
+//! These benchmarks validate performance targets:
+//! - UWP detection overhead <2ms per polling cycle
+//! - UWP detection for 150-250 processes within 1.25ms
 
 #![allow(missing_docs)]
 
@@ -85,7 +85,7 @@ fn bench_extract_package_family_name_complexity(c: &mut Criterion) {
 /// Benchmark UWP detection overhead on real processes
 ///
 /// This benchmark measures the overhead of calling `detect_uwp_process` on actual
-/// running processes. It validates Requirement 2.6 and 7.3.
+/// running processes.
 #[cfg(windows)]
 #[allow(unsafe_code)]
 fn bench_uwp_detection_on_real_processes(c: &mut Criterion) {
@@ -152,7 +152,7 @@ fn bench_uwp_detection_on_real_processes(c: &mut Criterion) {
 /// Benchmark polling cycle overhead: Win32-only vs Win32+UWP
 ///
 /// This benchmark compares the performance of Win32-only process detection
-/// against Win32+UWP detection to validate Requirement 2.6 (<2ms overhead).
+/// against Win32+UWP detection to validate <2ms overhead.
 #[cfg(windows)]
 #[allow(unsafe_code)]
 fn bench_polling_cycle_comparison(c: &mut Criterion) {
@@ -238,7 +238,7 @@ fn bench_polling_cycle_comparison(c: &mut Criterion) {
 /// Benchmark UWP detection at varying process counts
 ///
 /// This benchmark measures detection performance at different scales to validate
-/// Requirement 7.3 (150-250 processes within 1.25ms).
+/// 150-250 processes within 1.25ms.
 #[cfg(windows)]
 #[allow(unsafe_code)]
 fn bench_uwp_detection_scaling(c: &mut Criterion) {
