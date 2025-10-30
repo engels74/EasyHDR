@@ -116,25 +116,25 @@ jobs:
           # Note: For full profiling, run this on Windows host with actual workload
           Write-Host "Running CPU profiling with samply..."
 
-          # Run samply with timeout using Start-Process for better control
-          # samply on Windows: records ETW to .etl, then converts to JSON
-          $process = Start-Process -FilePath "samply" `
-            -ArgumentList "record", "-o", "profiling-results/cpu-profile", "--", "target/profiling/easyhdr.exe" `
-            -NoNewWindow -PassThru
+          # Start profiling in background job (samply needs admin, runs ETW on Windows)
+          $job = Start-Job -ScriptBlock {
+            # samply on Windows: records ETW to .etl
+            # Note: samply will try to open browser, but that will fail in CI (expected)
+            samply record -o profiling-results/cpu-profile -- target/profiling/easyhdr.exe
+          }
 
           # Wait for 30 seconds to collect samples
           Write-Host "Collecting profile for 30 seconds..."
-          Start-Sleep -Seconds 30
+          Wait-Job $job -Timeout 30 | Out-Null
 
-          # Send Ctrl+C signal to gracefully stop profiling (allows ETL→JSON conversion)
-          if (!$process.HasExited) {
-            Write-Host "Sending interrupt signal to samply for graceful shutdown..."
-            # Use taskkill without /F to allow graceful shutdown
-            taskkill /PID $process.Id /T 2>&1 | Out-Null
-
-            # Wait up to 60 seconds for samply to complete ETL→JSON conversion
-            Write-Host "Waiting for samply to convert ETL to JSON (this may take a minute)..."
-            $process.WaitForExit(60000)
+          # Stop recording (ETL is written continuously, safe to kill)
+          if ($job.State -eq 'Running') {
+            Write-Host "Stopping recording..."
+            Stop-Job $job
+            Remove-Job $job
+          } else {
+            Receive-Job $job
+            Remove-Job $job
           }
 
           # Check for generated files (samply may create .etl or .kernel.etl)
@@ -143,10 +143,7 @@ jobs:
             Write-Host "  Found: $($_.Name)"
           }
 
-          # Note: Automated ETL→JSON conversion is problematic in CI because
-          # samply import starts a web server that waits for Ctrl+C.
-          # Instead, we upload the ETL file for manual conversion.
-
+          # Check that ETL file was created
           $etlFiles = @(
             "profiling-results/cpu-profile.etl",
             "profiling-results/cpu-profile.kernel.etl"
@@ -156,8 +153,8 @@ jobs:
           foreach ($etlFile in $etlFiles) {
             if (Test-Path $etlFile) {
               $etlFound = $true
-              Write-Host "Found ETL file: $etlFile"
-              Write-Host "ETL file will be uploaded for manual conversion to JSON"
+              $fileSize = (Get-Item $etlFile).Length / 1MB
+              Write-Host "Found ETL file: $etlFile ($([math]::Round($fileSize, 2)) MB)"
             }
           }
 
@@ -165,6 +162,8 @@ jobs:
             Write-Warning "No profiling data generated. This may happen if the app exits too quickly or samply couldn't start."
             exit 1
           }
+
+          Write-Host "ETL file will be uploaded for manual conversion to JSON"
 
       - name: Generate profiling report
         run: |
