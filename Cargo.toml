@@ -16,6 +16,7 @@ bench = false  # Disable libtest benchmark harness to allow Criterion args (--sa
 [[bin]]
 name = "easyhdr"
 path = "src/main.rs"
+bench = false  # Disable libtest benchmark harness to allow Criterion args (--save-baseline, etc.)
 
 [dependencies]
 # GUI
