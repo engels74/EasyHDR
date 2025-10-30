@@ -116,34 +116,62 @@ jobs:
           # Note: For full profiling, run this on Windows host with actual workload
           Write-Host "Running CPU profiling with samply..."
 
-          # Start profiling in background (samply needs admin, runs ETW on Windows)
-          $job = Start-Job -ScriptBlock {
-            # samply on Windows: records ETW to .etl, then converts to JSON
-            # Note: samply will try to open browser, but that will fail in CI (expected)
-            samply record -o profiling-results/cpu-profile -- target/profiling/easyhdr.exe
-          }
+          # Run samply with timeout using Start-Process for better control
+          # samply on Windows: records ETW to .etl, then converts to JSON
+          $process = Start-Process -FilePath "samply" `
+            -ArgumentList "record", "-o", "profiling-results/cpu-profile", "--", "target/profiling/easyhdr.exe" `
+            -NoNewWindow -PassThru
 
           # Wait for 30 seconds to collect samples
           Write-Host "Collecting profile for 30 seconds..."
-          Wait-Job $job -Timeout 30 | Out-Null
+          Start-Sleep -Seconds 30
 
-          # Stop recording gracefully (allows samply to convert ETL to JSON)
-          if ($job.State -eq 'Running') {
-            Write-Host "Stopping recording and converting ETL to JSON..."
-            Stop-Job $job
-            Remove-Job $job
-          } else {
-            Receive-Job $job
-            Remove-Job $job
+          # Send Ctrl+C signal to gracefully stop profiling (allows ETL→JSON conversion)
+          if (!$process.HasExited) {
+            Write-Host "Sending interrupt signal to samply for graceful shutdown..."
+            # Use taskkill without /F to allow graceful shutdown
+            taskkill /PID $process.Id /T 2>&1 | Out-Null
+
+            # Wait up to 60 seconds for samply to complete ETL→JSON conversion
+            Write-Host "Waiting for samply to convert ETL to JSON (this may take a minute)..."
+            $process.WaitForExit(60000)
           }
 
-          # Convert ETL to JSON if samply was interrupted before conversion
-          if (Test-Path "profiling-results/cpu-profile.etl") {
-            Write-Host "Converting ETL file to Firefox Profiler JSON format..."
-            samply import profiling-results/cpu-profile.etl
-            # samply import outputs to current directory, move to profiling-results
-            if (Test-Path "cpu-profile.json") {
-              Move-Item cpu-profile.json profiling-results/
+          # Check for generated files (samply may create .etl or .kernel.etl)
+          Write-Host "Looking for profiling output files..."
+          Get-ChildItem profiling-results/ -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "  Found: $($_.Name)"
+          }
+
+          # If we have ETL but no JSON, manually convert
+          $etlFiles = @(
+            "profiling-results/cpu-profile.etl",
+            "profiling-results/cpu-profile.kernel.etl"
+          )
+
+          $etlFound = $false
+          foreach ($etlFile in $etlFiles) {
+            if (Test-Path $etlFile) {
+              $etlFound = $true
+              Write-Host "Converting $etlFile to Firefox Profiler JSON format..."
+
+              # samply import creates JSON in current directory
+              samply import $etlFile
+
+              # Move the generated JSON to profiling-results
+              if (Test-Path "cpu-profile.json") {
+                Move-Item -Force cpu-profile.json profiling-results/
+                Write-Host "Successfully created profiling-results/cpu-profile.json"
+                break
+              }
+            }
+          }
+
+          if (!(Test-Path "profiling-results/cpu-profile.json")) {
+            if ($etlFound) {
+              Write-Warning "ETL file found but JSON conversion failed. ETL will be uploaded for manual conversion."
+            } else {
+              Write-Warning "No profiling data generated. This may happen if the app exits too quickly or samply couldn't start."
             }
           }
 
@@ -157,9 +185,20 @@ jobs:
 
           ## Viewing the Profile
 
-          1. Download the `cpu-profile.json` artifact
+          ### Option 1: Using Firefox Profiler (Recommended)
+
+          1. Download the `cpu-profile.json` artifact (if available)
           2. Open [Firefox Profiler](https://profiler.firefox.com/)
           3. Click 'Load a profile from file' and select `cpu-profile.json`
+
+          ### Option 2: Manual Conversion from ETL
+
+          If only `.etl` or `.kernel.etl` files are present:
+
+          1. Download the artifact containing the ETL file
+          2. Install samply: ``cargo install samply``
+          3. Convert: ``samply import cpu-profile.kernel.etl``
+          4. Upload the generated `cpu-profile.json` to Firefox Profiler
 
           ## What to Look For (Phase 0 Success Criteria)
 
@@ -167,6 +206,12 @@ jobs:
           - **`handle_process_event` contribution:** Should show >5% CPU time
           - **Windows API calls:** Look for `CreateToolhelp32Snapshot`, `OpenProcess`
           - **String allocations:** Look for allocation-heavy paths in process name extraction
+
+          ## Troubleshooting
+
+          - **No JSON file?** The workflow attempts automatic ETL→JSON conversion via samply. If this fails, manually convert using `samply import`.
+          - **ETL files explained:** Windows Event Trace Logs (.etl) are the native format. Samply converts these to Firefox Profiler's JSON format.
+          - **Short profiles:** CI runs profile for 30 seconds. For deeper analysis, run profiling locally with longer duration.
           "@ | Out-File -FilePath profiling-results/README.md -Encoding UTF8
 
       - name: Upload CPU profiling artifacts
