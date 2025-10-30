@@ -56,7 +56,8 @@ jobs:
       - name: Run benchmarks
         run: |
           # Run all benchmarks including the new process_monitor_bench
-          cargo bench --profile profiling -- --baseline ci-baseline
+          # Note: cargo bench always uses release mode, no --profile flag needed
+          cargo bench -- --save-baseline ci-baseline
 
       - name: Generate benchmark report
         run: |
@@ -177,33 +178,12 @@ jobs:
           toolchain: stable
           cache: true
 
-      - name: Add DHAT instrumentation
-        run: |
-          # Create a temporary test binary with DHAT instrumentation
-          # This is done at CI time to avoid polluting the main codebase
-
-          @"
-          //! Temporary DHAT-instrumented test for allocation profiling
-
-          #[global_allocator]
-          static ALLOC: dhat::Alloc = dhat::Alloc;
-
-          fn main() {
-              let _profiler = dhat::Profiler::new_heap();
-
-              // Run a representative workload
-              println!("Running DHAT allocation profiling...");
-
-              // TODO: Add actual workload here
-              // For now, just demonstrate the infrastructure works
-              println!("DHAT profiling complete. Check dhat-heap.json for results.");
-          }
-          "@ | Out-File -FilePath tests/dhat_profiling_test.rs -Encoding UTF8
-
       - name: Run allocation profiling
         run: |
-          # Build and run with DHAT
-          cargo test --test dhat_profiling_test --release
+          # Run Phase 2.1 profiling test (watch list cloning overhead)
+          # See tests/dhat_profiling_test.rs for all available profiling tests
+          # This test measures allocation patterns for the watch list cloning optimization
+          cargo test --test dhat_profiling_test --release -- profile_watch_list_cloning --nocapture
         continue-on-error: true
 
       - name: Generate DHAT report
