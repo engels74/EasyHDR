@@ -111,6 +111,10 @@ harness = false
 name = "process_monitor_bench"
 harness = false
 
+[[bench]]
+name = "uwp_detection"
+harness = false
+
 [profile.release]
 opt-level = "z"     # Optimize for size
 lto = true          # Link-time optimization
