@@ -89,6 +89,9 @@ winres = "0.1"
 [dev-dependencies]
 proptest = "1.8"
 criterion = "0.7"
+# Allocation profiling (Rust port of DHAT, works on Windows)
+dhat = "0.3"
+crossbeam-channel = "0.5"
 
 [[bench]]
 name = "config"
@@ -100,6 +103,10 @@ harness = false
 
 [[bench]]
 name = "icon_cache"
+harness = false
+
+[[bench]]
+name = "process_monitor_bench"
 harness = false
 
 [profile.release]

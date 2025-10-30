@@ -1,0 +1,279 @@
+---
+name: Performance Profiling
+
+# Run on demand or when performance-related files change
+"on":
+  workflow_dispatch:
+    inputs:
+      enable_cpu_profiling:
+        description: 'Enable CPU profiling with samply'
+        required: false
+        type: boolean
+        default: true
+      enable_allocation_profiling:
+        description: 'Enable allocation profiling with DHAT'
+        required: false
+        type: boolean
+        default: true
+  push:
+    branches:
+      - main
+      - 'feat/perf-**'
+    paths:
+      - 'src/monitor/**'
+      - 'src/controller/**'
+      - 'benches/**'
+      - 'docs/performance_plan.md'
+  pull_request:
+    paths:
+      - 'src/monitor/**'
+      - 'src/controller/**'
+      - 'benches/**'
+
+permissions:
+  contents: read
+
+env:
+  RUST_BACKTRACE: 1
+  # Enable frame pointers for accurate profiling
+  RUSTFLAGS: "-C force-frame-pointers=yes"
+
+jobs:
+  criterion-benchmarks:
+    name: Criterion Benchmarks
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+
+      - name: Run benchmarks
+        run: |
+          # Run all benchmarks including the new process_monitor_bench
+          cargo bench --profile profiling -- --save-baseline ci-baseline
+
+      - name: Generate benchmark report
+        run: |
+          echo "# Criterion Benchmark Results" > benchmark-summary.md
+          echo "" >> benchmark-summary.md
+          echo "**Commit:** ${{ github.sha }}" >> benchmark-summary.md
+          echo "**Branch:** ${{ github.ref_name }}" >> benchmark-summary.md
+          echo "**Date:** $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")" >> benchmark-summary.md
+          echo "" >> benchmark-summary.md
+          echo "See attached artifacts for detailed Criterion reports." >> benchmark-summary.md
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: criterion-benchmarks-${{ github.sha }}
+          path: |
+            target/criterion/
+            benchmark-summary.md
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Add benchmark summary to job summary
+        run: |
+          Get-Content benchmark-summary.md >> $env:GITHUB_STEP_SUMMARY
+
+  cpu-profiling:
+    name: CPU Profiling (samply)
+    runs-on: windows-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_cpu_profiling == 'true' || github.event_name != 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+
+      - name: Install samply
+        run: cargo install samply
+
+      - name: Build profiling binary
+        run: |
+          # Build with profiling profile (release + debug symbols + frame pointers)
+          cargo build --profile profiling
+
+      - name: Run CPU profiling
+        run: |
+          # Create output directory
+          New-Item -ItemType Directory -Force -Path profiling-results
+
+          # Profile the main application (short run for CI)
+          # Note: For full profiling, run this on Windows host with actual workload
+          Write-Host "Running CPU profiling with samply..."
+
+          # Set a timeout to prevent hanging in CI (30 seconds)
+          $job = Start-Job -ScriptBlock {
+            samply record -o profiling-results/cpu-profile.json -- target/profiling/easyhdr.exe
+          }
+
+          # Wait for 30 seconds or until job completes
+          Wait-Job $job -Timeout 30 | Out-Null
+
+          # Stop the job if it's still running
+          if ($job.State -eq 'Running') {
+            Write-Host "Stopping profiling after timeout..."
+            Stop-Job $job
+            Remove-Job $job
+          } else {
+            Receive-Job $job
+            Remove-Job $job
+          }
+
+      - name: Generate profiling report
+        run: |
+          echo "# CPU Profiling Results (samply)" > profiling-results/README.md
+          echo "" >> profiling-results/README.md
+          echo "**Commit:** ${{ github.sha }}" >> profiling-results/README.md
+          echo "**Branch:** ${{ github.ref_name }}" >> profiling-results/README.md
+          echo "" >> profiling-results/README.md
+          echo "## Viewing the Profile" >> profiling-results/README.md
+          echo "" >> profiling-results/README.md
+          echo "1. Download the \`cpu-profile.json\` artifact" >> profiling-results/README.md
+          echo "2. Open [Firefox Profiler](https://profiler.firefox.com/)" >> profiling-results/README.md
+          echo "3. Click 'Load a profile from file' and select \`cpu-profile.json\`" >> profiling-results/README.md
+          echo "" >> profiling-results/README.md
+          echo "## What to Look For (Phase 0 Success Criteria)" >> profiling-results/README.md
+          echo "" >> profiling-results/README.md
+          echo "- **\`poll_processes\` hotspot:** Should consume >20% CPU time" >> profiling-results/README.md
+          echo "- **\`handle_process_event\` contribution:** Should show >5% CPU time" >> profiling-results/README.md
+          echo "- **Windows API calls:** Look for \`CreateToolhelp32Snapshot\`, \`OpenProcess\`" >> profiling-results/README.md
+          echo "- **String allocations:** Look for allocation-heavy paths in process name extraction" >> profiling-results/README.md
+
+      - name: Upload CPU profiling artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-profiling-samply-${{ github.sha }}
+          path: profiling-results/
+          retention-days: 30
+          if-no-files-found: warn
+
+  allocation-profiling:
+    name: Allocation Profiling (DHAT)
+    runs-on: windows-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_allocation_profiling == 'true' || github.event_name != 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache: true
+
+      - name: Add DHAT instrumentation
+        run: |
+          # Create a temporary test binary with DHAT instrumentation
+          # This is done at CI time to avoid polluting the main codebase
+
+          @"
+          //! Temporary DHAT-instrumented test for allocation profiling
+
+          #[global_allocator]
+          static ALLOC: dhat::Alloc = dhat::Alloc;
+
+          fn main() {
+              let _profiler = dhat::Profiler::new_heap();
+
+              // Run a representative workload
+              println!("Running DHAT allocation profiling...");
+
+              // TODO: Add actual workload here
+              // For now, just demonstrate the infrastructure works
+              println!("DHAT profiling complete. Check dhat-heap.json for results.");
+          }
+          "@ | Out-File -FilePath tests/dhat_profiling_test.rs -Encoding UTF8
+
+      - name: Run allocation profiling
+        run: |
+          # Build and run with DHAT
+          cargo test --test dhat_profiling_test --release
+        continue-on-error: true
+
+      - name: Generate DHAT report
+        run: |
+          New-Item -ItemType Directory -Force -Path dhat-results
+
+          # Move DHAT output if it exists
+          if (Test-Path dhat-heap.json) {
+            Move-Item dhat-heap.json dhat-results/
+          }
+
+          echo "# Allocation Profiling Results (DHAT)" > dhat-results/README.md
+          echo "" >> dhat-results/README.md
+          echo "**Commit:** ${{ github.sha }}" >> dhat-results/README.md
+          echo "**Branch:** ${{ github.ref_name }}" >> dhat-results/README.md
+          echo "" >> dhat-results/README.md
+          echo "## Viewing the Profile" >> dhat-results/README.md
+          echo "" >> dhat-results/README.md
+          echo "1. Download the \`dhat-heap.json\` artifact" >> dhat-results/README.md
+          echo "2. Open [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)" >> dhat-results/README.md
+          echo "3. Load \`dhat-heap.json\` in the viewer" >> dhat-results/README.md
+          echo "" >> dhat-results/README.md
+          echo "## What to Look For (Phase 0 Success Criteria)" >> dhat-results/README.md
+          echo "" >> dhat-results/README.md
+          echo "- **Allocation rate:** Baseline should show 200-500 allocations/sec" >> dhat-results/README.md
+          echo "- **Hot allocation paths:** Process name extraction, watch list cloning" >> dhat-results/README.md
+          echo "- **Memory per poll:** Should measure baseline memory usage per poll cycle" >> dhat-results/README.md
+
+      - name: Upload DHAT profiling artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: allocation-profiling-dhat-${{ github.sha }}
+          path: dhat-results/
+          retention-days: 30
+          if-no-files-found: warn
+
+  profiling-summary:
+    name: Generate Profiling Summary
+    runs-on: ubuntu-latest
+    needs: [criterion-benchmarks, cpu-profiling, allocation-profiling]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Performance Profiling Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Profiling Jobs Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Criterion Benchmarks:** ${{ needs.criterion-benchmarks.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CPU Profiling (samply):** ${{ needs.cpu-profiling.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Allocation Profiling (DHAT):** ${{ needs.allocation-profiling.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download profiling artifacts from the workflow run" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review Criterion benchmark reports in \`target/criterion/\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. View CPU profile at [Firefox Profiler](https://profiler.firefox.com/)" >> $GITHUB_STEP_SUMMARY
+          echo "4. View allocation profile at [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)" >> $GITHUB_STEP_SUMMARY
+          echo "5. Document baseline metrics in \`docs/performance_plan.md\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Phase 0 Success Criteria" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Flamegraph identifies \`poll_processes\` as hotspot (>20% CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Flamegraph shows \`handle_process_event\` contribution (>5% CPU)" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] DHAT confirms 200-500 allocations/sec baseline" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Criterion baseline captured for regression detection" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Benchmarks run with varying workloads documented" >> $GITHUB_STEP_SUMMARY
