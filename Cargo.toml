@@ -11,6 +11,7 @@ license = "AGPL-3.0-only"
 [lib]
 name = "easyhdr"
 path = "src/lib.rs"
+bench = false  # Disable libtest benchmark harness to allow Criterion args (--save-baseline, etc.)
 
 [[bin]]
 name = "easyhdr"

@@ -57,6 +57,7 @@ jobs:
         run: |
           # Run all benchmarks including the new process_monitor_bench
           # Note: cargo bench always uses release mode, no --profile flag needed
+          # Cargo.toml has bench = false for [lib] to prevent libtest harness conflicts
           cargo bench -- --save-baseline ci-baseline
 
       - name: Generate benchmark report
