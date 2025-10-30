@@ -116,22 +116,35 @@ jobs:
           # Note: For full profiling, run this on Windows host with actual workload
           Write-Host "Running CPU profiling with samply..."
 
-          # Set a timeout to prevent hanging in CI (30 seconds)
+          # Start profiling in background (samply needs admin, runs ETW on Windows)
           $job = Start-Job -ScriptBlock {
-            samply record -o profiling-results/cpu-profile.json -- target/profiling/easyhdr.exe
+            # samply on Windows: records ETW to .etl, then converts to JSON
+            # Note: samply will try to open browser, but that will fail in CI (expected)
+            samply record -o profiling-results/cpu-profile -- target/profiling/easyhdr.exe
           }
 
-          # Wait for 30 seconds or until job completes
+          # Wait for 30 seconds to collect samples
+          Write-Host "Collecting profile for 30 seconds..."
           Wait-Job $job -Timeout 30 | Out-Null
 
-          # Stop the job if it's still running
+          # Stop recording gracefully (allows samply to convert ETL to JSON)
           if ($job.State -eq 'Running') {
-            Write-Host "Stopping profiling after timeout..."
+            Write-Host "Stopping recording and converting ETL to JSON..."
             Stop-Job $job
             Remove-Job $job
           } else {
             Receive-Job $job
             Remove-Job $job
+          }
+
+          # Convert ETL to JSON if samply was interrupted before conversion
+          if (Test-Path "profiling-results/cpu-profile.etl") {
+            Write-Host "Converting ETL file to Firefox Profiler JSON format..."
+            samply import profiling-results/cpu-profile.etl
+            # samply import outputs to current directory, move to profiling-results
+            if (Test-Path "cpu-profile.json") {
+              Move-Item cpu-profile.json profiling-results/
+            }
           }
 
       - name: Generate profiling report
