@@ -143,9 +143,10 @@ jobs:
             Write-Host "  Found: $($_.Name)"
           }
 
-          # Attempt conversion using samply import with timeout
-          # Note: samply import starts a web server and waits for Ctrl+C
-          # We'll start it in background, wait for JSON generation, then kill it
+          # Note: Automated ETL→JSON conversion is problematic in CI because
+          # samply import starts a web server that waits for Ctrl+C.
+          # Instead, we upload the ETL file for manual conversion.
+
           $etlFiles = @(
             "profiling-results/cpu-profile.etl",
             "profiling-results/cpu-profile.kernel.etl"
@@ -155,50 +156,14 @@ jobs:
           foreach ($etlFile in $etlFiles) {
             if (Test-Path $etlFile) {
               $etlFound = $true
-              Write-Host "Converting $etlFile to Firefox Profiler JSON format..."
-
-              # Start samply import in background job
-              # samply import processes the ETL, creates profile.json, then starts a server
-              $importJob = Start-Job -ScriptBlock {
-                param($etlPath)
-                Set-Location $using:PWD
-                samply import $etlPath
-              } -ArgumentList $etlFile
-
-              # Wait up to 30 seconds for profile.json to be created
-              Write-Host "Waiting for JSON conversion (max 90 seconds)..."
-              $timeout = 90
-              $elapsed = 0
-              while ($elapsed -lt $timeout) {
-                if (Test-Path "profile.json") {
-                  Write-Host "JSON file created after $elapsed seconds"
-                  break
-                }
-                Start-Sleep -Seconds 1
-                $elapsed++
-              }
-
-              # Kill the samply import job (it will keep running the server otherwise)
-              Stop-Job $importJob -ErrorAction SilentlyContinue
-              Remove-Job $importJob -Force -ErrorAction SilentlyContinue
-
-              # Move the generated JSON to profiling-results
-              if (Test-Path "profile.json") {
-                Move-Item -Force profile.json profiling-results/cpu-profile.json
-                Write-Host "Successfully created profiling-results/cpu-profile.json"
-                break
-              } else {
-                Write-Warning "JSON conversion timed out after 90 seconds"
-              }
+              Write-Host "Found ETL file: $etlFile"
+              Write-Host "ETL file will be uploaded for manual conversion to JSON"
             }
           }
 
-          if (!(Test-Path "profiling-results/cpu-profile.json")) {
-            if ($etlFound) {
-              Write-Warning "ETL file found but JSON conversion failed. ETL will be uploaded for manual conversion."
-            } else {
-              Write-Warning "No profiling data generated. This may happen if the app exits too quickly or samply couldn't start."
-            }
+          if (!$etlFound) {
+            Write-Warning "No profiling data generated. This may happen if the app exits too quickly or samply couldn't start."
+            exit 1
           }
 
       - name: Generate profiling report
@@ -209,35 +174,57 @@ jobs:
           **Commit:** ${{ github.sha }}
           **Branch:** ${{ github.ref_name }}
 
-          ## Viewing the Profile
+          ## Converting ETL to Firefox Profiler JSON
 
-          ### Option 1: Using Firefox Profiler (Recommended)
+          This artifact contains a Windows ETL (Event Trace Log) file that needs manual conversion.
 
-          1. Download the `cpu-profile.json` artifact (if available)
-          2. Open [Firefox Profiler](https://profiler.firefox.com/)
-          3. Click 'Load a profile from file' and select `cpu-profile.json`
+          ### Quick Method: Portable Samply (No Installation)
 
-          ### Option 2: Manual Conversion from ETL
+          1. **Download samply portable:**
+             - [samply-x86_64-pc-windows-msvc.zip](https://github.com/mstange/samply/releases/download/samply-v0.13.1/samply-x86_64-pc-windows-msvc.zip) (14.2 MB)
+             - Extract ``samply.exe`` to any folder
 
-          If only `.etl` or `.kernel.etl` files are present:
+          2. **Download this artifact** and extract the ``.kernel.etl`` file
 
-          1. Download the artifact containing the ETL file
-          2. Install samply: ``cargo install samply``
-          3. Convert: ``samply import cpu-profile.kernel.etl``
-          4. Upload the generated `cpu-profile.json` to Firefox Profiler
+          3. **Convert to JSON:**
+             ``````cmd
+             samply.exe import cpu-profile.kernel.etl
+             ``````
+             Wait for "Processing ETL trace..." to complete and ``profile.json`` to be created, then press **Ctrl+C**
+
+          4. **View in Firefox Profiler:**
+             - Open [https://profiler.firefox.com/](https://profiler.firefox.com/)
+             - Click "Load a profile from file"
+             - Select ``profile.json``
+
+          ### Alternative: Install via Cargo
+
+          If you have Rust installed:
+          ``````bash
+          cargo install samply
+          samply import cpu-profile.kernel.etl
+          # Press Ctrl+C after profile.json is created
+          ``````
+
+          ### From WSL2 (Linux)
+
+          The ETL file can be accessed from WSL2 at:
+          ``````
+          /mnt/c/Users/YourUsername/Downloads/cpu-profile.kernel.etl
+          ``````
+
+          However, samply requires Windows to process ETL files (they use Windows-specific APIs).
 
           ## What to Look For (Phase 0 Success Criteria)
 
-          - **`poll_processes` hotspot:** Should consume >20% CPU time
-          - **`handle_process_event` contribution:** Should show >5% CPU time
-          - **Windows API calls:** Look for `CreateToolhelp32Snapshot`, `OpenProcess`
+          - **``poll_processes`` hotspot:** Should consume >20% CPU time
+          - **``handle_process_event`` contribution:** Should show >5% CPU time
+          - **Windows API calls:** Look for ``CreateToolhelp32Snapshot``, ``OpenProcess``
           - **String allocations:** Look for allocation-heavy paths in process name extraction
 
-          ## Troubleshooting
+          ## Why No Automatic Conversion?
 
-          - **No JSON file?** The workflow attempts automatic ETL→JSON conversion via samply. If this fails, manually convert using `samply import`.
-          - **ETL files explained:** Windows Event Trace Logs (.etl) are the native format. Samply converts these to Firefox Profiler's JSON format.
-          - **Short profiles:** CI runs profile for 30 seconds. For deeper analysis, run profiling locally with longer duration.
+          ``samply import`` starts a web server and waits for user input (Ctrl+C), making it incompatible with automated CI environments. Manual conversion takes ~10-30 seconds.
           "@ | Out-File -FilePath profiling-results/README.md -Encoding UTF8
 
       - name: Upload CPU profiling artifacts
