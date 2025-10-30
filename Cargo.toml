@@ -127,9 +127,12 @@ opt-level = 1       # Some optimization for dev builds
 
 [profile.profiling]
 inherits = "release"
-debug = true        # Keep debug info for profiling
+debug = 2           # Full debug info with line tables for accurate profiling
 strip = false       # Don't strip symbols for profiling tools
+opt-level = 3       # Full optimization (override release's "z" for performance profiling)
+lto = "thin"        # Thin LTO for faster builds while keeping good performance
 # Build with: RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling
+# For tests: RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling --tests
 
 [lints.rust]
 unsafe_code = "warn"
