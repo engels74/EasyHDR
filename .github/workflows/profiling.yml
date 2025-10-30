@@ -143,7 +143,9 @@ jobs:
             Write-Host "  Found: $($_.Name)"
           }
 
-          # If we have ETL but no JSON, manually convert
+          # Attempt conversion using samply import with timeout
+          # Note: samply import starts a web server and waits for Ctrl+C
+          # We'll start it in background, wait for JSON generation, then kill it
           $etlFiles = @(
             "profiling-results/cpu-profile.etl",
             "profiling-results/cpu-profile.kernel.etl"
@@ -155,14 +157,38 @@ jobs:
               $etlFound = $true
               Write-Host "Converting $etlFile to Firefox Profiler JSON format..."
 
-              # samply import creates JSON in current directory
-              samply import $etlFile
+              # Start samply import in background job
+              # samply import processes the ETL, creates profile.json, then starts a server
+              $importJob = Start-Job -ScriptBlock {
+                param($etlPath)
+                Set-Location $using:PWD
+                samply import $etlPath
+              } -ArgumentList $etlFile
+
+              # Wait up to 30 seconds for profile.json to be created
+              Write-Host "Waiting for JSON conversion (max 90 seconds)..."
+              $timeout = 90
+              $elapsed = 0
+              while ($elapsed -lt $timeout) {
+                if (Test-Path "profile.json") {
+                  Write-Host "JSON file created after $elapsed seconds"
+                  break
+                }
+                Start-Sleep -Seconds 1
+                $elapsed++
+              }
+
+              # Kill the samply import job (it will keep running the server otherwise)
+              Stop-Job $importJob -ErrorAction SilentlyContinue
+              Remove-Job $importJob -Force -ErrorAction SilentlyContinue
 
               # Move the generated JSON to profiling-results
-              if (Test-Path "cpu-profile.json") {
-                Move-Item -Force cpu-profile.json profiling-results/
+              if (Test-Path "profile.json") {
+                Move-Item -Force profile.json profiling-results/cpu-profile.json
                 Write-Host "Successfully created profiling-results/cpu-profile.json"
                 break
+              } else {
+                Write-Warning "JSON conversion timed out after 90 seconds"
               }
             }
           }
