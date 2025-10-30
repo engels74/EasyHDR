@@ -56,7 +56,7 @@ jobs:
       - name: Run benchmarks
         run: |
           # Run all benchmarks including the new process_monitor_bench
-          cargo bench --profile profiling -- --save-baseline ci-baseline
+          cargo bench --profile profiling -- --baseline ci-baseline
 
       - name: Generate benchmark report
         run: |
@@ -134,23 +134,25 @@ jobs:
 
       - name: Generate profiling report
         run: |
-          echo "# CPU Profiling Results (samply)" > profiling-results/README.md
-          echo "" >> profiling-results/README.md
-          echo "**Commit:** ${{ github.sha }}" >> profiling-results/README.md
-          echo "**Branch:** ${{ github.ref_name }}" >> profiling-results/README.md
-          echo "" >> profiling-results/README.md
-          echo "## Viewing the Profile" >> profiling-results/README.md
-          echo "" >> profiling-results/README.md
-          echo "1. Download the \`cpu-profile.json\` artifact" >> profiling-results/README.md
-          echo "2. Open [Firefox Profiler](https://profiler.firefox.com/)" >> profiling-results/README.md
-          echo "3. Click 'Load a profile from file' and select \`cpu-profile.json\`" >> profiling-results/README.md
-          echo "" >> profiling-results/README.md
-          echo "## What to Look For (Phase 0 Success Criteria)" >> profiling-results/README.md
-          echo "" >> profiling-results/README.md
-          echo "- **\`poll_processes\` hotspot:** Should consume >20% CPU time" >> profiling-results/README.md
-          echo "- **\`handle_process_event\` contribution:** Should show >5% CPU time" >> profiling-results/README.md
-          echo "- **Windows API calls:** Look for \`CreateToolhelp32Snapshot\`, \`OpenProcess\`" >> profiling-results/README.md
-          echo "- **String allocations:** Look for allocation-heavy paths in process name extraction" >> profiling-results/README.md
+          @"
+          # CPU Profiling Results (samply)
+
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref_name }}
+
+          ## Viewing the Profile
+
+          1. Download the `cpu-profile.json` artifact
+          2. Open [Firefox Profiler](https://profiler.firefox.com/)
+          3. Click 'Load a profile from file' and select `cpu-profile.json`
+
+          ## What to Look For (Phase 0 Success Criteria)
+
+          - **`poll_processes` hotspot:** Should consume >20% CPU time
+          - **`handle_process_event` contribution:** Should show >5% CPU time
+          - **Windows API calls:** Look for `CreateToolhelp32Snapshot`, `OpenProcess`
+          - **String allocations:** Look for allocation-heavy paths in process name extraction
+          "@ | Out-File -FilePath profiling-results/README.md -Encoding UTF8
 
       - name: Upload CPU profiling artifacts
         uses: actions/upload-artifact@v4
@@ -213,22 +215,24 @@ jobs:
             Move-Item dhat-heap.json dhat-results/
           }
 
-          echo "# Allocation Profiling Results (DHAT)" > dhat-results/README.md
-          echo "" >> dhat-results/README.md
-          echo "**Commit:** ${{ github.sha }}" >> dhat-results/README.md
-          echo "**Branch:** ${{ github.ref_name }}" >> dhat-results/README.md
-          echo "" >> dhat-results/README.md
-          echo "## Viewing the Profile" >> dhat-results/README.md
-          echo "" >> dhat-results/README.md
-          echo "1. Download the \`dhat-heap.json\` artifact" >> dhat-results/README.md
-          echo "2. Open [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)" >> dhat-results/README.md
-          echo "3. Load \`dhat-heap.json\` in the viewer" >> dhat-results/README.md
-          echo "" >> dhat-results/README.md
-          echo "## What to Look For (Phase 0 Success Criteria)" >> dhat-results/README.md
-          echo "" >> dhat-results/README.md
-          echo "- **Allocation rate:** Baseline should show 200-500 allocations/sec" >> dhat-results/README.md
-          echo "- **Hot allocation paths:** Process name extraction, watch list cloning" >> dhat-results/README.md
-          echo "- **Memory per poll:** Should measure baseline memory usage per poll cycle" >> dhat-results/README.md
+          @"
+          # Allocation Profiling Results (DHAT)
+
+          **Commit:** ${{ github.sha }}
+          **Branch:** ${{ github.ref_name }}
+
+          ## Viewing the Profile
+
+          1. Download the `dhat-heap.json` artifact
+          2. Open [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)
+          3. Load `dhat-heap.json` in the viewer
+
+          ## What to Look For (Phase 0 Success Criteria)
+
+          - **Allocation rate:** Baseline should show 200-500 allocations/sec
+          - **Hot allocation paths:** Process name extraction, watch list cloning
+          - **Memory per poll:** Should measure baseline memory usage per poll cycle
+          "@ | Out-File -FilePath dhat-results/README.md -Encoding UTF8
 
       - name: Upload DHAT profiling artifacts
         uses: actions/upload-artifact@v4
