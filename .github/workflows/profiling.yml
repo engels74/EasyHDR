@@ -111,20 +111,42 @@ jobs:
           Write-Host "This will exercise poll_processes and handle_process_event for 30 seconds"
           Write-Host ""
 
+          # Force cargo-flamegraph to use blondie backend instead of dtrace
+          # Windows Server 2025 has dtrace installed, but it doesn't collect stack samples properly in CI
+          # The blondie backend uses ETW and works reliably on Windows
+          # We temporarily modify PATH to exclude the directory containing dtrace.exe
+          $originalPath = $env:PATH
+          $pathParts = $env:PATH -split ';'
+          $dtraceDir = (Get-Command dtrace.exe -ErrorAction SilentlyContinue).Source | Split-Path -Parent
+          if ($dtraceDir) {
+            Write-Host "Temporarily removing dtrace from PATH to force blondie backend: $dtraceDir"
+            $env:PATH = ($pathParts | Where-Object { $_ -ne $dtraceDir }) -join ';'
+          }
+
           # Generate flamegraph with profiling profile (includes debug symbols)
           # RUSTFLAGS is already set globally with force-frame-pointers
           # The test runs for 30 seconds and exercises the hot paths
+          # blondie backend will be used automatically since dtrace is not in PATH
           cargo flamegraph --profile profiling --test cpu_profiling_test --output profiling-results/cpu-flamegraph.svg -- --exact --nocapture profile_process_monitoring_hot_paths
+
+          # Restore original PATH
+          $env:PATH = $originalPath
 
           Write-Host ""
 
-          # Verify flamegraph was generated
+          # Verify flamegraph was generated and has meaningful content
           if (Test-Path profiling-results/cpu-flamegraph.svg) {
             $size = (Get-Item profiling-results/cpu-flamegraph.svg).Length / 1KB
-            Write-Host "✓ Flamegraph generated successfully: $([math]::Round($size, 1)) KB"
-            Write-Host ""
-            Write-Host "The flamegraph contains symbolicated function names and can be viewed in any browser."
-            Write-Host "Look for: easyhdr::monitor::process_monitor::poll_processes (>20% CPU expected)"
+            # A valid flamegraph should be larger than 1KB (empty/error flamegraphs are ~0.6KB)
+            if ($size -gt 1.0) {
+              Write-Host "✓ Flamegraph generated successfully: $([math]::Round($size, 1)) KB"
+              Write-Host ""
+              Write-Host "The flamegraph contains symbolicated function names and can be viewed in any browser."
+              Write-Host "Look for: easyhdr::monitor::process_monitor::poll_processes (>20% CPU expected)"
+            } else {
+              Write-Error "Flamegraph generated but appears empty (${size} KB). This indicates profiling failed to collect samples."
+              exit 1
+            }
           } else {
             Write-Error "Flamegraph generation failed - no output file created"
             exit 1
