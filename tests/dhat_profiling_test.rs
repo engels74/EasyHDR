@@ -35,6 +35,20 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
 
+// Additional imports for production workload profiling
+#[cfg(windows)]
+use easyhdr::controller::AppController;
+#[cfg(windows)]
+use easyhdr::monitor::ProcessMonitor;
+#[cfg(windows)]
+use parking_lot::Mutex;
+#[cfg(windows)]
+use std::sync::mpsc;
+#[cfg(windows)]
+use std::thread;
+#[cfg(windows)]
+use std::time::{Duration, Instant};
+
 /// Create a realistic configuration for profiling
 fn create_realistic_config(num_apps: usize) -> AppConfig {
     let mut config = AppConfig {
@@ -130,7 +144,11 @@ fn create_realistic_config(num_apps: usize) -> AppConfig {
 ///
 /// This test measures allocation overhead from repeated watch list cloning,
 /// which currently occurs on every config access.
+///
+/// **Note:** This test is for isolated profiling of watch list cloning only.
+/// For full production workload profiling, use `profile_production_allocation_patterns`.
 #[test]
+#[ignore = "Run explicitly for isolated watch list profiling: cargo test --test dhat_profiling_test --ignored -- profile_watch_list_cloning"]
 fn profile_watch_list_cloning() {
     let _profiler = dhat::Profiler::new_heap();
 
@@ -229,4 +247,169 @@ fn profile_config_access() {
     }
 
     println!("DHAT profiling complete. Check dhat-heap.json for results.");
+}
+
+/// Profile production allocation patterns (Phase 0 baseline requirement)
+///
+/// This test exercises the full ProcessMonitor and AppController workload
+/// for 30 seconds to capture realistic allocation patterns from production code.
+///
+/// **Expected to profile:**
+/// - `poll_processes()` string allocations (~250 per poll)
+/// - Process name extraction from Windows APIs
+/// - AppIdentifier creation and cloning
+/// - Watch list clones in event handling
+/// - UWP detection allocations
+///
+/// **Phase 0 Success Criteria:**
+/// - Allocation rate: 200-500 allocs/sec
+/// - Runtime: ~30 seconds (not microseconds)
+/// - Stack traces show `poll_processes`, `detect_uwp_process`, `String::from`
+#[test]
+#[cfg(windows)]
+fn profile_production_allocation_patterns() {
+    let _profiler = dhat::Profiler::new_heap();
+
+    println!("\n=== DHAT Allocation Profiling Test ===");
+    println!("This test will run for 30 seconds to collect allocation samples.");
+    println!("Expected allocation patterns:");
+    println!("  - Process name extraction (String::from)");
+    println!("  - AppIdentifier creation in poll_processes");
+    println!("  - Watch list cloning overhead");
+    println!("  - UWP detection allocations\n");
+
+    // Create a realistic configuration with multiple monitored apps
+    let config = create_profiling_config();
+
+    // Set up channels for process events and HDR state events
+    let (process_tx, process_rx) = mpsc::sync_channel(32);
+    let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
+    let (state_tx, state_rx) = mpsc::sync_channel(32);
+
+    // Create watch list with monitored apps
+    let apps = create_monitored_apps();
+    let watch_list = Arc::new(Mutex::new(apps.clone()));
+
+    // Create process monitor with aggressive polling (500ms) to maximize allocations
+    let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
+    monitor.update_watch_list(apps);
+
+    // Create app controller
+    let mut controller = AppController::new(
+        config,
+        process_rx,
+        hdr_state_rx,
+        state_tx,
+        watch_list.clone(),
+    )
+    .expect("Failed to create AppController");
+
+    // Start the process monitor thread (exercises poll_processes)
+    let _monitor_handle = monitor.start();
+
+    // Start the event loop in a separate thread (exercises handle_process_event)
+    let _event_handle = thread::spawn(move || {
+        controller.run();
+    });
+
+    // Consume state updates to prevent channel from filling up
+    let _state_consumer = thread::spawn(move || {
+        while state_rx.recv().is_ok() {
+            // Just drain the channel
+        }
+    });
+
+    // Run for 30 seconds to collect sufficient allocation samples
+    println!("Starting allocation profiling workload...");
+    let start = Instant::now();
+    let duration = Duration::from_secs(30);
+
+    let mut last_print = 0;
+    while start.elapsed() < duration {
+        let elapsed = start.elapsed().as_secs();
+        if elapsed > 0 && elapsed >= last_print + 5 {
+            println!("  Profiling... {}s / {}s", elapsed, duration.as_secs());
+            last_print = elapsed;
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    println!("Allocation profiling complete.");
+
+    // Note: We can't gracefully stop the threads (they run in infinite loops)
+    // but that's okay for profiling purposes - the process will exit and DHAT
+    // will write dhat-heap.json automatically
+
+    println!("\n=== DHAT Profiling Test Complete ===");
+    println!("Next steps:");
+    println!("1. Open https://nnethercote.github.io/dh_view/dh_view.html");
+    println!("2. Load dhat-heap.json from this test run");
+    println!("3. Look for allocation hotspots:");
+    println!("   - poll_processes string allocations");
+    println!("   - detect_uwp_process overhead");
+    println!("   - AppIdentifier creation patterns");
+    println!("4. Verify allocation rate is 200-500 allocs/sec");
+}
+
+/// Create a realistic configuration for profiling (matches cpu_profiling_test.rs)
+#[cfg(windows)]
+fn create_profiling_config() -> AppConfig {
+    let mut preferences = UserPreferences::default();
+    preferences.monitoring_interval_ms = 500; // Aggressive polling for profiling
+    preferences.auto_start = false;
+
+    AppConfig {
+        monitored_apps: create_monitored_apps(),
+        preferences,
+        window_state: Default::default(),
+    }
+}
+
+/// Create a list of monitored applications for profiling
+///
+/// Uses common Windows applications that might be running during profiling
+#[cfg(windows)]
+fn create_monitored_apps() -> Vec<MonitoredApp> {
+    vec![
+        MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "Google Chrome".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"),
+            process_name: "chrome".to_string(),
+            enabled: true,
+            icon_data: None,
+        }),
+        MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "Mozilla Firefox".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\Mozilla Firefox\\firefox.exe"),
+            process_name: "firefox".to_string(),
+            enabled: true,
+            icon_data: None,
+        }),
+        MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "OBS Studio".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe"),
+            process_name: "obs64".to_string(),
+            enabled: true,
+            icon_data: None,
+        }),
+        MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "Visual Studio Code".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\Microsoft VS Code\\Code.exe"),
+            process_name: "code".to_string(),
+            enabled: true,
+            icon_data: None,
+        }),
+        MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
+            display_name: "Notepad".to_string(),
+            exe_path: PathBuf::from("C:\\Windows\\System32\\notepad.exe"),
+            process_name: "notepad".to_string(),
+            enabled: true,
+            icon_data: None,
+        }),
+    ]
 }
