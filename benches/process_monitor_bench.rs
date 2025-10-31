@@ -6,8 +6,8 @@
 //! - String allocation patterns (Phase 1.2 optimization target)
 //!
 //! Note: Direct process polling benchmarks require Windows APIs and are better
-//! measured via integration tests and profiling tools (samply, DHAT).
-//! See `docs/profiling_guide.md` for instructions.
+//! measured via integration tests and profiling tools (cargo-flamegraph, DHAT).
+//! See `docs/performance_plan.md` for profiling instructions.
 
 #![allow(missing_docs)]
 

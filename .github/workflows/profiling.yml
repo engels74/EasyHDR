@@ -6,7 +6,7 @@ name: Performance Profiling
   workflow_dispatch:
     inputs:
       enable_cpu_profiling:
-        description: 'Enable CPU profiling with samply'
+        description: 'Enable CPU profiling with flamegraph'
         required: false
         type: boolean
         default: true
@@ -85,7 +85,7 @@ jobs:
           Get-Content benchmark-summary.md >> $env:GITHUB_STEP_SUMMARY
 
   cpu-profiling:
-    name: CPU Profiling (samply)
+    name: CPU Profiling (flamegraph)
     runs-on: windows-latest
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_cpu_profiling == 'true' || github.event_name != 'workflow_dispatch' }}
 
@@ -99,114 +99,48 @@ jobs:
           toolchain: stable
           cache: true
 
-      - name: Install samply
-        run: cargo install samply
+      - name: Install flamegraph
+        run: cargo install flamegraph
 
-      - name: Build profiling test binary
-        run: |
-          # Build test binary with profiling profile (release + debug symbols + frame pointers)
-          # The RUSTFLAGS env var is already set globally with force-frame-pointers
-          cargo build --profile profiling --tests
-
-      - name: Run CPU profiling
+      - name: Run CPU profiling with flamegraph
         run: |
           # Create output directory
           New-Item -ItemType Directory -Force -Path profiling-results
 
-          # Find the test binary (it will have a hash in the name)
-          $testBinary = Get-ChildItem target/profiling/deps/cpu_profiling_test-*.exe | Select-Object -First 1
-
-          if (!$testBinary) {
-            Write-Error "Could not find cpu_profiling_test binary"
-            exit 1
-          }
-
-          Write-Host "Found test binary: $($testBinary.Name)"
-          Write-Host "Running CPU profiling with samply..."
+          Write-Host "Running CPU profiling with flamegraph..."
           Write-Host "This will exercise poll_processes and handle_process_event for 30 seconds"
+          Write-Host ""
 
-          # Run samply with the profiling test
+          # Generate flamegraph with profiling profile (includes debug symbols)
+          # RUSTFLAGS is already set globally with force-frame-pointers
           # The test runs for 30 seconds and exercises the hot paths
-          # Use --save-only to prevent opening browser/web server in CI
-          try {
-            samply record --save-only -o profiling-results/cpu-profile -- $testBinary.FullName --exact --nocapture profile_process_monitoring_hot_paths
-          } catch {
-            Write-Host "samply exited (expected - test completed)"
-          }
+          cargo flamegraph --profile profiling --test cpu_profiling_test --output profiling-results/cpu-flamegraph.svg -- --exact --nocapture profile_process_monitoring_hot_paths
 
-          # Check for generated files (samply with --save-only may create various formats)
-          Write-Host "`nLooking for profiling output files..."
-          Get-ChildItem profiling-results/ -ErrorAction SilentlyContinue | ForEach-Object {
-            if ($_.PSIsContainer) {
-              Write-Host "  Found directory: $($_.Name)"
-              # List contents if it's a directory
-              Get-ChildItem $_.FullName -ErrorAction SilentlyContinue | ForEach-Object {
-                Write-Host "    - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
-              }
-            } else {
-              Write-Host "  Found file: $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
-            }
-          }
+          Write-Host ""
 
-          # Check that profile data was created (file, directory, or ETL)
-          $profilePaths = @(
-            "profiling-results/cpu-profile",
-            "profiling-results/cpu-profile.json",
-            "profiling-results/cpu-profile.etl",
-            "profiling-results/cpu-profile.kernel.etl"
-          )
-
-          $profileFound = $false
-          $profilePath = ""
-          $isDirectory = $false
-
-          foreach ($path in $profilePaths) {
-            if (Test-Path $path) {
-              $item = Get-Item $path
-              $profileFound = $true
-              $profilePath = $path
-              $isDirectory = $item.PSIsContainer
-
-              if ($isDirectory) {
-                Write-Host "`nFound profile directory: $profilePath"
-                $dirSize = (Get-ChildItem $profilePath -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
-                Write-Host "  Total size: $([math]::Round($dirSize, 2)) MB"
-              } else {
-                $fileSize = $item.Length / 1MB
-                Write-Host "`nFound profile file: $profilePath ($([math]::Round($fileSize, 2)) MB)"
-              }
-              break
-            }
-          }
-
-          if (!$profileFound) {
-            Write-Warning "No profiling data generated. This may happen if samply couldn't start."
-            Write-Warning "The test should have run for 30 seconds and generated profile data."
+          # Verify flamegraph was generated
+          if (Test-Path profiling-results/cpu-flamegraph.svg) {
+            $size = (Get-Item profiling-results/cpu-flamegraph.svg).Length / 1KB
+            Write-Host "✓ Flamegraph generated successfully: $([math]::Round($size, 1)) KB"
+            Write-Host ""
+            Write-Host "The flamegraph contains symbolicated function names and can be viewed in any browser."
+            Write-Host "Look for: easyhdr::monitor::process_monitor::poll_processes (>20% CPU expected)"
+          } else {
+            Write-Error "Flamegraph generation failed - no output file created"
             exit 1
           }
-
-          # Detect format
-          if ($isDirectory) {
-            Write-Host "Profile is stored in a directory structure (may contain multiple files)"
-          } elseif ($profilePath -match "\.etl$") {
-            Write-Host "Profile is in ETL format (needs manual conversion)"
-          } else {
-            Write-Host "Profile appears to be in processed format (check contents for JSON)"
-          }
-
-          Write-Host "`nThe profile should show symbolicated function names (e.g., easyhdr::monitor::process_monitor::poll_processes)"
 
       - name: Generate profiling report
         run: |
           @"
-          # CPU Profiling Results (samply)
+          # CPU Profiling Results (flamegraph)
 
           **Commit:** ${{ github.sha }}
           **Branch:** ${{ github.ref_name }}
 
           ## Profile Details
 
-          This profile was generated by running the dedicated CPU profiling test (``tests/cpu_profiling_test.rs``) which exercises the hot paths in process monitoring and event handling for 30 seconds.
+          This flamegraph was generated by running the dedicated CPU profiling test (``tests/cpu_profiling_test.rs``) which exercises the hot paths in process monitoring and event handling for 30 seconds.
 
           **Test workload:**
           - Process monitor polling at 500ms intervals (aggressive for profiling)
@@ -218,92 +152,74 @@ jobs:
           - ``easyhdr::controller::app_controller::handle_process_event``
           - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot``
 
-          ## Viewing the Profile
+          ## Viewing the Flamegraph
 
-          This artifact contains profiling data with **full debug symbols** from the 30-second CPU profiling test.
+          This artifact contains a self-contained **SVG flamegraph** with full debug symbols from the 30-second CPU profiling test.
 
-          ### Option 1: Direct JSON Profile (Recommended)
+          ### How to View
 
-          If the artifact contains a ``cpu-profile`` or ``cpu-profile.json`` file (generated with ``--save-only``):
+          1. **Download this artifact** and extract ``cpu-flamegraph.svg``
+          2. **Open in any web browser** (Chrome, Firefox, Edge, Safari)
+          3. **Interact with the flamegraph:**
+             - **Click any box** to zoom into that call stack
+             - **Click the top box** to reset zoom
+             - **Search** using the search box (top right) - try "poll_processes" or "handle_process_event"
+             - **Hover over boxes** to see full function names and percentages
+             - **Box width = CPU time** - wider boxes consumed more CPU
 
-          1. **Download this artifact** and extract the profile file
-          2. **Open Firefox Profiler:**
-             - Go to [https://profiler.firefox.com/](https://profiler.firefox.com/)
-             - Click "Load a profile from file"
-             - Select the ``cpu-profile`` or ``cpu-profile.json`` file
-          3. **Analyze!** The profile is ready to use immediately, no conversion needed.
+          ### Color Key
 
-          ### Option 2: Converting ETL Files (If Present)
-
-          If the artifact contains ``.etl`` or ``.kernel.etl`` files instead:
-
-          #### Quick Method: Portable Samply
-
-          1. **Download samply portable:**
-             - [samply-x86_64-pc-windows-msvc.zip](https://github.com/mstange/samply/releases/download/samply-v0.13.1/samply-x86_64-pc-windows-msvc.zip) (14.2 MB)
-             - Extract ``samply.exe`` to any folder
-
-          2. **Download this artifact** and extract the ``.kernel.etl`` file
-
-          3. **Convert to JSON:**
-             ``````cmd
-             samply.exe import cpu-profile.kernel.etl
-             ``````
-             Wait for "Processing ETL trace..." to complete and ``profile.json`` to be created, then press **Ctrl+C**
-
-          4. **View in Firefox Profiler:**
-             - Open [https://profiler.firefox.com/](https://profiler.firefox.com/)
-             - Click "Load a profile from file"
-             - Select ``profile.json``
-
-          #### Alternative: Install via Cargo
-
-          If you have Rust installed:
-          ``````bash
-          cargo install samply
-          samply import cpu-profile.kernel.etl
-          # Press Ctrl+C after profile.json is created
-          ``````
+          - **Red/orange colors:** User code (EasyHDR functions)
+          - **Yellow colors:** System libraries (Windows APIs)
+          - **Green colors:** Kernel functions
 
           ## What to Look For (Phase 0 Success Criteria)
 
-          **The profile should show actual Rust function names, NOT raw memory addresses!**
+          **The flamegraph should show actual Rust function names, NOT raw memory addresses!**
 
-          ✅ **Good profile (symbolicated):**
-          - ``easyhdr::monitor::process_monitor::poll_processes`` (>20% CPU)
-          - ``easyhdr::controller::app_controller::handle_process_event`` (>5% CPU)
-          - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot``
-          - ``std::string::String::from`` (string allocations)
+          ✅ **Expected hotspots:**
+          - ``easyhdr::monitor::process_monitor::poll_processes`` should be **>20% of flamegraph width**
+          - ``easyhdr::controller::app_controller::handle_process_event`` should be **>5% visible**
+          - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot`` (Windows API)
+          - ``alloc::string::String`` (string allocations)
 
-          ❌ **Bad profile (not symbolicated):**
-          - ``0xadd297``
-          - ``0x7ff6abc12345``
-          - Raw memory addresses without function names
+          ❌ **If you see raw addresses** (like ``0xadd297``, ``0x7ff6abc12345``):
+          - Symbolication failed - check that test was built with ``--profile profiling``
+          - Verify ``RUSTFLAGS="-C force-frame-pointers=yes"`` was set
 
-          **Additional analysis:**
-          - **Windows API calls:** Look for ``CreateToolhelp32Snapshot``, ``Process32FirstW``, ``Process32NextW``
-          - **String allocations:** Look for allocation-heavy paths in process name extraction
-          - **Lock contention:** Look for ``parking_lot::Mutex::lock`` calls
+          ### Analysis Tips
+
+          - **Windows API calls:** Search for "CreateToolhelp32Snapshot", "Process32FirstW", "Process32NextW"
+          - **String allocations:** Search for "String::from" or "alloc::string"
+          - **Lock contention:** Search for "parking_lot::Mutex::lock" or "RwLock"
+          - **Hot paths:** The widest boxes at the bottom are the most expensive leaf functions
 
           ## Note on CI Generation
 
-          This profile was generated in CI using ``samply record --save-only`` to avoid hanging on the web server. The ``--save-only`` flag processes the ETL trace and creates a Firefox Profiler-compatible output without requiring manual conversion.
+          This flamegraph was generated in CI using ``cargo flamegraph --profile profiling``, which automatically symbolicates function names during generation. No manual conversion or symbol loading required.
 
           ## Troubleshooting
 
-          If the profile shows raw addresses instead of function names:
+          If the flamegraph shows raw addresses instead of function names:
           1. Verify the test binary was built with ``--profile profiling`` (includes ``debug = 2``)
           2. Check that ``RUSTFLAGS="-C force-frame-pointers=yes"`` was set during build
-          3. Ensure samply is using the correct PDB files (should be in ``target/profiling/deps/``)
+          3. Ensure flamegraph has access to PDB files (should be in ``target/profiling/deps/``)
+
+          ## Next Steps
+
+          Use the flamegraph to:
+          1. Confirm ``poll_processes`` is the main CPU hotspot (Phase 0 baseline)
+          2. Identify allocation-heavy paths (complement with DHAT profiling)
+          3. Document baseline metrics in ``docs/performance_plan.md``
           "@ | Out-File -FilePath profiling-results/README.md -Encoding UTF8
 
       - name: Upload CPU profiling artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cpu-profiling-samply-${{ github.sha }}
+          name: cpu-profiling-flamegraph-${{ github.sha }}
           path: profiling-results/
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
   allocation-profiling:
     name: Allocation Profiling (DHAT)
@@ -383,7 +299,7 @@ jobs:
           echo "## Profiling Jobs Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Criterion Benchmarks:** ${{ needs.criterion-benchmarks.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **CPU Profiling (samply):** ${{ needs.cpu-profiling.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CPU Profiling (flamegraph):** ${{ needs.cpu-profiling.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Allocation Profiling (DHAT):** ${{ needs.allocation-profiling.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
@@ -391,7 +307,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "1. Download profiling artifacts from the workflow run" >> $GITHUB_STEP_SUMMARY
           echo "2. Review Criterion benchmark reports in \`target/criterion/\`" >> $GITHUB_STEP_SUMMARY
-          echo "3. View CPU profile at [Firefox Profiler](https://profiler.firefox.com/)" >> $GITHUB_STEP_SUMMARY
+          echo "3. View CPU flamegraph (SVG) in any web browser" >> $GITHUB_STEP_SUMMARY
           echo "4. View allocation profile at [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)" >> $GITHUB_STEP_SUMMARY
           echo "5. Document baseline metrics in \`docs/performance_plan.md\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

@@ -1,25 +1,22 @@
-//! CPU profiling test for samply/flamegraph analysis
+//! CPU profiling test for flamegraph analysis
 //!
 //! This test exercises the hot paths in process monitoring and event handling
 //! to generate meaningful CPU profiles with symbolicated function names.
 //!
-//! **Usage with samply:**
+//! **Usage with cargo-flamegraph:**
 //! ```cmd
-//! # Build with profiling profile (release + debug symbols)
-//! cargo build --profile profiling --tests
+//! # Generate flamegraph (automatically builds with profiling profile)
+//! cargo flamegraph --profile profiling --test cpu_profiling_test --output cpu-flamegraph.svg -- --exact --nocapture profile_process_monitoring_hot_paths
 //!
-//! # Run with samply to generate CPU profile
-//! samply record -o cpu-profile -- target/profiling/deps/cpu_profiling_test-*.exe --exact --nocapture profile_process_monitoring_hot_paths
-//!
-//! # Convert ETL to JSON (press Ctrl+C after profile.json is created)
-//! samply import cpu-profile.kernel.etl
-//!
-//! # View at https://profiler.firefox.com/
+//! # View: Open cpu-flamegraph.svg in any browser
+//! # - Click function boxes to zoom in
+//! # - Use search box to find specific functions (e.g., "poll_processes")
+//! # - Box width = CPU time percentage
 //! ```
 //!
 //! **Expected flamegraph hotspots:**
-//! - `poll_processes` should consume >20% CPU time
-//! - `handle_process_event` should show >5% CPU time
+//! - `poll_processes` should consume >20% CPU time (>20% flamegraph width)
+//! - `handle_process_event` should show >5% CPU time (>5% flamegraph width)
 //! - Windows API calls: `CreateToolhelp32Snapshot`, `Process32FirstW`, `Process32NextW`
 //! - String allocations in process name extraction
 
@@ -111,9 +108,9 @@ fn profile_process_monitoring_hot_paths() {
 
     println!("\n=== Profiling Test Complete ===");
     println!("Next steps:");
-    println!("1. Convert ETL to JSON: samply import cpu-profile.kernel.etl");
-    println!("2. View at https://profiler.firefox.com/");
-    println!("3. Look for poll_processes and handle_process_event in the flamegraph");
+    println!("1. Open cpu-flamegraph.svg in any web browser");
+    println!("2. Search for 'poll_processes' and 'handle_process_event'");
+    println!("3. Verify poll_processes is >20% of flamegraph width");
 }
 
 /// Create a realistic configuration for profiling
