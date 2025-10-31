@@ -7,7 +7,7 @@
 //!
 //! Note: Direct process polling benchmarks require Windows APIs and are better
 //! measured via integration tests and profiling tools (samply, DHAT).
-//! See docs/profiling_guide.md for instructions.
+//! See `docs/profiling_guide.md` for instructions.
 
 #![allow(missing_docs)]
 
@@ -74,7 +74,7 @@ fn create_mock_config(num_monitored: usize) -> Arc<parking_lot::Mutex<AppConfig>
 /// Benchmark monitored app lookups (O(n) currently, Phase 3.2 target: O(1))
 ///
 /// This simulates the event handling pattern where we check if a process
-/// is in the monitored list. Currently uses O(n) iteration, target is O(1) HashSet.
+/// is in the monitored list. Currently uses O(n) iteration, target is O(1) `HashSet`.
 fn bench_monitored_app_lookup(c: &mut Criterion) {
     let mut group = c.benchmark_group("monitored_app_lookup");
 
@@ -82,29 +82,25 @@ fn bench_monitored_app_lookup(c: &mut Criterion) {
     for num_apps in [1, 5, 10, 50] {
         let config = create_mock_config(num_apps);
 
-        group.bench_with_input(
-            BenchmarkId::new("apps", num_apps),
-            &num_apps,
-            |b, _| {
-                let guard = config.lock();
-                let apps = &guard.monitored_apps;
+        group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
+            let guard = config.lock();
+            let apps = &guard.monitored_apps;
 
-                b.iter(|| {
-                    // Simulate checking if a process is monitored (O(n) currently)
-                    let target_processes = ["chrome.exe", "firefox.exe", "obs64.exe"];
+            b.iter(|| {
+                // Simulate checking if a process is monitored (O(n) currently)
+                let target_processes = ["chrome.exe", "firefox.exe", "obs64.exe"];
 
-                    for target in &target_processes {
-                        black_box(apps.iter().any(|app| {
-                            if let MonitoredApp::Win32(win32_app) = app {
-                                win32_app.process_name == *target
-                            } else {
-                                false
-                            }
-                        }));
-                    }
-                });
-            },
-        );
+                for target in &target_processes {
+                    black_box(apps.iter().any(|app| {
+                        if let MonitoredApp::Win32(win32_app) = app {
+                            win32_app.process_name == *target
+                        } else {
+                            false
+                        }
+                    }));
+                }
+            });
+        });
     }
 
     group.finish();
@@ -119,18 +115,14 @@ fn bench_watch_list_clone(c: &mut Criterion) {
     for num_apps in [1, 5, 10, 50] {
         let config = create_mock_config(num_apps);
 
-        group.bench_with_input(
-            BenchmarkId::new("apps", num_apps),
-            &num_apps,
-            |b, _| {
-                b.iter(|| {
-                    let guard = config.lock();
-                    let apps = black_box(&guard.monitored_apps);
-                    // Simulate current implementation: clone the entire Vec
-                    black_box(apps.clone());
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
+            b.iter(|| {
+                let guard = config.lock();
+                let apps = black_box(&guard.monitored_apps);
+                // Simulate current implementation: clone the entire Vec
+                black_box(apps.clone());
+            });
+        });
     }
 
     group.finish();
@@ -138,33 +130,29 @@ fn bench_watch_list_clone(c: &mut Criterion) {
 
 /// Benchmark config access patterns
 ///
-/// Tests Mutex contention (Phase 3.1 RwLock optimization target)
+/// Tests Mutex contention (Phase 3.1 `RwLock` optimization target)
 fn bench_config_read_contention(c: &mut Criterion) {
     let mut group = c.benchmark_group("config_read");
 
     for num_apps in [1, 10, 50] {
         let config = create_mock_config(num_apps);
 
-        group.bench_with_input(
-            BenchmarkId::new("apps", num_apps),
-            &num_apps,
-            |b, _| {
-                b.iter(|| {
-                    // Simulate frequent config reads (currently uses Mutex)
-                    let guard = config.lock();
-                    let apps = &guard.monitored_apps;
-                    // Simulate checking if an app is monitored (O(n) currently)
-                    let target = "chrome.exe";
-                    black_box(apps.iter().any(|app| {
-                        if let MonitoredApp::Win32(win32_app) = app {
-                            win32_app.process_name == target
-                        } else {
-                            false
-                        }
-                    }));
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
+            b.iter(|| {
+                // Simulate frequent config reads (currently uses Mutex)
+                let guard = config.lock();
+                let apps = &guard.monitored_apps;
+                // Simulate checking if an app is monitored (O(n) currently)
+                let target = "chrome.exe";
+                black_box(apps.iter().any(|app| {
+                    if let MonitoredApp::Win32(win32_app) = app {
+                        win32_app.process_name == target
+                    } else {
+                        false
+                    }
+                }));
+            });
+        });
     }
 
     group.finish();
@@ -191,7 +179,7 @@ fn bench_string_allocations(c: &mut Criterion) {
                 let filename = PathBuf::from(path)
                     .file_stem()
                     .and_then(|s| s.to_str())
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
                     .unwrap_or_default();
                 black_box(filename);
             }

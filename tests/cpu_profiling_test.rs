@@ -25,14 +25,16 @@
 
 #![cfg(windows)]
 
-use easyhdr::config::{AppConfig, MonitoredApp, Win32App};
+use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, Win32App};
 use easyhdr::controller::AppController;
 use easyhdr::monitor::ProcessMonitor;
 use parking_lot::Mutex;
-use std::sync::mpsc;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 /// Profile the process monitoring hot paths with realistic workload
 ///
@@ -50,7 +52,7 @@ fn profile_process_monitoring_hot_paths() {
     println!("  - String allocations in process name extraction\n");
 
     // Create a realistic configuration with multiple monitored apps
-    let config = Arc::new(Mutex::new(create_profiling_config()));
+    let config = create_profiling_config();
 
     // Set up channels for process events and HDR state events
     let (process_tx, process_rx) = mpsc::sync_channel(32);
@@ -65,20 +67,22 @@ fn profile_process_monitoring_hot_paths() {
     monitor.update_watch_list(create_monitored_apps());
 
     // Create app controller
-    let controller = Arc::new(Mutex::new(
-        AppController::new(config, process_rx, hdr_state_rx, state_tx, watch_list)
-            .expect("Failed to create AppController"),
-    ));
+    let mut controller = AppController::new(
+        config,
+        process_rx,
+        hdr_state_rx,
+        state_tx,
+        watch_list.clone(),
+    )
+    .expect("Failed to create AppController");
 
     // Start the process monitor thread (exercises poll_processes)
     let _monitor_handle = monitor.start();
 
-    // Start the event loop (exercises handle_process_event)
-    let controller_clone = Arc::clone(&controller);
-    let _event_handle = {
-        let mut ctrl = controller_clone.lock();
-        ctrl.start_event_loop()
-    };
+    // Start the event loop in a separate thread (exercises handle_process_event)
+    let _event_handle = thread::spawn(move || {
+        controller.run();
+    });
 
     // Consume state updates to prevent channel from filling up
     let _state_consumer = thread::spawn(move || {
@@ -114,12 +118,14 @@ fn profile_process_monitoring_hot_paths() {
 
 /// Create a realistic configuration for profiling
 fn create_profiling_config() -> AppConfig {
+    let mut preferences = UserPreferences::default();
+    preferences.monitoring_interval_ms = 500; // Aggressive polling for profiling
+    preferences.auto_start = false;
+
     AppConfig {
         monitored_apps: create_monitored_apps(),
-        app_settings: easyhdr::config::AppSettings {
-            polling_interval_ms: 500, // Aggressive polling for profiling
-            auto_start: false,
-        },
+        preferences,
+        window_state: Default::default(),
     }
 }
 
@@ -129,32 +135,42 @@ fn create_profiling_config() -> AppConfig {
 fn create_monitored_apps() -> Vec<MonitoredApp> {
     vec![
         MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
             display_name: "Google Chrome".to_string(),
-            process_name: "chrome.exe".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"),
+            process_name: "chrome".to_string(),
             enabled: true,
             icon_data: None,
         }),
         MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
             display_name: "Mozilla Firefox".to_string(),
-            process_name: "firefox.exe".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\Mozilla Firefox\\firefox.exe"),
+            process_name: "firefox".to_string(),
             enabled: true,
             icon_data: None,
         }),
         MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
             display_name: "OBS Studio".to_string(),
-            process_name: "obs64.exe".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe"),
+            process_name: "obs64".to_string(),
             enabled: true,
             icon_data: None,
         }),
         MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
             display_name: "Visual Studio Code".to_string(),
-            process_name: "Code.exe".to_string(),
+            exe_path: PathBuf::from("C:\\Program Files\\Microsoft VS Code\\Code.exe"),
+            process_name: "code".to_string(),
             enabled: true,
             icon_data: None,
         }),
         MonitoredApp::Win32(Win32App {
+            id: Uuid::new_v4(),
             display_name: "Notepad".to_string(),
-            process_name: "notepad.exe".to_string(),
+            exe_path: PathBuf::from("C:\\Windows\\System32\\notepad.exe"),
+            process_name: "notepad".to_string(),
             enabled: true,
             icon_data: None,
         }),
@@ -192,28 +208,22 @@ fn profile_handle_process_event_throughput() {
 
     println!("\n=== handle_process_event Throughput Test ===");
 
-    let config = Arc::new(Mutex::new(create_profiling_config()));
+    let config = create_profiling_config();
     let (process_tx, process_rx) = mpsc::sync_channel(32);
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
     let watch_list = Arc::new(Mutex::new(create_monitored_apps()));
 
-    let controller = Arc::new(Mutex::new(
-        AppController::new(config, process_rx, hdr_state_rx, state_tx, watch_list)
-            .expect("Failed to create AppController"),
-    ));
+    let mut controller = AppController::new(config, process_rx, hdr_state_rx, state_tx, watch_list)
+        .expect("Failed to create AppController");
 
-    // Start event loop to process events
-    let controller_clone = Arc::clone(&controller);
-    let _event_handle = {
-        let mut ctrl = controller_clone.lock();
-        ctrl.start_event_loop()
-    };
+    // Start event loop to process events in a separate thread
+    let _event_handle = thread::spawn(move || {
+        controller.run();
+    });
 
     // Consume state updates
-    let _state_consumer = thread::spawn(move || {
-        while state_rx.recv().is_ok() {}
-    });
+    let _state_consumer = thread::spawn(move || while state_rx.recv().is_ok() {});
 
     // Simulate rapid event generation
     println!("Generating 10,000 events...");
@@ -221,9 +231,9 @@ fn profile_handle_process_event_throughput() {
 
     for i in 0..10_000 {
         let app_id = if i % 2 == 0 {
-            AppIdentifier::Win32("chrome.exe".to_string())
+            AppIdentifier::Win32("chrome".to_string())
         } else {
-            AppIdentifier::Win32("firefox.exe".to_string())
+            AppIdentifier::Win32("firefox".to_string())
         };
 
         let event = if i % 4 < 2 {
@@ -246,4 +256,3 @@ fn profile_handle_process_event_throughput() {
         10_000.0 / elapsed.as_secs_f64()
     );
 }
-

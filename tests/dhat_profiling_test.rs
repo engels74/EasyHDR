@@ -3,7 +3,7 @@
 //! This test instruments the application with DHAT to measure allocation patterns
 //! in config operations, watch list cloning, and string allocations.
 //!
-//! Note: Direct ProcessMonitor profiling requires running the full application
+//! Note: Direct `ProcessMonitor` profiling requires running the full application
 //! with DHAT instrumentation. Use the profiling guide for full profiling instructions.
 //!
 //! # Usage
@@ -112,8 +112,7 @@ fn create_realistic_config(num_apps: usize) -> AppConfig {
         ),
     ];
 
-    for i in 0..num_apps.min(apps.len()) {
-        let (process_name, display_name, path) = apps[i];
+    for &(process_name, display_name, path) in apps.iter().take(num_apps.min(apps.len())) {
         config.monitored_apps.push(MonitoredApp::Win32(Win32App {
             id: Uuid::new_v4(),
             display_name: display_name.to_string(),
@@ -157,9 +156,9 @@ fn profile_watch_list_cloning() {
 /// Profile monitored app lookups with varying sizes (Phase 3.2 optimization target)
 ///
 /// This test measures allocation and performance overhead from O(n) lookups
-/// in the monitored apps list. Target is O(1) HashSet lookup.
+/// in the monitored apps list. Target is O(1) `HashSet` lookup.
 #[test]
-#[ignore] // Run explicitly with: cargo test --test dhat_profiling_test --ignored -- profile_monitored_app_lookups
+#[ignore = "Run explicitly with: cargo test --test dhat_profiling_test --ignored -- profile_monitored_app_lookups"]
 fn profile_monitored_app_lookups() {
     let _profiler = dhat::Profiler::new_heap();
 
@@ -199,7 +198,7 @@ fn profile_monitored_app_lookups() {
 ///
 /// This test measures allocation overhead from config reads and writes.
 #[test]
-#[ignore] // Run explicitly with: cargo test --test dhat_profiling_test --ignored -- profile_config_access
+#[ignore = "Run explicitly with: cargo test --test dhat_profiling_test --ignored -- profile_config_access"]
 fn profile_config_access() {
     let _profiler = dhat::Profiler::new_heap();
 
