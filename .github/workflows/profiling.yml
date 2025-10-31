@@ -134,35 +134,67 @@ jobs:
             Write-Host "samply exited (expected - test completed)"
           }
 
-          # Check for generated files (samply creates .etl and .kernel.etl)
+          # Check for generated files (samply with --save-only may create various formats)
           Write-Host "`nLooking for profiling output files..."
           Get-ChildItem profiling-results/ -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "  Found: $($_.Name)"
+            if ($_.PSIsContainer) {
+              Write-Host "  Found directory: $($_.Name)"
+              # List contents if it's a directory
+              Get-ChildItem $_.FullName -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "    - $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+              }
+            } else {
+              Write-Host "  Found file: $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+            }
           }
 
-          # Check that ETL file was created
-          $etlFiles = @(
+          # Check that profile data was created (file, directory, or ETL)
+          $profilePaths = @(
+            "profiling-results/cpu-profile",
+            "profiling-results/cpu-profile.json",
             "profiling-results/cpu-profile.etl",
             "profiling-results/cpu-profile.kernel.etl"
           )
 
-          $etlFound = $false
-          foreach ($etlFile in $etlFiles) {
-            if (Test-Path $etlFile) {
-              $etlFound = $true
-              $fileSize = (Get-Item $etlFile).Length / 1MB
-              Write-Host "Found ETL file: $etlFile ($([math]::Round($fileSize, 2)) MB)"
+          $profileFound = $false
+          $profilePath = ""
+          $isDirectory = $false
+
+          foreach ($path in $profilePaths) {
+            if (Test-Path $path) {
+              $item = Get-Item $path
+              $profileFound = $true
+              $profilePath = $path
+              $isDirectory = $item.PSIsContainer
+
+              if ($isDirectory) {
+                Write-Host "`nFound profile directory: $profilePath"
+                $dirSize = (Get-ChildItem $profilePath -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum / 1MB
+                Write-Host "  Total size: $([math]::Round($dirSize, 2)) MB"
+              } else {
+                $fileSize = $item.Length / 1MB
+                Write-Host "`nFound profile file: $profilePath ($([math]::Round($fileSize, 2)) MB)"
+              }
+              break
             }
           }
 
-          if (!$etlFound) {
+          if (!$profileFound) {
             Write-Warning "No profiling data generated. This may happen if samply couldn't start."
-            Write-Warning "The test should have run for 30 seconds and generated an ETL file."
+            Write-Warning "The test should have run for 30 seconds and generated profile data."
             exit 1
           }
 
-          Write-Host "`nETL file will be uploaded for manual conversion to JSON"
-          Write-Host "The profile should show symbolicated function names (e.g., easyhdr::monitor::process_monitor::poll_processes)"
+          # Detect format
+          if ($isDirectory) {
+            Write-Host "Profile is stored in a directory structure (may contain multiple files)"
+          } elseif ($profilePath -match "\.etl$") {
+            Write-Host "Profile is in ETL format (needs manual conversion)"
+          } else {
+            Write-Host "Profile appears to be in processed format (check contents for JSON)"
+          }
+
+          Write-Host "`nThe profile should show symbolicated function names (e.g., easyhdr::monitor::process_monitor::poll_processes)"
 
       - name: Generate profiling report
         run: |
@@ -186,11 +218,26 @@ jobs:
           - ``easyhdr::controller::app_controller::handle_process_event``
           - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot``
 
-          ## Converting ETL to Firefox Profiler JSON
+          ## Viewing the Profile
 
-          This artifact contains a Windows ETL (Event Trace Log) file with **full debug symbols** that needs manual conversion.
+          This artifact contains profiling data with **full debug symbols** from the 30-second CPU profiling test.
 
-          ### Quick Method: Portable Samply (No Installation)
+          ### Option 1: Direct JSON Profile (Recommended)
+
+          If the artifact contains a ``cpu-profile`` or ``cpu-profile.json`` file (generated with ``--save-only``):
+
+          1. **Download this artifact** and extract the profile file
+          2. **Open Firefox Profiler:**
+             - Go to [https://profiler.firefox.com/](https://profiler.firefox.com/)
+             - Click "Load a profile from file"
+             - Select the ``cpu-profile`` or ``cpu-profile.json`` file
+          3. **Analyze!** The profile is ready to use immediately, no conversion needed.
+
+          ### Option 2: Converting ETL Files (If Present)
+
+          If the artifact contains ``.etl`` or ``.kernel.etl`` files instead:
+
+          #### Quick Method: Portable Samply
 
           1. **Download samply portable:**
              - [samply-x86_64-pc-windows-msvc.zip](https://github.com/mstange/samply/releases/download/samply-v0.13.1/samply-x86_64-pc-windows-msvc.zip) (14.2 MB)
@@ -209,7 +256,7 @@ jobs:
              - Click "Load a profile from file"
              - Select ``profile.json``
 
-          ### Alternative: Install via Cargo
+          #### Alternative: Install via Cargo
 
           If you have Rust installed:
           ``````bash
@@ -217,15 +264,6 @@ jobs:
           samply import cpu-profile.kernel.etl
           # Press Ctrl+C after profile.json is created
           ``````
-
-          ### From WSL2 (Linux)
-
-          The ETL file can be accessed from WSL2 at:
-          ``````
-          /mnt/c/Users/YourUsername/Downloads/cpu-profile.kernel.etl
-          ``````
-
-          However, samply requires Windows to process ETL files (they use Windows-specific APIs).
 
           ## What to Look For (Phase 0 Success Criteria)
 
@@ -247,9 +285,9 @@ jobs:
           - **String allocations:** Look for allocation-heavy paths in process name extraction
           - **Lock contention:** Look for ``parking_lot::Mutex::lock`` calls
 
-          ## Why No Automatic Conversion?
+          ## Note on CI Generation
 
-          ``samply import`` starts a web server and waits for user input (Ctrl+C), making it incompatible with automated CI environments. Manual conversion takes ~10-30 seconds.
+          This profile was generated in CI using ``samply record --save-only`` to avoid hanging on the web server. The ``--save-only`` flag processes the ETL trace and creates a Firefox Profiler-compatible output without requiring manual conversion.
 
           ## Troubleshooting
 
