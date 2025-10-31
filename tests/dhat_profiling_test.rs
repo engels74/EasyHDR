@@ -316,15 +316,17 @@ fn profile_production_allocation_patterns() {
     // Create shutdown signal for graceful thread coordination
     // Guideline Line 96: std::sync::atomic for non-async shutdown signaling
     let shutdown = Arc::new(AtomicBool::new(false));
-    let monitor_shutdown = shutdown.clone();
-    let controller_shutdown = shutdown.clone();
+    let _monitor_shutdown = shutdown.clone();
+    let _controller_shutdown = shutdown.clone();
     let consumer_shutdown = shutdown.clone();
 
     // Start the process monitor thread (exercises poll_processes)
-    let monitor_handle = monitor.start();
+    // Note: Handle intentionally unused - thread runs in infinite loop and will be cleaned up on process exit
+    let _monitor_handle = monitor.start();
 
     // Start the event loop in a separate thread (exercises handle_process_event)
-    let event_handle = thread::spawn(move || {
+    // Note: Handle intentionally unused - thread runs in infinite loop and will be cleaned up on process exit
+    let _event_handle = thread::spawn(move || {
         // Note: AppController::run() has infinite loop - we'll let it run until process exits
         // Thread will be cleaned up when process terminates
         controller.run();
