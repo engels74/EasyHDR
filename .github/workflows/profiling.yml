@@ -146,7 +146,9 @@ jobs:
 
       - name: Generate profiling report
         run: |
-          @"
+          Write-Host "Generating profiling report README..."
+
+          $readmeContent = @"
           # CPU Profiling Results (flamegraph)
 
           **Commit:** ${{ github.sha }}
@@ -225,7 +227,11 @@ jobs:
           1. Confirm ``poll_processes`` is the main CPU hotspot (Phase 0 baseline)
           2. Identify allocation-heavy paths (complement with DHAT profiling)
           3. Document baseline metrics in ``docs/performance_plan.md``
-          "@ | Out-File -FilePath profiling-results/README.md -Encoding UTF8
+          "@
+
+          $readmeContent | Out-File -FilePath profiling-results/README.md -Encoding UTF8
+
+          Write-Host "✓ Profiling report generated successfully"
 
       - name: Upload CPU profiling artifacts
         uses: actions/upload-artifact@v4
