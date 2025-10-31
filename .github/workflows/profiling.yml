@@ -127,9 +127,9 @@ jobs:
 
           # Run samply with the profiling test
           # The test runs for 30 seconds and exercises the hot paths
-          # Note: samply will try to open browser, but that will fail in CI (expected)
+          # Use --save-only to prevent opening browser/web server in CI
           try {
-            samply record -o profiling-results/cpu-profile -- $testBinary.FullName --exact --nocapture profile_process_monitoring_hot_paths
+            samply record --save-only -o profiling-results/cpu-profile -- $testBinary.FullName --exact --nocapture profile_process_monitoring_hot_paths
           } catch {
             Write-Host "samply exited (expected - test completed)"
           }
