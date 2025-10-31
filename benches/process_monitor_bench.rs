@@ -189,11 +189,158 @@ fn bench_string_allocations(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark simulated `poll_processes()` with varying workloads (Phase 4.1 requirement)
+///
+/// This benchmark simulates the complete poll cycle to test algorithmic complexity
+/// with different process counts and monitored app counts. Tests the O(n) vs O(1)
+/// lookup patterns that Phase 1-3 optimizations will address.
+///
+/// **Test Matrix:** 3 process counts × 4 app counts = 12 combinations
+/// - Process counts: 100, 250, 500 (realistic Windows workloads)
+/// - Monitored apps: 1, 5, 10, 50
+///
+/// **What this measures:**
+/// - O(n) monitored app lookup (current implementation)
+/// - String allocation overhead from process name extraction
+/// - HashSet operations for process diffing
+///
+/// **Guideline compliance:**
+/// - Line 114: Pre-allocate with `Vec::with_capacity`
+/// - Line 120: Use iterator adapters
+/// - Line 148: Use `black_box()` to prevent optimizer elision
+fn bench_poll_processes_simulation(c: &mut Criterion) {
+    use std::collections::HashSet;
+
+    let mut group = c.benchmark_group("poll_processes_simulation");
+
+    // Test matrix: varying process counts and monitored app counts
+    for num_processes in [100, 250, 500] {
+        for num_apps in [1, 5, 10, 50] {
+            let id = format!("{}_procs_{}_apps", num_processes, num_apps);
+
+            group.bench_with_input(
+                BenchmarkId::from_parameter(id),
+                &(num_processes, num_apps),
+                |b, &(procs, apps)| {
+                    // Setup: Pre-allocate per Guideline Line 114
+                    let mock_pids: Vec<u32> = (1000..1000 + procs as u32).collect();
+                    let monitored_apps = create_mock_config(apps);
+                    let mut current_processes = HashSet::with_capacity(procs);
+                    let mut previous_processes = HashSet::new();
+
+                    // Simulate realistic process names (Windows 10/11 common processes)
+                    let process_names = [
+                        "svchost",
+                        "explorer",
+                        "chrome",
+                        "firefox",
+                        "msedge",
+                        "Code",
+                        "Discord",
+                        "Teams",
+                        "Outlook",
+                        "Excel",
+                        "Word",
+                        "PowerPoint",
+                        "notepad",
+                        "cmd",
+                        "powershell",
+                        "WinStore.App",
+                        "Calculator",
+                        "Photos",
+                        "Mail",
+                        "Calendar",
+                        "GameBar",
+                        "Xbox",
+                        "Spotify",
+                        "Steam",
+                        "obs64",
+                        "Photoshop",
+                        "Premiere Pro",
+                        "Blender",
+                        "Unity",
+                        "UnrealEngine",
+                        // Fill remaining with generic names
+                        "process_a",
+                        "process_b",
+                        "process_c",
+                        "process_d",
+                        "process_e",
+                        "process_f",
+                        "process_g",
+                        "process_h",
+                        "process_i",
+                        "process_j",
+                        "service_a",
+                        "service_b",
+                        "service_c",
+                        "service_d",
+                        "service_e",
+                        "app_a",
+                        "app_b",
+                        "app_c",
+                        "app_d",
+                        "app_e",
+                    ];
+
+                    b.iter(|| {
+                        current_processes.clear();
+
+                        // Simulate poll cycle (Guideline Line 120: iterator adapters)
+                        for &pid in &mock_pids {
+                            // Simulate process name extraction (uses modulo for variety)
+                            let process_name = process_names[(pid as usize) % process_names.len()];
+
+                            // Simulate O(n) monitored app lookup (current implementation)
+                            // This is what Phase 3.2 will optimize to O(1) HashSet lookup
+                            let guard = monitored_apps.lock();
+                            let is_monitored = guard.monitored_apps.iter().any(|app| {
+                                if let MonitoredApp::Win32(win32_app) = app {
+                                    // Simulate string comparison overhead
+                                    win32_app.process_name == process_name
+                                } else {
+                                    false
+                                }
+                            });
+                            drop(guard);
+
+                            if is_monitored {
+                                // Simulate inserting into current_processes HashSet
+                                black_box(current_processes.insert(pid));
+                            }
+                        }
+
+                        // Simulate process diffing (new vs previous)
+                        let new_processes: Vec<_> = current_processes
+                            .difference(&previous_processes)
+                            .copied()
+                            .collect();
+                        let removed_processes: Vec<_> = previous_processes
+                            .difference(&current_processes)
+                            .copied()
+                            .collect();
+
+                        // Use black_box to prevent optimizer from eliding work
+                        black_box(&new_processes);
+                        black_box(&removed_processes);
+
+                        // Swap sets for next iteration
+                        std::mem::swap(&mut current_processes, &mut previous_processes);
+                    });
+                },
+            );
+        }
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_monitored_app_lookup,
     bench_watch_list_clone,
     bench_config_read_contention,
-    bench_string_allocations
+    bench_string_allocations,
+    bench_poll_processes_simulation
 );
 criterion_main!(benches);

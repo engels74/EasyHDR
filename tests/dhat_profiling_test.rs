@@ -43,6 +43,8 @@ use easyhdr::monitor::ProcessMonitor;
 #[cfg(windows)]
 use parking_lot::Mutex;
 #[cfg(windows)]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(windows)]
 use std::sync::mpsc;
 #[cfg(windows)]
 use std::thread;
@@ -265,18 +267,25 @@ fn profile_config_access() {
 /// - Allocation rate: 200-500 allocs/sec
 /// - Runtime: ~30 seconds (not microseconds)
 /// - Stack traces show `poll_processes`, `detect_uwp_process`, `String::from`
+///
+/// **Implementation notes:**
+/// - Warmup period (5s) BEFORE DHAT profiling starts to exclude startup allocations
+/// - Shutdown signal using `Arc<AtomicBool>` for graceful thread coordination
+/// - Guideline: Line 96 - std::sync primitives for non-async code
 #[test]
 #[cfg(windows)]
 fn profile_production_allocation_patterns() {
-    let _profiler = dhat::Profiler::new_heap();
-
     println!("\n=== DHAT Allocation Profiling Test ===");
-    println!("This test will run for 30 seconds to collect allocation samples.");
+    println!("This test will run for 35 seconds total (5s warmup + 30s profiling)");
     println!("Expected allocation patterns:");
     println!("  - Process name extraction (String::from)");
     println!("  - AppIdentifier creation in poll_processes");
     println!("  - Watch list cloning overhead");
     println!("  - UWP detection allocations\n");
+
+    // Warmup phase: establish steady state before profiling
+    println!("Phase 1: Warmup (5 seconds) - establishing steady state...");
+    println!("  (Threads starting, caches populating, allocations NOT profiled)\n");
 
     // Create a realistic configuration with multiple monitored apps
     let config = create_profiling_config();
@@ -304,41 +313,83 @@ fn profile_production_allocation_patterns() {
     )
     .expect("Failed to create AppController");
 
+    // Create shutdown signal for graceful thread coordination
+    // Guideline Line 96: std::sync::atomic for non-async shutdown signaling
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let monitor_shutdown = shutdown.clone();
+    let controller_shutdown = shutdown.clone();
+    let consumer_shutdown = shutdown.clone();
+
     // Start the process monitor thread (exercises poll_processes)
-    let _monitor_handle = monitor.start();
+    let monitor_handle = monitor.start();
 
     // Start the event loop in a separate thread (exercises handle_process_event)
-    let _event_handle = thread::spawn(move || {
+    let event_handle = thread::spawn(move || {
+        // Note: AppController::run() has infinite loop - we'll let it run until process exits
+        // Thread will be cleaned up when process terminates
         controller.run();
     });
 
     // Consume state updates to prevent channel from filling up
-    let _state_consumer = thread::spawn(move || {
-        while state_rx.recv().is_ok() {
-            // Just drain the channel
+    let state_consumer = thread::spawn(move || {
+        while !consumer_shutdown.load(Ordering::Relaxed) {
+            if state_rx.recv_timeout(Duration::from_millis(100)).is_err() {
+                // Channel closed or timeout - continue checking shutdown signal
+                continue;
+            }
         }
     });
 
-    // Run for 30 seconds to collect sufficient allocation samples
-    println!("Starting allocation profiling workload...");
-    let start = Instant::now();
-    let duration = Duration::from_secs(30);
+    // Warmup period: 5 seconds to allow threads to start and reach steady state
+    let warmup_start = Instant::now();
+    let warmup_duration = Duration::from_secs(5);
+
+    while warmup_start.elapsed() < warmup_duration {
+        let elapsed = warmup_start.elapsed().as_secs();
+        if elapsed > 0 && elapsed % 1 == 0 {
+            println!("  Warmup... {}s / 5s", elapsed);
+        }
+        thread::sleep(Duration::from_millis(500));
+    }
+
+    println!("\nPhase 2: Starting DHAT allocation profiling (30 seconds)...\n");
+
+    // NOW start DHAT profiler (after warmup completes)
+    let _profiler = dhat::Profiler::new_heap();
+
+    // Run profiling for 30 seconds to collect allocation samples
+    let profile_start = Instant::now();
+    let profile_duration = Duration::from_secs(30);
 
     let mut last_print = 0;
-    while start.elapsed() < duration {
-        let elapsed = start.elapsed().as_secs();
+    while profile_start.elapsed() < profile_duration {
+        let elapsed = profile_start.elapsed().as_secs();
         if elapsed > 0 && elapsed >= last_print + 5 {
-            println!("  Profiling... {}s / {}s", elapsed, duration.as_secs());
+            println!(
+                "  Profiling... {}s / {}s",
+                elapsed,
+                profile_duration.as_secs()
+            );
             last_print = elapsed;
         }
         thread::sleep(Duration::from_secs(1));
     }
 
-    println!("Allocation profiling complete.");
+    println!("\nPhase 3: Profiling complete, shutting down threads...");
 
-    // Note: We can't gracefully stop the threads (they run in infinite loops)
-    // but that's okay for profiling purposes - the process will exit and DHAT
-    // will write dhat-heap.json automatically
+    // Signal shutdown to threads
+    // Ordering::Relaxed is sufficient - this is just a shutdown flag (Guideline Line 96)
+    shutdown.store(true, Ordering::Relaxed);
+
+    // Give threads a moment to see shutdown signal
+    thread::sleep(Duration::from_millis(500));
+
+    // Note: ProcessMonitor and AppController run in infinite loops
+    // We cannot gracefully join them, but DHAT will flush data on process exit
+    // The state_consumer thread should exit cleanly
+    drop(state_consumer);
+
+    println!("DHAT profiling data collected (dhat-heap.json will be written on process exit)");
 
     println!("\n=== DHAT Profiling Test Complete ===");
     println!("Next steps:");
@@ -349,6 +400,7 @@ fn profile_production_allocation_patterns() {
     println!("   - detect_uwp_process overhead");
     println!("   - AppIdentifier creation patterns");
     println!("4. Verify allocation rate is 200-500 allocs/sec");
+    println!("5. Check that warmup allocations are excluded from profile\n");
 }
 
 /// Create a realistic configuration for profiling (matches cpu_profiling_test.rs)
