@@ -89,7 +89,7 @@ This baseline enables:
 
 ---
 
-## Phase 1: API Call Reduction (Week 1)
+## Phase 1: API Call Reduction
 
 **Goal:** Reduce Windows API calls by 90%
 
@@ -175,7 +175,7 @@ DHAT_PROFILER=1 cargo test --release
 
 ---
 
-## Phase 2: Lock Contention Elimination (Week 2)
+## Phase 2: Lock Contention Elimination
 
 **Goal:** Remove allocation overhead and lock contention
 
@@ -233,7 +233,7 @@ cargo test --test integration_tests --release -- --test-threads=1
 
 ---
 
-## Phase 3: Read-Heavy Optimizations (Week 3)
+## Phase 3: Read-Heavy Optimizations
 
 **Goal:** O(n) → O(1) lookups, concurrent reads
 
@@ -277,7 +277,7 @@ cargo test --test integration_tests --release -- --test-threads=1
 
 ---
 
-## Phase 4: Validation & Tuning (Week 4)
+## Phase 4: Validation & Tuning
 
 ### 4.1 Comprehensive Benchmarks
 **New file:** `benches/process_monitor_bench.rs`
@@ -378,24 +378,22 @@ drmemory -light -- ./target/release/easyhdr.exe
 
 ## Implementation Checklist
 
-### Phase 0 (Baseline - REQUIRED FIRST)
-- [ ] Run flamegraph CPU profiling
-- [ ] Run DHAT allocation profiling
-- [ ] Create Criterion baseline benchmarks
-- [ ] Document hot paths and baseline metrics
-- [ ] Create feature branch: `feat/performance-optimization`
+### Phase 0 (Baseline)
+- [x] ✅ **COMPLETE** - Baseline established (see Phase 0 section for metrics)
 
 ### Phase 1 (API Reduction)
 - [ ] 1.1 Post-identification filtering with RwLock implemented
 - [ ] 1.1 Shared cache synchronization protocol established (ProcessMonitor ↔ AppController)
 - [ ] 1.2 AppIdentifier cache with PID reuse test implemented (if Phase 0 confirms)
 - [ ] 1.2 Cache hit rate instrumentation added (tracing)
+- [ ] 1.2 Benchmark executed: `cargo bench --bench process_monitor_bench`
 - [ ] UWP detection still works correctly
 - [ ] Integration tests pass
 
 ### Phase 2 (Lock Elimination)
 - [ ] 2.1 Double-Arc watch list implemented
 - [ ] 2.2 Atomic timestamp implemented
+- [ ] 2.2 Debounce tests pass: `cargo test --lib debounce`
 - [ ] Memory profiling shows 95% allocation reduction
 - [ ] All tests pass
 
@@ -413,35 +411,23 @@ drmemory -light -- ./target/release/easyhdr.exe
 - [ ] 4.2 24-hour stability test shows stable RSS (no leaks)
 - [ ] 4.3 Channel capacity tuned with backpressure monitoring (optional)
 - [ ] 4.4 Real-world validation with 3-5 apps from test list (CRITICAL)
+- [ ] 4.4 Cache correctness verified (PID reuse, cache hit rate >80% via tracing)
 - [ ] 4.4 Cross-version testing on Win10/11/11-24H2+ via GitHub Actions/VMs
 - [ ] Documentation updated
 
 ### Final Validation
-- [ ] Phase 0 baseline documented
+- [x] Phase 0 baseline documented
 - [ ] All benchmarks show target improvements vs baseline
 - [ ] Flamegraph confirms hotspots resolved
 - [ ] No performance regressions in any scenario
 - [ ] 24-hour stability test passed
+- [ ] Property tests pass (cache coherence, debounce invariants, PID reuse)
 - [ ] Integration tests pass: `cargo test --test integration_tests --release -- --test-threads=1`
 - [ ] Unit tests pass: `cargo test --lib --release`
 - [ ] Clippy clean: `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] PR ready for review
 
 ---
-
-## Rollback Plan
-
-Each phase is independently revertible:
-
-1. **Phase 1 fail:** Revert filtering logic, keep existing `poll_processes()` implementation
-2. **Phase 2 fail:** Revert to `Arc<Mutex<T>>` patterns, remove atomic timestamp
-3. **Phase 3 fail:** Revert to `Mutex`, remove HashSet cache
-4. **Phase 4 fail:** Restore default channel capacity (32)
-
-**Git Strategy:**
-- Create branch per phase: `feat/perf-phase-1`, `feat/perf-phase-2`, etc.
-- Merge to main only after phase validation
-- Tag baseline: `v0.1.4-perf-baseline`
 
 ---
 
@@ -482,9 +468,3 @@ Each phase is independently revertible:
 **Decision:** Thread-based concurrency with crossbeam channels
 **Rationale:** Windows APIs (CreateToolhelp32Snapshot, OpenProcess, DisplayConfig) are inherently blocking; polling-based monitoring (500-1000ms) has no benefit from async task switching; thread overhead negligible for 2-3 threads. Adding Tokio would introduce runtime complexity without performance gains.
 **Guideline Alignment:** "Never block the async runtime" ([rust-dev-guidelines.md:85-86](../.claude/rust-dev-guidelines.md)) — we avoid this by not using async where blocking is inherent.
-
----
-
-**Estimated Total Time:** 4-5 weeks (includes Phase 0 baseline + Phase 4.4 real-world validation)
-**Risk Level:** Low-Medium (Phase 0 reduces uncertainty; cache coordination requires care)
-**Breaking Changes:** None (internal optimizations only)
