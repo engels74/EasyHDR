@@ -41,9 +41,7 @@ use easyhdr::controller::AppController;
 #[cfg(windows)]
 use easyhdr::monitor::ProcessMonitor;
 #[cfg(windows)]
-use parking_lot::{Mutex, RwLock};
-#[cfg(windows)]
-use std::collections::HashSet;
+use parking_lot::Mutex;
 #[cfg(windows)]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
@@ -301,9 +299,10 @@ fn profile_production_allocation_patterns() {
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
 
-    // Create watch list with monitored apps
+    // Create watch list with monitored apps using double-Arc pattern
+    // This matches the production implementation for lock-free reads
     let apps = create_monitored_apps();
-    let watch_list = Arc::new(Mutex::new(apps.clone()));
+    let watch_list = Arc::new(Mutex::new(Arc::new(apps.clone())));
 
     // Create process monitor with aggressive polling (500ms) to maximize allocations
     let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
@@ -350,10 +349,8 @@ fn profile_production_allocation_patterns() {
     // Consume state updates to prevent channel from filling up
     let state_consumer = thread::spawn(move || {
         while !consumer_shutdown.load(Ordering::Relaxed) {
-            if state_rx.recv_timeout(Duration::from_millis(100)).is_err() {
-                // Channel closed or timeout - continue checking shutdown signal
-                continue;
-            }
+            // Drain the channel with timeout to check shutdown signal periodically
+            let _ = state_rx.recv_timeout(Duration::from_millis(100));
         }
     });
 
