@@ -202,12 +202,16 @@ fn bench_string_allocations(c: &mut Criterion) {
 /// **What this measures:**
 /// - O(n) monitored app lookup (current implementation)
 /// - String allocation overhead from process name extraction
-/// - HashSet operations for process diffing
+/// - `HashSet` operations for process diffing
 ///
 /// **Guideline compliance:**
 /// - Line 114: Pre-allocate with `Vec::with_capacity`
 /// - Line 120: Use iterator adapters
 /// - Line 148: Use `black_box()` to prevent optimizer elision
+#[expect(
+    clippy::too_many_lines,
+    reason = "Benchmark function includes comprehensive test matrix (12 combinations) with setup/teardown code"
+)]
 fn bench_poll_processes_simulation(c: &mut Criterion) {
     use std::collections::HashSet;
 
@@ -216,13 +220,17 @@ fn bench_poll_processes_simulation(c: &mut Criterion) {
     // Test matrix: varying process counts and monitored app counts
     for num_processes in [100, 250, 500] {
         for num_apps in [1, 5, 10, 50] {
-            let id = format!("{}_procs_{}_apps", num_processes, num_apps);
+            let id = format!("{num_processes}_procs_{num_apps}_apps");
 
             group.bench_with_input(
                 BenchmarkId::from_parameter(id),
                 &(num_processes, num_apps),
                 |b, &(procs, apps)| {
                     // Setup: Pre-allocate per Guideline Line 114
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "Benchmark procs parameter is limited to [100, 250, 500], well within u32 range"
+                    )]
                     let mock_pids: Vec<u32> = (1000..1000 + procs as u32).collect();
                     let monitored_apps = create_mock_config(apps);
                     let mut current_processes = HashSet::with_capacity(procs);

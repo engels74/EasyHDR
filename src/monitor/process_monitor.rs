@@ -12,7 +12,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-#[cfg(any(windows, test))]
+// Ordering used for poll_cycle_count atomic operations (test diagnostics)
 use std::sync::atomic::Ordering;
 
 #[cfg(windows)]
@@ -82,7 +82,9 @@ pub struct ProcessMonitor {
     #[cfg_attr(not(windows), allow(dead_code))]
     estimated_process_count: usize,
     /// Number of completed poll cycles (for testing/diagnostics)
-    #[cfg_attr(not(test), allow(dead_code))]
+    ///
+    /// Used by both unit tests and integration tests (e.g., DHAT profiling).
+    /// Always compiled but only accessed through `#[doc(hidden)]` test methods.
     poll_cycle_count: Arc<AtomicU64>,
 }
 
@@ -129,7 +131,13 @@ impl ProcessMonitor {
     /// - No happens-before relationship needed with other operations
     /// - Approximate count is acceptable (exact synchronization not required)
     /// - Counter only increases monotonically (no complex state dependencies)
-    #[cfg(test)]
+    ///
+    /// # Test-Only API
+    ///
+    /// Hidden from documentation as this is internal test infrastructure.
+    /// Integration tests are compiled as separate crates, so `cfg(test)` doesn't apply.
+    /// This method is always compiled but hidden from docs to signal test-only usage.
+    #[doc(hidden)]
     pub fn get_poll_cycle_count(&self) -> u64 {
         self.poll_cycle_count.load(Ordering::Relaxed)
     }
@@ -143,7 +151,13 @@ impl ProcessMonitor {
     /// # Memory Ordering
     ///
     /// Loads use `Ordering::Relaxed` for the same reasons as `get_poll_cycle_count()`.
-    #[cfg(test)]
+    ///
+    /// # Test-Only API
+    ///
+    /// Hidden from documentation as this is internal test infrastructure.
+    /// Integration tests are compiled as separate crates, so `cfg(test)` doesn't apply.
+    /// This method is always compiled but hidden from docs to signal test-only usage.
+    #[doc(hidden)]
     pub fn get_poll_cycle_count_ref(&self) -> Arc<AtomicU64> {
         Arc::clone(&self.poll_cycle_count)
     }
