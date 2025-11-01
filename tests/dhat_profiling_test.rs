@@ -253,11 +253,11 @@ fn profile_config_access() {
 
 /// Profile production allocation patterns (Phase 0 baseline requirement)
 ///
-/// This test exercises the full ProcessMonitor and AppController workload
+/// This test exercises the full `ProcessMonitor` and `AppController` workload
 /// for 30 seconds to capture realistic allocation patterns from production code.
 ///
 /// **Test phases:**
-/// 1. **Thread verification (up to 10s)**: Waits for ProcessMonitor to complete
+/// 1. **Thread verification (up to 10s)**: Waits for `ProcessMonitor` to complete
 ///    at least 3 poll cycles to ensure threads are healthy before profiling
 /// 2. **DHAT profiling (30s)**: Captures allocations from production workload
 /// 3. **Shutdown**: Signals threads to stop and waits for cleanup
@@ -265,8 +265,8 @@ fn profile_config_access() {
 /// **Expected to profile:**
 /// - `poll_processes()` string allocations (~250 per poll)
 /// - Process name extraction from Windows APIs
-/// - AppIdentifier creation and cloning
-/// - Watch list clones in event handling (AppController)
+/// - `AppIdentifier` creation and cloning
+/// - Watch list clones in event handling (`AppController`)
 /// - UWP detection allocations
 ///
 /// **Phase 0 Success Criteria:**
@@ -277,11 +277,12 @@ fn profile_config_access() {
 ///
 /// **Implementation notes:**
 /// - Thread verification prevents capturing failed/non-running threads
-/// - Uses atomic counter to verify ProcessMonitor is actively polling
+/// - Uses atomic counter to verify `ProcessMonitor` is actively polling
 /// - Test panics if threads don't start within 10 seconds (fail-fast)
 /// - Guideline compliance: Relaxed ordering for diagnostic counter (Line 96-100)
 #[test]
 #[cfg(windows)]
+#[allow(clippy::too_many_lines)]
 fn profile_production_allocation_patterns() {
     println!("\n=== DHAT Allocation Profiling Test ===");
     println!("This test will run for ~40 seconds total (up to 10s verification + 30s profiling)");
@@ -365,24 +366,19 @@ fn profile_production_allocation_patterns() {
         let cycle_count = poll_counter.load(Ordering::Relaxed);
 
         if cycle_count >= 3 {
-            println!(
-                "  ✓ ProcessMonitor verified: {} poll cycles completed",
-                cycle_count
-            );
+            println!("  ✓ ProcessMonitor verified: {cycle_count} poll cycles completed");
             println!("  ✓ Threads are healthy and allocating\n");
             break;
         }
 
-        if verification_start.elapsed() > verification_timeout {
-            panic!(
-                "ProcessMonitor failed to complete 3 poll cycles within 10 seconds. \
-                Completed: {} cycles. This indicates threads are not running or poll_processes() is failing.",
-                cycle_count
-            );
-        }
+        assert!(
+            verification_start.elapsed() <= verification_timeout,
+            "ProcessMonitor failed to complete 3 poll cycles within 10 seconds. \
+                Completed: {cycle_count} cycles. This indicates threads are not running or poll_processes() is failing."
+        );
 
         if cycle_count > 0 {
-            println!("  In progress... {} poll cycles completed", cycle_count);
+            println!("  In progress... {cycle_count} poll cycles completed");
         }
 
         thread::sleep(Duration::from_millis(500));
@@ -414,10 +410,7 @@ fn profile_production_allocation_patterns() {
 
     let final_cycle_count = poll_counter.load(Ordering::Relaxed);
     println!("\nPhase 3: Profiling complete, shutting down threads...");
-    println!(
-        "  Total poll cycles during profiling: {}",
-        final_cycle_count
-    );
+    println!("  Total poll cycles during profiling: {final_cycle_count}");
     println!(
         "  Expected allocations: {} to {} (200-300 allocs/poll)",
         final_cycle_count * 200,
@@ -450,17 +443,19 @@ fn profile_production_allocation_patterns() {
     println!("5. Check that warmup allocations are excluded from profile\n");
 }
 
-/// Create a realistic configuration for profiling (matches cpu_profiling_test.rs)
+/// Create a realistic configuration for profiling (matches `cpu_profiling_test.rs`)
 #[cfg(windows)]
 fn create_profiling_config() -> AppConfig {
-    let mut preferences = UserPreferences::default();
-    preferences.monitoring_interval_ms = 500; // Aggressive polling for profiling
-    preferences.auto_start = false;
+    let preferences = UserPreferences {
+        monitoring_interval_ms: 500, // Aggressive polling for profiling
+        auto_start: false,
+        ..Default::default()
+    };
 
     AppConfig {
         monitored_apps: create_monitored_apps(),
         preferences,
-        window_state: Default::default(),
+        window_state: WindowState::default(),
     }
 }
 
