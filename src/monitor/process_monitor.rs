@@ -12,7 +12,7 @@ use std::sync::{Arc, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 use std::sync::atomic::Ordering;
 
 #[cfg(windows)]
