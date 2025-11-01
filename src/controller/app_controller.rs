@@ -100,7 +100,14 @@ impl AppController {
     ///
     /// - Line 47-49: "applications use anyhow with context"
     /// - Line 111: "See tests/dhat_profiling_test.rs for phase-specific profiling"
-    #[cfg(test)]
+    ///
+    /// # Note
+    ///
+    /// This method is available in both unit tests and integration tests.
+    /// The `#[doc(hidden)]` attribute hides it from public documentation, but it remains
+    /// accessible to integration tests in the `tests/` directory.
+    #[doc(hidden)]
+    #[cfg(any(test, doctest))]
     pub fn new_with_mock_hdr(
         config: AppConfig,
         event_receiver: mpsc::Receiver<ProcessEvent>,

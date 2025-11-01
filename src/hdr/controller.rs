@@ -89,7 +89,14 @@ impl HdrController {
     ///
     /// - Line 111: "See tests/dhat_profiling_test.rs for phase-specific allocation profiling"
     /// - Line 153: "Minimize unsafe; document Safety invariants; encapsulate behind safe APIs"
-    #[cfg(test)]
+    ///
+    /// # Note
+    ///
+    /// This method is available in both unit tests and integration tests.
+    /// The `#[doc(hidden)]` attribute hides it from public documentation, but it remains
+    /// accessible to integration tests in the `tests/` directory.
+    #[doc(hidden)]
+    #[cfg(any(test, doctest))]
     pub fn new_mock() -> Result<Self> {
         Ok(Self {
             // Mock as Windows 11 (most common target)
