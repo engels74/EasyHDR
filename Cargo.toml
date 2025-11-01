@@ -45,7 +45,7 @@ tracing-appender = "0.2"
 # Concurrency
 parking_lot = "0.12"
 smallvec = { version = "1.15.1", features = ["union"] }
-rayon = "1.10"  # Parallel iterator processing for icon cache loading
+rayon = "1.11"  # Parallel iterator processing for icon cache loading
 
 # Image processing (for icon cache PNG encoding/decoding)
 image = { version = "0.25", default-features = false, features = ["ico", "png"] }
@@ -89,7 +89,7 @@ slint-build = "1.13"
 winres = "0.1"
 
 [dev-dependencies]
-proptest = "1.8"
+proptest = "1.9"
 criterion = "0.7"
 # Allocation profiling (Rust port of DHAT, works on Windows)
 dhat = "0.3"
