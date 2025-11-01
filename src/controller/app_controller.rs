@@ -6,7 +6,7 @@
 use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
 use crate::error::{EasyHdrError, Result};
 use crate::hdr::HdrController;
-use crate::monitor::{AppIdentifier, HdrStateEvent, ProcessEvent};
+use crate::monitor::{AppIdentifier, HdrStateEvent, ProcessEvent, WatchState};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -54,13 +54,12 @@ pub struct AppController {
     /// because precise synchronization is not needed for debouncing - approximate
     /// timing within ~500ms window is acceptable.
     last_toggle_time_nanos: Arc<AtomicU64>,
-    /// Reference to `ProcessMonitor`'s watch list for updating (Phase 2.1: Double-Arc)
-    process_monitor_watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
-    /// Shared cache of monitored app identifiers (Phase 1.1)
+    /// Reference to `ProcessMonitor`'s unified watch state (app list + identifier cache)
     ///
-    /// Synchronized with `ProcessMonitor` for fast O(1) lookups. Updated when
-    /// GUI modifies the monitored app list via `rebuild_monitored_identifiers()`.
-    monitored_identifiers: Arc<RwLock<HashSet<AppIdentifier>>>,
+    /// Shared with `ProcessMonitor` for atomic updates. Prevents race conditions where
+    /// `poll_processes()` could observe inconsistent state between the app list and
+    /// identifier cache during GUI updates.
+    watch_state: Arc<RwLock<WatchState>>,
 }
 
 impl AppController {
@@ -70,8 +69,7 @@ impl AppController {
         event_receiver: mpsc::Receiver<ProcessEvent>,
         hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
         gui_state_sender: mpsc::SyncSender<AppState>,
-        process_monitor_watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
-        monitored_identifiers: Arc<RwLock<HashSet<AppIdentifier>>>,
+        watch_state: Arc<RwLock<WatchState>>,
     ) -> Result<Self> {
         use tracing::info;
 
@@ -100,11 +98,10 @@ impl AppController {
             gui_state_sender,
             startup_time,
             last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
-            process_monitor_watch_list,
-            monitored_identifiers,
+            watch_state,
         };
 
-        // Phase 3.2: Initialize monitored_identifiers cache from config
+        // Phase 3.2: Initialize watch_state with enabled apps from config
         controller.update_process_monitor_watch_list();
 
         Ok(controller)
@@ -143,8 +140,7 @@ impl AppController {
         event_receiver: mpsc::Receiver<ProcessEvent>,
         hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
         gui_state_sender: mpsc::SyncSender<AppState>,
-        process_monitor_watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
-        monitored_identifiers: Arc<RwLock<HashSet<AppIdentifier>>>,
+        watch_state: Arc<RwLock<WatchState>>,
     ) -> Result<Self> {
         use tracing::info;
 
@@ -173,11 +169,10 @@ impl AppController {
             gui_state_sender,
             startup_time,
             last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
-            process_monitor_watch_list,
-            monitored_identifiers,
+            watch_state,
         };
 
-        // Phase 3.2: Initialize monitored_identifiers cache from config
+        // Phase 3.2: Initialize watch_state with enabled apps from config
         controller.update_process_monitor_watch_list();
 
         Ok(controller)
@@ -350,9 +345,9 @@ impl AppController {
                 // Phase 3.2: Use O(1) HashSet lookup instead of O(n) iteration
                 // Normalize the identifier for case-insensitive matching (Win32 only)
                 let normalized_id = Self::normalize_app_identifier(&app_id);
-                let monitored_ids = self.monitored_identifiers.read();
-                let is_monitored = monitored_ids.contains(&normalized_id);
-                drop(monitored_ids); // Release lock early
+                let state = self.watch_state.read();
+                let is_monitored = state.identifiers.contains(&normalized_id);
+                drop(state); // Release lock early
 
                 if is_monitored {
                     match &app_id {
@@ -390,9 +385,9 @@ impl AppController {
                 // Phase 3.2: Use O(1) HashSet lookup instead of O(n) iteration
                 // Normalize the identifier for case-insensitive matching (Win32 only)
                 let normalized_id = Self::normalize_app_identifier(&app_id);
-                let monitored_ids = self.monitored_identifiers.read();
-                let is_monitored = monitored_ids.contains(&normalized_id);
-                drop(monitored_ids); // Release lock early
+                let state = self.watch_state.read();
+                let is_monitored = state.identifiers.contains(&normalized_id);
+                drop(state); // Release lock early
 
                 if is_monitored {
                     match &app_id {
@@ -802,16 +797,15 @@ impl AppController {
             })
             .collect();
 
-        // Update both caches atomically (from caller's perspective)
-        // Phase 2.1: Wrap apps in Arc to enable cheap cloning during event handling
-        let mut watch_list = self.process_monitor_watch_list.lock();
-        *watch_list = Arc::new(monitored_apps);
-        drop(watch_list); // Release watch_list lock before acquiring write lock
+        // Atomically update both the app list and identifier cache
+        // This prevents race conditions where poll_processes() could see inconsistent state
+        let mut state = self.watch_state.write();
+        *state = WatchState {
+            apps: Arc::new(monitored_apps),
+            identifiers,
+        };
 
-        let mut monitored_ids = self.monitored_identifiers.write();
-        *monitored_ids = identifiers;
-
-        debug!("ProcessMonitor watch list and monitored identifiers cache updated");
+        debug!("ProcessMonitor watch state updated atomically");
     }
 }
 
@@ -911,16 +905,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         );
         assert!(controller.is_ok());
     }
@@ -941,16 +933,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -986,16 +976,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1024,16 +1012,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1062,16 +1048,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1116,16 +1100,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1192,16 +1174,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1250,16 +1230,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list.clone(),
-            monitored_identifiers.clone(),
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1284,9 +1262,9 @@ mod tests {
         drop(config);
 
         // Verify watch list was updated
-        let watch_list_guard = watch_list.lock();
-        assert_eq!(watch_list_guard.len(), 1);
-        assert!(watch_list_guard.iter().any(|app| {
+        let watch_state_guard = watch_state.read();
+        assert_eq!(watch_state_guard.apps.len(), 1);
+        assert!(watch_state_guard.apps.iter().any(|app| {
             if let MonitoredApp::Win32(win32_app) = app {
                 win32_app.process_name == "newapp"
             } else {
@@ -1315,16 +1293,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list.clone(),
-            monitored_identifiers.clone(),
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1338,8 +1314,8 @@ mod tests {
         drop(config);
 
         // Verify watch list was updated
-        let watch_list_guard = watch_list.lock();
-        assert_eq!(watch_list_guard.len(), 0);
+        let watch_state_guard = watch_state.read();
+        assert_eq!(watch_state_guard.apps.len(), 0);
     }
 
     #[test]
@@ -1362,25 +1338,23 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list.clone(),
-            monitored_identifiers.clone(),
+            watch_state.clone(),
         )
         .unwrap();
 
         // Initially populate watch list
         controller.update_process_monitor_watch_list();
         {
-            let watch_list_guard = watch_list.lock();
-            assert_eq!(watch_list_guard.len(), 1);
-            assert!(watch_list_guard.iter().any(|app| {
+            let watch_state_guard = watch_state.read();
+            assert_eq!(watch_state_guard.apps.len(), 1);
+            assert!(watch_state_guard.apps.iter().any(|app| {
                 if let MonitoredApp::Win32(win32_app) = app {
                     win32_app.process_name == "app"
                 } else {
@@ -1399,9 +1373,9 @@ mod tests {
         drop(config);
 
         // Verify watch list was updated (app should be removed)
-        let watch_list_guard = watch_list.lock();
-        assert_eq!(watch_list_guard.len(), 0);
-        drop(watch_list_guard);
+        let watch_state_guard = watch_state.read();
+        assert_eq!(watch_state_guard.apps.len(), 0);
+        drop(watch_state_guard);
 
         // Re-enable the application
         let result = controller.toggle_app_enabled(app_id, true);
@@ -1413,9 +1387,9 @@ mod tests {
         drop(config);
 
         // Verify watch list was updated (app should be added back)
-        let watch_list_guard = watch_list.lock();
-        assert_eq!(watch_list_guard.len(), 1);
-        assert!(watch_list_guard.iter().any(|app| {
+        let watch_state_guard = watch_state.read();
+        assert_eq!(watch_state_guard.apps.len(), 1);
+        assert!(watch_state_guard.apps.iter().any(|app| {
             if let MonitoredApp::Win32(win32_app) = app {
                 win32_app.process_name == "app"
             } else {
@@ -1434,16 +1408,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1502,16 +1474,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list.clone(),
-            monitored_identifiers.clone(),
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1519,23 +1489,23 @@ mod tests {
         controller.update_process_monitor_watch_list();
 
         // Verify only enabled apps are in watch list
-        let watch_list_guard = watch_list.lock();
-        assert_eq!(watch_list_guard.len(), 2);
-        assert!(watch_list_guard.iter().any(|app| {
+        let watch_state_guard = watch_state.read();
+        assert_eq!(watch_state_guard.apps.len(), 2);
+        assert!(watch_state_guard.apps.iter().any(|app| {
             if let MonitoredApp::Win32(win32_app) = app {
                 win32_app.process_name == "app1"
             } else {
                 false
             }
         }));
-        assert!(!watch_list_guard.iter().any(|app| {
+        assert!(!watch_state_guard.apps.iter().any(|app| {
             if let MonitoredApp::Win32(win32_app) = app {
                 win32_app.process_name == "app2"
             } else {
                 false
             }
         })); // Disabled
-        assert!(watch_list_guard.iter().any(|app| {
+        assert!(watch_state_guard.apps.iter().any(|app| {
             if let MonitoredApp::Win32(win32_app) = app {
                 win32_app.process_name == "app3"
             } else {
@@ -1559,16 +1529,14 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1607,16 +1575,14 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1659,16 +1625,14 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1728,16 +1692,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1807,16 +1769,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1880,16 +1840,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1925,16 +1883,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -1988,16 +1944,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -2060,16 +2014,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -2154,16 +2106,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 
@@ -2237,16 +2187,14 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-        let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+        let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
         let mut controller = AppController::new(
             config,
             event_rx,
             hdr_state_rx,
             state_tx,
-            watch_list,
-            monitored_identifiers,
+            watch_state.clone(),
         )
         .unwrap();
 

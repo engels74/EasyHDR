@@ -39,7 +39,7 @@ use uuid::Uuid;
 #[cfg(windows)]
 use easyhdr::controller::AppController;
 #[cfg(windows)]
-use easyhdr::monitor::ProcessMonitor;
+use easyhdr::monitor::{ProcessMonitor, WatchState};
 #[cfg(windows)]
 use parking_lot::Mutex;
 #[cfg(windows)]
@@ -300,10 +300,8 @@ fn profile_production_allocation_patterns() {
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
 
-    // Create watch list with monitored apps using double-Arc pattern
-    // This matches the production implementation for lock-free reads
+    // Create watch list with monitored apps
     let apps = create_monitored_apps();
-    let watch_list = Arc::new(Mutex::new(Arc::new(apps.clone())));
 
     // Create process monitor with aggressive polling (500ms) to maximize allocations
     let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
@@ -312,21 +310,15 @@ fn profile_production_allocation_patterns() {
     // Get reference to poll cycle counter BEFORE moving monitor into thread
     // This allows us to verify the monitor is actually running before profiling
     let poll_counter = monitor.get_poll_cycle_count_ref();
-    let monitored_identifiers = monitor.get_monitored_identifiers_ref();
+    let watch_state = monitor.get_watch_state_ref();
 
     // Create app controller using mock HDR controller (test-only)
     // The profiling test measures allocation patterns in ProcessMonitor and AppController,
     // but doesn't exercise HDR functionality. Using new_with_mock_hdr() avoids Windows API
     // failures in CI environments while still profiling the complete production workload.
-    let mut controller = AppController::new_with_mock_hdr(
-        config,
-        process_rx,
-        hdr_state_rx,
-        state_tx,
-        watch_list.clone(),
-        monitored_identifiers,
-    )
-    .expect("Failed to create AppController with mock HDR");
+    let mut controller =
+        AppController::new_with_mock_hdr(config, process_rx, hdr_state_rx, state_tx, watch_state)
+            .expect("Failed to create AppController with mock HDR");
 
     // Create shutdown signal for graceful thread coordination
     // Guideline Line 96: std::sync::atomic for non-async shutdown signaling

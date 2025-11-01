@@ -455,8 +455,7 @@ fn initialize_components(
         monitoring_interval
     );
     let process_monitor = ProcessMonitor::new(monitoring_interval, process_event_tx);
-    let watch_list_ref = process_monitor.get_watch_list_ref();
-    let monitored_identifiers_ref = process_monitor.get_monitored_identifiers_ref();
+    let watch_state_ref = process_monitor.get_watch_state_ref();
     profiler.record_phase(StartupPhase::ProcessMonitorInit);
 
     // Create HdrStateMonitor for real-time HDR state change detection
@@ -475,8 +474,7 @@ fn initialize_components(
         process_event_rx,
         hdr_state_rx,
         app_state_tx,
-        watch_list_ref,
-        monitored_identifiers_ref,
+        watch_state_ref,
     )
     .context("Failed to create application controller")?;
     profiler.record_phase(StartupPhase::AppControllerInit);
