@@ -263,8 +263,8 @@ impl ProcessMonitor {
             use tracing::{debug, warn};
 
             // Phase 1.2: Expire stale cache entries (older than 5 seconds) to handle PID reuse
-            let now = Instant::now();
             const CACHE_EXPIRY: Duration = Duration::from_secs(5);
+            let now = Instant::now();
             self.app_id_cache
                 .retain(|_pid, (_app_id, last_seen)| now.duration_since(*last_seen) < CACHE_EXPIRY);
 
@@ -432,6 +432,8 @@ impl ProcessMonitor {
             // Phase 1.2: Log cache hit rate for performance monitoring
             let total_lookups = cache_hits + cache_misses;
             if total_lookups > 0 {
+                // Precision loss is acceptable for logging statistics
+                #[allow(clippy::cast_precision_loss)]
                 let hit_rate = (cache_hits as f64 / total_lookups as f64) * 100.0;
                 debug!(
                     "AppIdentifier cache: {} hits, {} misses ({:.1}% hit rate)",
