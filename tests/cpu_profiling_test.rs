@@ -120,14 +120,16 @@ fn profile_process_monitoring_hot_paths() {
 
 /// Create a realistic configuration for profiling
 fn create_profiling_config() -> AppConfig {
-    let mut preferences = UserPreferences::default();
-    preferences.monitoring_interval_ms = 500; // Aggressive polling for profiling
-    preferences.auto_start = false;
+    let preferences = UserPreferences {
+        monitoring_interval_ms: 500, // Aggressive polling for profiling
+        auto_start: false,
+        ..Default::default()
+    };
 
     AppConfig {
         monitored_apps: create_monitored_apps(),
         preferences,
-        window_state: Default::default(),
+        window_state: WindowState::default(),
     }
 }
 
@@ -179,7 +181,7 @@ fn create_monitored_apps() -> Vec<MonitoredApp> {
     ]
 }
 
-/// Benchmark-style test to measure poll_processes throughput
+/// Benchmark-style test to measure `poll_processes` throughput
 ///
 /// This test focuses specifically on the process enumeration hot path
 #[test]
@@ -200,10 +202,10 @@ fn profile_poll_processes_throughput() {
     println!("poll_processes profiling complete");
 }
 
-/// Benchmark-style test to measure handle_process_event throughput
+/// Benchmark-style test to measure `handle_process_event` throughput
 ///
 /// This test focuses specifically on the event handling hot path by directly
-/// calling the internal handle_process_event method (via reflection/testing API)
+/// calling the internal `handle_process_event` method (via reflection/testing API)
 #[test]
 fn profile_handle_process_event_throughput() {
     use easyhdr::monitor::{AppIdentifier, ProcessEvent};
