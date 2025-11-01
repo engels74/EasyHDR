@@ -116,10 +116,10 @@ name = "uwp_detection"
 harness = false
 
 [profile.release]
-opt-level = "s"     # Optimize for size
-lto = "thin"          # Link-time optimization
+opt-level = "3"     # Optimize for size
+lto = true          # Link-time optimization
 codegen-units = 1   # Better optimization
-strip = false       # Strip symbols
+strip = true        # Strip symbols
 panic = "abort"     # Smaller binary
 
 [profile.dev]
