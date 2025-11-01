@@ -74,6 +74,31 @@ impl HdrController {
         Ok(controller)
     }
 
+    /// Create a mock HDR controller for testing
+    ///
+    /// Returns a minimal `HdrController` with mocked Windows version and empty display cache.
+    /// **For test use only** - does not call Windows APIs.
+    ///
+    /// # Rationale
+    ///
+    /// DHAT profiling tests need `AppController` to measure allocation patterns in
+    /// `handle_process_event`, but `HdrController::new()` fails in CI environments
+    /// without real displays. This mock allows profiling the full production workload.
+    ///
+    /// # Guidelines Alignment
+    ///
+    /// - Line 111: "See tests/dhat_profiling_test.rs for phase-specific allocation profiling"
+    /// - Line 153: "Minimize unsafe; document Safety invariants; encapsulate behind safe APIs"
+    #[cfg(test)]
+    pub fn new_mock() -> Result<Self> {
+        Ok(Self {
+            // Mock as Windows 11 (most common target)
+            windows_version: WindowsVersion::Windows11,
+            // Empty display cache - profiling test doesn't exercise HDR operations
+            display_cache: SmallVec::new(),
+        })
+    }
+
     /// Get a reference to the display cache
     ///
     /// Returns a slice of all enumerated display targets.

@@ -303,15 +303,18 @@ fn profile_production_allocation_patterns() {
     let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
     monitor.update_watch_list(apps);
 
-    // Create app controller
-    let mut controller = AppController::new(
+    // Create app controller using mock HDR controller (test-only)
+    // The profiling test measures allocation patterns in ProcessMonitor and AppController,
+    // but doesn't exercise HDR functionality. Using new_with_mock_hdr() avoids Windows API
+    // failures in CI environments while still profiling the complete production workload.
+    let mut controller = AppController::new_with_mock_hdr(
         config,
         process_rx,
         hdr_state_rx,
         state_tx,
         watch_list.clone(),
     )
-    .expect("Failed to create AppController");
+    .expect("Failed to create AppController with mock HDR");
 
     // Create shutdown signal for graceful thread coordination
     // Guideline Line 96: std::sync::atomic for non-async shutdown signaling

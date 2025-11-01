@@ -82,6 +82,59 @@ impl AppController {
         })
     }
 
+    /// Create a new application controller with mock HDR controller
+    ///
+    /// **For test use only** - uses `HdrController::new_mock()` to avoid Windows API failures.
+    /// Identical to `new()` except it uses the mock HDR controller.
+    ///
+    /// # Rationale
+    ///
+    /// DHAT allocation profiling requires the full `AppController` workload to measure:
+    /// - Phase 2.1: Watch list cloning in event handling
+    /// - Phase 3.1: Config access patterns during event processing
+    /// - Phase 3.2: O(n) monitored app lookups
+    ///
+    /// See `docs/performance_plan.md` Phase 0 baseline requirements.
+    ///
+    /// # Guidelines Alignment
+    ///
+    /// - Line 47-49: "applications use anyhow with context"
+    /// - Line 111: "See tests/dhat_profiling_test.rs for phase-specific profiling"
+    #[cfg(test)]
+    pub fn new_with_mock_hdr(
+        config: AppConfig,
+        event_receiver: mpsc::Receiver<ProcessEvent>,
+        hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
+        gui_state_sender: mpsc::SyncSender<AppState>,
+        process_monitor_watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
+    ) -> Result<Self> {
+        use tracing::info;
+
+        // Use mock HDR controller instead of real one
+        let hdr_controller = HdrController::new_mock().map_err(|e| {
+            use tracing::error;
+            error!("Failed to initialize mock HDR controller: {e}");
+            // Preserve error chain by wrapping the source error
+            EasyHdrError::HdrControlFailed(Box::new(e))
+        })?;
+
+        // Detect initial HDR state (will be false for mock, but maintains code path)
+        let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
+        info!("AppController initialized with mock HDR controller (test mode)");
+
+        Ok(Self {
+            config: Arc::new(Mutex::new(config)),
+            hdr_controller,
+            active_process_count: AtomicUsize::new(0),
+            current_hdr_state: AtomicBool::new(initial_hdr_state),
+            event_receiver: Some(event_receiver),
+            hdr_state_receiver: Some(hdr_state_receiver),
+            gui_state_sender,
+            last_toggle_time: Arc::new(Mutex::new(Instant::now())),
+            process_monitor_watch_list,
+        })
+    }
+
     /// Detect the current HDR state from the system by checking all HDR-capable displays
     fn detect_current_hdr_state(hdr_controller: &HdrController) -> bool {
         // Delegate to the shared implementation in HdrController

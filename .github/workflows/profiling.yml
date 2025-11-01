@@ -263,8 +263,8 @@ jobs:
           # to capture realistic allocation patterns from production code
           # See tests/dhat_profiling_test.rs for implementation details
           # Note: --exact flag ensures precise test name matching for cfg-gated tests
+          # Mock HDR controller allows this to succeed in CI without real displays
           cargo test --test dhat_profiling_test --release -- profile_production_allocation_patterns --exact --nocapture
-        continue-on-error: true
 
       - name: Generate DHAT report
         run: |
