@@ -85,11 +85,6 @@ impl HdrController {
     /// `handle_process_event`, but `HdrController::new()` fails in CI environments
     /// without real displays. This mock allows profiling the full production workload.
     ///
-    /// # Guidelines Alignment
-    ///
-    /// - Line 111: "See tests/dhat_profiling_test.rs for phase-specific allocation profiling"
-    /// - Line 153: "Minimize unsafe; document Safety invariants; encapsulate behind safe APIs"
-    ///
     /// # Note
     ///
     /// This method is available in both unit tests and integration tests.

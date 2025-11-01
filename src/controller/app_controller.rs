@@ -28,7 +28,6 @@ pub struct AppState {
 /// Application logic controller
 pub struct AppController {
     /// Application configuration (public for GUI access)
-    /// Phase 3.1: `RwLock` enables concurrent reads from multiple event handlers
     pub config: Arc<RwLock<AppConfig>>,
     /// HDR controller
     hdr_controller: HdrController,
@@ -42,13 +41,13 @@ pub struct AppController {
     hdr_state_receiver: Option<mpsc::Receiver<HdrStateEvent>>,
     /// State sender to GUI
     gui_state_sender: mpsc::SyncSender<AppState>,
-    /// Startup time for relative timestamp calculations (Phase 2.2)
+    /// Startup time for relative timestamp calculations
     ///
     /// Used as the reference point for atomic timestamp operations.
     /// Since `Instant` cannot be stored in an atomic directly, we store
     /// elapsed nanoseconds from this startup time in `last_toggle_time_nanos`.
     startup_time: Instant,
-    /// Last toggle time for debouncing (Phase 2.2: Atomic)
+    /// Last toggle time for debouncing
     ///
     /// Stores nanoseconds elapsed since `startup_time`. Uses `Ordering::Relaxed`
     /// because precise synchronization is not needed for debouncing - approximate
@@ -85,7 +84,6 @@ impl AppController {
         let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
         info!("Detected initial HDR state: {}", initial_hdr_state);
 
-        // Phase 2.2: Initialize startup time for atomic timestamp calculations
         let startup_time = Instant::now();
 
         let controller = Self {
@@ -101,7 +99,6 @@ impl AppController {
             watch_state,
         };
 
-        // Phase 3.2: Initialize watch_state with enabled apps from config
         controller.update_process_monitor_watch_list();
 
         Ok(controller)
@@ -114,17 +111,11 @@ impl AppController {
     ///
     /// # Rationale
     ///
-    /// DHAT allocation profiling requires the full `AppController` workload to measure:
-    /// - Phase 2.1: Watch list cloning in event handling
-    /// - Phase 3.1: Config access patterns during event processing
-    /// - Phase 3.2: O(n) monitored app lookups
-    ///
-    /// See `docs/performance_plan.md` Phase 0 baseline requirements.
+    /// DHAT allocation profiling requires the full `AppController` workload.
     ///
     /// # Guidelines Alignment
     ///
     /// - Line 47-49: "applications use anyhow with context"
-    /// - Line 111: "See tests/dhat_profiling_test.rs for phase-specific profiling"
     ///
     /// # Note
     ///
@@ -156,7 +147,6 @@ impl AppController {
         let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
         info!("AppController initialized with mock HDR controller (test mode)");
 
-        // Phase 2.2: Initialize startup time for atomic timestamp calculations
         let startup_time = Instant::now();
 
         let controller = Self {
@@ -172,7 +162,6 @@ impl AppController {
             watch_state,
         };
 
-        // Phase 3.2: Initialize watch_state with enabled apps from config
         controller.update_process_monitor_watch_list();
 
         Ok(controller)
@@ -342,7 +331,6 @@ impl AppController {
                 debug!("Process started event: {:?}", app_id);
 
                 // Check if this app is in our monitored list and enabled
-                // Phase 3.2: Use O(1) HashSet lookup instead of O(n) iteration
                 // Normalize the identifier for case-insensitive matching (Win32 only)
                 let normalized_id = Self::normalize_app_identifier(&app_id);
                 let state = self.watch_state.read();
@@ -382,7 +370,6 @@ impl AppController {
                 debug!("Process stopped event: {:?}", app_id);
 
                 // Check if this app is in our monitored list and enabled
-                // Phase 3.2: Use O(1) HashSet lookup instead of O(n) iteration
                 // Normalize the identifier for case-insensitive matching (Win32 only)
                 let normalized_id = Self::normalize_app_identifier(&app_id);
                 let state = self.watch_state.read();
@@ -414,7 +401,6 @@ impl AppController {
                     );
 
                     // Debounce: wait 500ms before disabling to handle quick restarts
-                    // Phase 2.2: Use atomic timestamp with Relaxed ordering
                     // SAFETY: Relaxed ordering is sufficient for debouncing:
                     // - Atomics guarantee cross-thread visibility even with Relaxed ordering
                     // - No happens-before synchronization needed (approximate timing acceptable)
@@ -510,7 +496,6 @@ impl AppController {
         self.current_hdr_state.store(enable, Ordering::SeqCst);
 
         // Update last toggle time for debouncing
-        // Phase 2.2: Store elapsed nanos since startup using atomic operation
         // SAFETY: See handle_process_event for ordering rationale (Relaxed is sufficient)
         #[allow(clippy::cast_possible_truncation)]
         let elapsed_nanos = self.startup_time.elapsed().as_nanos() as u64;
@@ -524,7 +509,6 @@ impl AppController {
     fn send_state_update(&self) {
         use tracing::{debug, warn};
 
-        // Phase 3.1: Use read lock for concurrent access
         let config = self.config.read();
         let active_apps: Vec<String> = config
             .monitored_apps
@@ -589,7 +573,6 @@ impl AppController {
         }
 
         // Add to config
-        // Phase 3.1: Use write lock for exclusive access
         {
             let mut config = self.config.write();
             config.monitored_apps.push(app);
@@ -616,7 +599,6 @@ impl AppController {
         info!("Removing application with ID: {}", id);
 
         // Remove from config
-        // Phase 3.1: Use write lock for exclusive access
         {
             let mut config = self.config.write();
             config.monitored_apps.retain(|app| app.id() != &id);
@@ -656,7 +638,6 @@ impl AppController {
         info!("Toggling application {} to enabled={}", id, enabled);
 
         // Update enabled flag
-        // Phase 3.1: Use write lock for exclusive access
         {
             let mut config = self.config.write();
             if let Some(app) = config.monitored_apps.iter_mut().find(|app| app.id() == &id) {
@@ -685,7 +666,6 @@ impl AppController {
         info!("Updating user preferences");
 
         // Update preferences
-        // Phase 3.1: Use write lock for exclusive access
         {
             let mut config = self.config.write();
             config.preferences = prefs;
@@ -732,7 +712,6 @@ impl AppController {
     fn save_config_gracefully(&self) {
         use tracing::warn;
 
-        // Phase 3.1: Use read lock for saving (no mutation needed)
         let config = self.config.read();
         if let Err(e) = ConfigManager::save(&config) {
             warn!(
@@ -747,8 +726,6 @@ impl AppController {
     ///
     /// Win32 process names are normalized to lowercase for case-insensitive matching.
     /// UWP package family names are case-sensitive and returned as-is.
-    ///
-    /// # Phase 3.2
     ///
     /// This normalization ensures that the O(1) `HashSet` lookup works correctly
     /// even if the event contains a non-normalized identifier (e.g., from tests).
@@ -765,11 +742,10 @@ impl AppController {
     ///
     /// Filters the config to include only enabled applications (both Win32 and UWP)
     /// and updates the `ProcessMonitor`'s watch list. Also rebuilds the `monitored_identifiers`
-    /// cache for fast O(1) filtering (Phase 1.1).
+    /// cache for fast O(1) filtering.
     fn update_process_monitor_watch_list(&self) {
         use tracing::debug;
 
-        // Phase 3.1: Use read lock for reading monitored apps
         let config = self.config.read();
         let monitored_apps: Vec<MonitoredApp> = config
             .monitored_apps
@@ -784,7 +760,6 @@ impl AppController {
             monitored_apps.len()
         );
 
-        // Rebuild monitored identifiers cache (Phase 1.1)
         let identifiers: HashSet<AppIdentifier> = monitored_apps
             .iter()
             .map(|app| match app {
@@ -1710,7 +1685,6 @@ mod tests {
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
-        // Record the time of the first toggle (Phase 2.2: atomic timestamp)
         let first_toggle_nanos = controller.last_toggle_time_nanos.load(Ordering::Relaxed);
 
         // Wait a short time (less than 500ms)

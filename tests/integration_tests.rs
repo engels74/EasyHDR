@@ -119,7 +119,6 @@ fn test_app_controller_hdr_logic_integration() {
         icon_data: None,
     }));
 
-    // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
     let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
     // Create the controller
@@ -203,7 +202,6 @@ fn test_multiple_apps_integration() {
         icon_data: None,
     }));
 
-    // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
     let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
     let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_state);
@@ -231,7 +229,6 @@ fn test_disabled_apps_ignored() {
         icon_data: None,
     }));
 
-    // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
     let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
     let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_state);

@@ -1,4 +1,4 @@
-//! DHAT allocation profiling test for Phase 0 baseline measurements
+//! DHAT allocation profiling test for baseline measurements
 //!
 //! This test instruments the application with DHAT to measure allocation patterns
 //! in config operations, watch list cloning, and string allocations.
@@ -18,7 +18,7 @@
 //! # View results at: https://nnethercote.github.io/dh_view/dh_view.html
 //! ```
 //!
-//! # Phase 0 Success Criteria
+//! # Success Criteria
 //!
 //! - Watch list cloning overhead measured
 //! - Config lookup (O(n)) allocation patterns documented
@@ -142,7 +142,7 @@ fn create_realistic_config(num_apps: usize) -> AppConfig {
     config
 }
 
-/// Profile watch list cloning overhead (Phase 2.1 optimization target)
+/// Profile watch list cloning overhead
 ///
 /// This test measures allocation overhead from repeated watch list cloning,
 /// which currently occurs on every config access.
@@ -173,7 +173,7 @@ fn profile_watch_list_cloning() {
     println!("DHAT profiling complete. Check dhat-heap.json for results.");
 }
 
-/// Profile monitored app lookups with varying sizes (Phase 3.2 optimization target)
+/// Profile monitored app lookups with varying sizes
 ///
 /// This test measures allocation and performance overhead from O(n) lookups
 /// in the monitored apps list. Target is O(1) `HashSet` lookup.
@@ -214,7 +214,7 @@ fn profile_monitored_app_lookups() {
     println!("DHAT profiling complete. Check dhat-heap.json for results.");
 }
 
-/// Profile config access patterns (Phase 3.1 optimization target)
+/// Profile config access patterns
 ///
 /// This test measures allocation overhead from config reads and writes.
 #[test]
@@ -251,12 +251,12 @@ fn profile_config_access() {
     println!("DHAT profiling complete. Check dhat-heap.json for results.");
 }
 
-/// Profile production allocation patterns (Phase 0 baseline requirement)
+/// Profile production allocation patterns
 ///
 /// This test exercises the full `ProcessMonitor` and `AppController` workload
 /// for 30 seconds to capture realistic allocation patterns from production code.
 ///
-/// **Test phases:**
+/// **Test steps:**
 /// 1. **Thread verification (up to 10s)**: Waits for `ProcessMonitor` to complete
 ///    at least 3 poll cycles to ensure threads are healthy before profiling
 /// 2. **DHAT profiling (30s)**: Captures allocations from production workload
@@ -269,7 +269,7 @@ fn profile_config_access() {
 /// - Watch list clones in event handling (`AppController`)
 /// - UWP detection allocations
 ///
-/// **Phase 0 Success Criteria:**
+/// **Success Criteria:**
 /// - Allocation rate: 200-500 allocs/sec
 /// - Runtime: ~30 seconds DHAT profiling (plus ~5-10s verification)
 /// - Stack traces show `poll_processes`, `detect_uwp_process`, `String::from`
@@ -347,8 +347,8 @@ fn profile_production_allocation_patterns() {
         }
     });
 
-    // Phase 1: Thread verification (wait for threads to start and complete polls)
-    println!("Phase 1: Verifying threads are running...");
+    // Step 1: Thread verification (wait for threads to start and complete polls)
+    println!("Step 1: Verifying threads are running...");
     println!("  Waiting for ProcessMonitor to complete at least 3 poll cycles...\n");
 
     let verification_start = Instant::now();
@@ -376,7 +376,7 @@ fn profile_production_allocation_patterns() {
         thread::sleep(Duration::from_millis(500));
     }
 
-    println!("Phase 2: Starting DHAT allocation profiling (30 seconds)...");
+    println!("Step 2: Starting DHAT allocation profiling (30 seconds)...");
     println!("  Threads verified healthy - now capturing allocation patterns\n");
 
     // NOW start DHAT profiler (after warmup completes)
@@ -401,7 +401,7 @@ fn profile_production_allocation_patterns() {
     }
 
     let final_cycle_count = poll_counter.load(Ordering::Relaxed);
-    println!("\nPhase 3: Profiling complete, shutting down threads...");
+    println!("\nStep 3: Profiling complete, shutting down threads...");
     println!("  Total poll cycles during profiling: {final_cycle_count}");
     println!(
         "  Expected allocations: {} to {} (200-300 allocs/poll)",

@@ -10,19 +10,11 @@
 //!
 //! The `Package.Logo` property provides the relative path within the package.
 //!
-//! # Implementation Strategy
+//! # Implementation
 //!
-//! **Phase 1** (current): PNG decoding and conversion to RGBA
-//! - Read PNG file from package directory
-//! - Decode PNG and convert to RGBA8 format
-//! - Resize to 32x32 pixels to match Win32 icon format
-//! - Return raw RGBA bytes (4096 bytes for 32x32 image)
-//! - Use placeholder icon if file not found or decoding fails
+//! Currently reads PNG files from the package directory and converts to RGBA8.
 //!
-//! **Phase 2** (future enhancement):
-//! - Parse `.pri` (Package Resource Index) files for optimal icon selection
-//! - Select appropriate icon scale (100%, 200%, etc.) based on DPI
-//! - Handle multiple icon sizes and choose best fit
+//! Future enhancements could parse `.pri` files for optimal icon scale selection.
 //!
 //! # Security Considerations
 //!
