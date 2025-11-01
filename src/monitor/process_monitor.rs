@@ -5,7 +5,7 @@
 //!
 //! **Limitation:** Use unique executable names to avoid false positives.
 
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, mpsc};
@@ -60,6 +60,38 @@ pub enum ProcessEvent {
     Stopped(AppIdentifier),
 }
 
+/// Combined watch list and identifier cache for atomic state updates
+///
+/// Groups the monitored applications list and the identifier cache into a single
+/// structure that can be updated atomically. This prevents race conditions where
+/// `poll_processes()` could observe an inconsistent state between the two caches.
+///
+/// The `apps` field is wrapped in `Arc` to enable cheap cloning during event handling
+/// (Phase 2.1 optimization), while `identifiers` is owned directly for O(1) lookups.
+#[derive(Clone, Debug)]
+pub struct WatchState {
+    /// Monitored applications (Arc-wrapped for cheap cloning during event handling)
+    pub apps: Arc<Vec<MonitoredApp>>,
+    /// Cached set of monitored app identifiers for O(1) filtering
+    pub identifiers: HashSet<AppIdentifier>,
+}
+
+impl Default for WatchState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WatchState {
+    /// Create an empty `WatchState`
+    pub fn new() -> Self {
+        Self {
+            apps: Arc::new(Vec::new()),
+            identifiers: HashSet::new(),
+        }
+    }
+}
+
 /// Process monitor that polls for running processes
 ///
 /// Monitors running processes at regular intervals and detects state changes
@@ -68,18 +100,17 @@ pub enum ProcessEvent {
 /// **Known Limitation:** Matches processes by executable filename only (without path or extension).
 /// Multiple processes with the same filename will all be detected as the same application.
 pub struct ProcessMonitor {
-    /// List of monitored applications to watch (both Win32 and UWP) - Phase 2.1: Double-Arc
+    /// Combined watch list and identifier cache for atomic state updates
     ///
-    /// Uses Arc<Mutex<Arc<Vec<_>>>> to eliminate per-poll cloning overhead.
-    /// When reading, we clone the inner Arc (cheap pointer copy) instead of the entire Vec.
-    /// Lock hold time: O(n) → O(1) since we only need the lock to get the Arc reference.
-    watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
-    /// Cached set of monitored app identifiers for fast filtering (Phase 1.1)
+    /// Stores both the monitored applications list and the identifier cache in a single
+    /// atomic structure wrapped in `RwLock`. This enables:
+    /// - Atomic updates: Both caches updated simultaneously, preventing race conditions
+    /// - Concurrent reads: Multiple threads can read during `poll_processes()` hot path
+    /// - Cheap cloning: `apps` field uses Arc for O(1) clones during event handling
     ///
-    /// Shared with `AppController` for synchronized updates. Allows O(1) lookups
-    /// to skip processing unmonitored processes (~90% of enumerated processes).
-    /// `RwLock` enables concurrent reads in hot path (`poll_processes()`) without blocking.
-    monitored_identifiers: Arc<RwLock<HashSet<AppIdentifier>>>,
+    /// Shared with `AppController` via `Arc` for coordinated updates when GUI modifies
+    /// the monitored app list.
+    watch_state: Arc<RwLock<WatchState>>,
     /// PID-based `AppIdentifier` cache to avoid repeated string allocations (Phase 1.2)
     ///
     /// Maps PID → (`AppIdentifier`, `last_seen_timestamp`). Entries expire after 5s
@@ -112,8 +143,7 @@ impl ProcessMonitor {
         const DEFAULT_PROCESS_COUNT: usize = 200;
 
         Self {
-            watch_list: Arc::new(Mutex::new(Arc::new(Vec::new()))),
-            monitored_identifiers: Arc::new(RwLock::new(HashSet::new())),
+            watch_state: Arc::new(RwLock::new(WatchState::new())),
             app_id_cache: HashMap::with_capacity(DEFAULT_PROCESS_COUNT),
             event_sender,
             interval,
@@ -128,6 +158,9 @@ impl ProcessMonitor {
     /// Replaces the entire watch list with the provided applications.
     /// Only enabled applications should be passed to this method.
     /// Also rebuilds the `monitored_identifiers` cache for fast O(1) filtering.
+    ///
+    /// This method performs an atomic update of both the app list and identifier cache,
+    /// preventing race conditions where `poll_processes()` could observe inconsistent state.
     pub fn update_watch_list(&self, monitored_apps: Vec<MonitoredApp>) {
         // Rebuild monitored identifiers set from the new watch list
         let identifiers: HashSet<AppIdentifier> = monitored_apps
@@ -142,35 +175,26 @@ impl ProcessMonitor {
             })
             .collect();
 
-        // Update both caches atomically (from caller's perspective)
-        // Phase 2.1: Wrap apps in Arc to enable cheap cloning during event handling
-        let mut watch_list = self.watch_list.lock();
-        *watch_list = Arc::new(monitored_apps);
-        drop(watch_list); // Release watch_list lock before acquiring write lock
-
-        let mut monitored_ids = self.monitored_identifiers.write();
-        *monitored_ids = identifiers;
+        // Atomically update both the app list and identifier cache
+        // This prevents race conditions where poll_processes() could see inconsistent state
+        let mut state = self.watch_state.write();
+        *state = WatchState {
+            apps: Arc::new(monitored_apps),
+            identifiers,
+        };
     }
 
-    /// Get a reference to the watch list for external updates
-    pub fn get_watch_list_ref(&self) -> Arc<Mutex<Arc<Vec<MonitoredApp>>>> {
-        Arc::clone(&self.watch_list)
-    }
-
-    /// Get a reference to the monitored identifiers cache
+    /// Get a reference to the watch state for external updates
     ///
-    /// Returns a shared reference to the cached set of monitored app identifiers.
-    /// This enables `AppController` to share the same cache for O(1) lookups
-    /// when handling process events.
+    /// Returns a shared reference to the combined watch list and identifier cache.
+    /// This enables `AppController` to share the same state and perform coordinated
+    /// updates when the GUI modifies the monitored app list.
     ///
-    /// # Phase 1.1: Cache Synchronization
-    ///
-    /// Both `ProcessMonitor` and `AppController` hold references to the same
-    /// `Arc<RwLock<HashSet<AppIdentifier>>>`. When the GUI modifies the app list,
-    /// `AppController` calls `update_watch_list()` which rebuilds the cache,
-    /// ensuring both components see consistent state.
-    pub fn get_monitored_identifiers_ref(&self) -> Arc<RwLock<HashSet<AppIdentifier>>> {
-        Arc::clone(&self.monitored_identifiers)
+    /// The unified state structure ensures atomic updates and prevents race conditions
+    /// where `poll_processes()` could observe inconsistent state between the app list
+    /// and identifier cache.
+    pub fn get_watch_state_ref(&self) -> Arc<RwLock<WatchState>> {
+        Arc::clone(&self.watch_state)
     }
 
     /// Get the number of completed poll cycles
@@ -319,7 +343,7 @@ impl ProcessMonitor {
                 if let Some((cached_app_id, _)) = self.app_id_cache.get(&pid) {
                     cache_hits += 1;
                     // Cache hit - reuse existing AppIdentifier
-                    if self.monitored_identifiers.read().contains(cached_app_id) {
+                    if self.watch_state.read().identifiers.contains(cached_app_id) {
                         current_processes.insert(cached_app_id.clone());
                         // Update timestamp for this entry
                         self.app_id_cache.insert(pid, (cached_app_id.clone(), now));
@@ -342,7 +366,7 @@ impl ProcessMonitor {
                                     // Cache the AppIdentifier for this PID
                                     self.app_id_cache.insert(pid, (app_id.clone(), now));
 
-                                    if self.monitored_identifiers.read().contains(&app_id) {
+                                    if self.watch_state.read().identifiers.contains(&app_id) {
                                         debug!(
                                             "Found monitored UWP process (PID {}): {}",
                                             pid, app_id
@@ -359,7 +383,7 @@ impl ProcessMonitor {
                                         // Cache the AppIdentifier for this PID
                                         self.app_id_cache.insert(pid, (app_id.clone(), now));
 
-                                        if self.monitored_identifiers.read().contains(&app_id) {
+                                        if self.watch_state.read().identifiers.contains(&app_id) {
                                             current_processes.insert(app_id);
                                         }
                                         // Early exit: skip unmonitored Win32 apps (Phase 1.1 optimization)
@@ -380,7 +404,7 @@ impl ProcessMonitor {
                                         // Cache the AppIdentifier for this PID
                                         self.app_id_cache.insert(pid, (app_id.clone(), now));
 
-                                        if self.monitored_identifiers.read().contains(&app_id) {
+                                        if self.watch_state.read().identifiers.contains(&app_id) {
                                             current_processes.insert(app_id);
                                         }
                                         // Early exit: skip unmonitored Win32 apps (Phase 1.1 optimization)
@@ -400,7 +424,7 @@ impl ProcessMonitor {
                                 // Cache the AppIdentifier for this PID
                                 self.app_id_cache.insert(pid, (app_id.clone(), now));
 
-                                if self.monitored_identifiers.read().contains(&app_id) {
+                                if self.watch_state.read().identifiers.contains(&app_id) {
                                     current_processes.insert(app_id);
                                 }
                                 // Early exit: skip unmonitored Win32 apps (Phase 1.1 optimization)
@@ -468,17 +492,17 @@ impl ProcessMonitor {
     fn detect_changes(&mut self, current: HashSet<AppIdentifier>) {
         use tracing::info;
 
-        // Phase 2.1: Clone inner Arc (cheap pointer copy) instead of entire Vec
+        // Clone app list Arc (cheap pointer copy) - lock released immediately
         // Lock hold time: O(1) - just copying an Arc pointer, not the Vec contents
-        let watch_list = {
-            let guard = self.watch_list.lock();
-            Arc::clone(&*guard)
+        let apps = {
+            let state = self.watch_state.read();
+            Arc::clone(&state.apps)
         }; // Lock is released here
 
         // Find started processes
         for app_id in current.difference(&self.running_processes) {
             // Check if this app identifier is monitored
-            if Self::is_monitored(app_id, &watch_list) {
+            if Self::is_monitored(app_id, &apps) {
                 info!("Detected process started: {:?}", app_id);
                 if let Err(e) = self
                     .event_sender
@@ -496,7 +520,7 @@ impl ProcessMonitor {
         // Find stopped processes
         for app_id in self.running_processes.difference(&current) {
             // Check if this app identifier is monitored
-            if Self::is_monitored(app_id, &watch_list) {
+            if Self::is_monitored(app_id, &apps) {
                 info!("Detected process stopped: {:?}", app_id);
                 if let Err(e) = self
                     .event_sender
@@ -1105,14 +1129,14 @@ mod tests {
 
                 // Update once
                 monitor.update_watch_list(apps.clone());
-                let first_result = monitor.watch_list.lock().clone();
+                let first_result_len = monitor.watch_state.read().apps.len();
 
                 // Update again with the same input
                 monitor.update_watch_list(apps);
-                let second_result = monitor.watch_list.lock().clone();
+                let second_result_len = monitor.watch_state.read().apps.len();
 
                 // Results should be identical (same number of apps)
-                prop_assert_eq!(first_result.len(), second_result.len());
+                prop_assert_eq!(first_result_len, second_result_len);
             }
 
             /// Property: PID cache handles reuse correctly with expiry (Phase 1.2)

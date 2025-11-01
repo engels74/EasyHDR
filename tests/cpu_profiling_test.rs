@@ -24,9 +24,8 @@
 
 use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, Win32App, WindowState};
 use easyhdr::controller::AppController;
-use easyhdr::monitor::ProcessMonitor;
-use parking_lot::{Mutex, RwLock};
-use std::collections::HashSet;
+use easyhdr::monitor::{ProcessMonitor, WatchState};
+use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -57,26 +56,18 @@ fn profile_process_monitoring_hot_paths() {
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
 
-    // Create watch list with monitored apps using double-Arc pattern
-    // This matches the production implementation for lock-free reads
+    // Create watch list with monitored apps
     let apps = create_monitored_apps();
-    let watch_list = Arc::new(Mutex::new(Arc::new(apps.clone())));
 
     // Create process monitor with aggressive polling (500ms) to maximize CPU usage
     let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
     monitor.update_watch_list(apps);
-    let monitored_identifiers = monitor.get_monitored_identifiers_ref();
+    let watch_state = monitor.get_watch_state_ref();
 
     // Create app controller
-    let mut controller = AppController::new(
-        config,
-        process_rx,
-        hdr_state_rx,
-        state_tx,
-        watch_list.clone(),
-        monitored_identifiers,
-    )
-    .expect("Failed to create AppController");
+    let mut controller =
+        AppController::new(config, process_rx, hdr_state_rx, state_tx, watch_state)
+            .expect("Failed to create AppController");
 
     // Start the process monitor thread (exercises poll_processes)
     let _monitor_handle = monitor.start();
@@ -218,18 +209,11 @@ fn profile_handle_process_event_throughput() {
     let (state_tx, state_rx) = mpsc::sync_channel(32);
     // Use double-Arc pattern to match production implementation
     let apps = create_monitored_apps();
-    let watch_list = Arc::new(Mutex::new(Arc::new(apps)));
-    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+    let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
-    let mut controller = AppController::new(
-        config,
-        process_rx,
-        hdr_state_rx,
-        state_tx,
-        watch_list,
-        monitored_identifiers,
-    )
-    .expect("Failed to create AppController");
+    let mut controller =
+        AppController::new(config, process_rx, hdr_state_rx, state_tx, watch_state)
+            .expect("Failed to create AppController");
 
     // Start event loop to process events in a separate thread
     let _event_handle = thread::spawn(move || {

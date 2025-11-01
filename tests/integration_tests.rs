@@ -9,10 +9,9 @@ use easyhdr::{
     controller::AppController,
     error::{EasyHdrError, get_user_friendly_error},
     hdr::HdrController,
-    monitor::{ProcessEvent, ProcessMonitor},
+    monitor::{ProcessEvent, ProcessMonitor, WatchState},
 };
-use parking_lot::{Mutex, RwLock};
-use std::collections::HashSet;
+use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::thread;
@@ -121,18 +120,10 @@ fn test_app_controller_hdr_logic_integration() {
     }));
 
     // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
-    let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+    let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
     // Create the controller
-    let controller = AppController::new(
-        config,
-        event_rx,
-        hdr_state_rx,
-        state_tx,
-        watch_list,
-        monitored_identifiers,
-    );
+    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_state);
 
     assert!(controller.is_ok(), "Controller creation should succeed");
 
@@ -213,17 +204,9 @@ fn test_multiple_apps_integration() {
     }));
 
     // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
-    let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+    let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
-    let controller = AppController::new(
-        config,
-        event_rx,
-        hdr_state_rx,
-        state_tx,
-        watch_list,
-        monitored_identifiers,
-    );
+    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_state);
 
     assert!(controller.is_ok());
 
@@ -249,17 +232,9 @@ fn test_disabled_apps_ignored() {
     }));
 
     // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
-    let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
-    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
+    let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
-    let controller = AppController::new(
-        config,
-        event_rx,
-        hdr_state_rx,
-        state_tx,
-        watch_list,
-        monitored_identifiers,
-    );
+    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_state);
 
     assert!(controller.is_ok());
 }
