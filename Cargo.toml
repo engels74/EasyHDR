@@ -117,9 +117,9 @@ harness = false
 
 [profile.release]
 opt-level = "s"     # Optimize for size
-lto = true          # Link-time optimization
+lto = thin          # Link-time optimization
 codegen-units = 1   # Better optimization
-strip = true        # Strip symbols
+strip = false       # Strip symbols
 panic = "abort"     # Smaller binary
 
 [profile.dev]
