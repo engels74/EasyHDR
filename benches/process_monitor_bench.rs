@@ -125,7 +125,7 @@ fn bench_watch_list_clone(c: &mut Criterion) {
 
 /// Benchmark config access patterns
 ///
-/// Benchmark config read contention with RwLock
+/// Benchmark config read contention with `RwLock`
 fn bench_config_read_contention(c: &mut Criterion) {
     let mut group = c.benchmark_group("config_read");
 

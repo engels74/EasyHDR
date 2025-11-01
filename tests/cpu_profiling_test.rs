@@ -208,7 +208,7 @@ fn profile_handle_process_event_throughput() {
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
     // Use double-Arc pattern to match production implementation
-    let apps = create_monitored_apps();
+    let _apps = create_monitored_apps();
     let watch_state = Arc::new(RwLock::new(WatchState::new()));
 
     let mut controller =
