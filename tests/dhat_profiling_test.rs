@@ -39,9 +39,7 @@ use uuid::Uuid;
 #[cfg(windows)]
 use easyhdr::controller::AppController;
 #[cfg(windows)]
-use easyhdr::monitor::{ProcessMonitor, WatchState};
-#[cfg(windows)]
-use parking_lot::Mutex;
+use easyhdr::monitor::ProcessMonitor;
 #[cfg(windows)]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
