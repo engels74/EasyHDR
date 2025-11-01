@@ -57,12 +57,14 @@ fn profile_process_monitoring_hot_paths() {
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
 
-    // Create watch list with monitored apps
-    let watch_list = Arc::new(Mutex::new(create_monitored_apps()));
+    // Create watch list with monitored apps using double-Arc pattern
+    // This matches the production implementation for lock-free reads
+    let apps = create_monitored_apps();
+    let watch_list = Arc::new(Mutex::new(Arc::new(apps.clone())));
 
     // Create process monitor with aggressive polling (500ms) to maximize CPU usage
     let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
-    monitor.update_watch_list(create_monitored_apps());
+    monitor.update_watch_list(apps);
     let monitored_identifiers = monitor.get_monitored_identifiers_ref();
 
     // Create app controller
@@ -212,7 +214,9 @@ fn profile_handle_process_event_throughput() {
     let (process_tx, process_rx) = mpsc::sync_channel(32);
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
-    let watch_list = Arc::new(Mutex::new(create_monitored_apps()));
+    // Use double-Arc pattern to match production implementation
+    let apps = create_monitored_apps();
+    let watch_list = Arc::new(Mutex::new(Arc::new(apps)));
     let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
     let mut controller = AppController::new(
