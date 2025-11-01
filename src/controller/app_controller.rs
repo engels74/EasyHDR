@@ -106,8 +106,10 @@ impl AppController {
     /// This method is available in both unit tests and integration tests.
     /// The `#[doc(hidden)]` attribute hides it from public documentation, but it remains
     /// accessible to integration tests in the `tests/` directory.
+    ///
+    /// Integration tests are compiled as separate crates, so `cfg(test)` doesn't apply.
+    /// This method is always compiled but hidden from docs to signal test-only usage.
     #[doc(hidden)]
-    #[cfg(any(test, doctest))]
     pub fn new_with_mock_hdr(
         config: AppConfig,
         event_receiver: mpsc::Receiver<ProcessEvent>,
