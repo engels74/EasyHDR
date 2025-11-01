@@ -68,8 +68,12 @@ pub enum ProcessEvent {
 /// **Known Limitation:** Matches processes by executable filename only (without path or extension).
 /// Multiple processes with the same filename will all be detected as the same application.
 pub struct ProcessMonitor {
-    /// List of monitored applications to watch (both Win32 and UWP)
-    watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
+    /// List of monitored applications to watch (both Win32 and UWP) - Phase 2.1: Double-Arc
+    ///
+    /// Uses Arc<Mutex<Arc<Vec<_>>>> to eliminate per-poll cloning overhead.
+    /// When reading, we clone the inner Arc (cheap pointer copy) instead of the entire Vec.
+    /// Lock hold time: O(n) → O(1) since we only need the lock to get the Arc reference.
+    watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
     /// Cached set of monitored app identifiers for fast filtering (Phase 1.1)
     ///
     /// Shared with `AppController` for synchronized updates. Allows O(1) lookups
@@ -108,7 +112,7 @@ impl ProcessMonitor {
         const DEFAULT_PROCESS_COUNT: usize = 200;
 
         Self {
-            watch_list: Arc::new(Mutex::new(Vec::new())),
+            watch_list: Arc::new(Mutex::new(Arc::new(Vec::new()))),
             monitored_identifiers: Arc::new(RwLock::new(HashSet::new())),
             app_id_cache: HashMap::with_capacity(DEFAULT_PROCESS_COUNT),
             event_sender,
@@ -139,8 +143,9 @@ impl ProcessMonitor {
             .collect();
 
         // Update both caches atomically (from caller's perspective)
+        // Phase 2.1: Wrap apps in Arc to enable cheap cloning during event handling
         let mut watch_list = self.watch_list.lock();
-        *watch_list = monitored_apps;
+        *watch_list = Arc::new(monitored_apps);
         drop(watch_list); // Release watch_list lock before acquiring write lock
 
         let mut monitored_ids = self.monitored_identifiers.write();
@@ -148,7 +153,7 @@ impl ProcessMonitor {
     }
 
     /// Get a reference to the watch list for external updates
-    pub fn get_watch_list_ref(&self) -> Arc<Mutex<Vec<MonitoredApp>>> {
+    pub fn get_watch_list_ref(&self) -> Arc<Mutex<Arc<Vec<MonitoredApp>>>> {
         Arc::clone(&self.watch_list)
     }
 
@@ -460,10 +465,11 @@ impl ProcessMonitor {
     fn detect_changes(&mut self, current: HashSet<AppIdentifier>) {
         use tracing::info;
 
-        // Clone watch list to minimize lock hold time
+        // Phase 2.1: Clone inner Arc (cheap pointer copy) instead of entire Vec
+        // Lock hold time: O(1) - just copying an Arc pointer, not the Vec contents
         let watch_list = {
             let guard = self.watch_list.lock();
-            guard.clone()
+            Arc::clone(&*guard)
         }; // Lock is released here
 
         // Find started processes
@@ -1128,7 +1134,7 @@ mod tests {
 
                 // Verify cache contains the entry
                 prop_assert!(monitor.app_id_cache.contains_key(&pid));
-                prop_assert_eq!(monitor.app_id_cache.get(&pid).unwrap().0, app_id);
+                prop_assert_eq!(&monitor.app_id_cache.get(&pid).unwrap().0, &app_id);
 
                 // Simulate time passing beyond expiry (5 seconds)
                 // We can't actually wait 5 seconds in a test, so we manually insert
