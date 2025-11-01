@@ -54,8 +54,7 @@ pub struct HdrController {
     /// Cached display targets
     ///
     /// Uses `SmallVec` with inline capacity of 4 to avoid heap allocation for typical
-    /// 1-4 display setups. Most users have 1-2 monitors; 4 covers dual 4K + laptop screen
-    /// scenarios while keeping the common case stack-allocated for better cache locality.
+    /// 1-4 display setups.
     display_cache: SmallVec<[DisplayTarget; 4]>,
 }
 
@@ -76,23 +75,8 @@ impl HdrController {
 
     /// Create a mock HDR controller for testing
     ///
-    /// Returns a minimal `HdrController` with mocked Windows version and empty display cache.
+    /// Returns a minimal `HdrController` with empty display cache.
     /// **For test use only** - does not call Windows APIs.
-    ///
-    /// # Rationale
-    ///
-    /// DHAT profiling tests need `AppController` to measure allocation patterns in
-    /// `handle_process_event`, but `HdrController::new()` fails in CI environments
-    /// without real displays. This mock allows profiling the full production workload.
-    ///
-    /// # Note
-    ///
-    /// This method is available in both unit tests and integration tests.
-    /// The `#[doc(hidden)]` attribute hides it from public documentation, but it remains
-    /// accessible to integration tests in the `tests/` directory.
-    ///
-    /// Integration tests are compiled as separate crates, so `cfg(test)` doesn't apply.
-    /// This method is always compiled but hidden from docs to signal test-only usage.
     #[doc(hidden)]
     pub fn new_mock() -> Result<Self> {
         Ok(Self {
@@ -220,11 +204,8 @@ impl HdrController {
                 path_count, mode_count
             );
 
-            // Step 2: Allocate buffers for paths and modes
             let mut paths = vec![DISPLAYCONFIG_PATH_INFO::default(); path_count as usize];
             let mut modes = vec![DISPLAYCONFIG_MODE_INFO::default(); mode_count as usize];
-
-            // Step 3: Query display configuration
             unsafe {
                 let result = QueryDisplayConfig(
                     QDC_ONLY_ACTIVE_PATHS,
@@ -252,8 +233,7 @@ impl HdrController {
                 path_count
             );
 
-            // Step 4: Extract display targets from paths and detect HDR support
-            // Pre-allocate with known capacity from path_count
+            // Extract display targets from paths and detect HDR support
             self.display_cache.clear();
             self.display_cache.reserve(path_count as usize);
 

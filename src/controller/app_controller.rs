@@ -49,9 +49,7 @@ pub struct AppController {
     startup_time: Instant,
     /// Last toggle time for debouncing
     ///
-    /// Stores nanoseconds elapsed since `startup_time`. Uses `Ordering::Relaxed`
-    /// because precise synchronization is not needed for debouncing - approximate
-    /// timing within ~500ms window is acceptable.
+    /// Stores nanoseconds elapsed since `startup_time`.
     last_toggle_time_nanos: Arc<AtomicU64>,
     /// Reference to `ProcessMonitor`'s unified watch state (app list + identifier cache)
     ///
@@ -106,25 +104,7 @@ impl AppController {
 
     /// Create a new application controller with mock HDR controller
     ///
-    /// **For test use only** - uses `HdrController::new_mock()` to avoid Windows API failures.
-    /// Identical to `new()` except it uses the mock HDR controller.
-    ///
-    /// # Rationale
-    ///
-    /// DHAT allocation profiling requires the full `AppController` workload.
-    ///
-    /// # Guidelines Alignment
-    ///
-    /// - Line 47-49: "applications use anyhow with context"
-    ///
-    /// # Note
-    ///
-    /// This method is available in both unit tests and integration tests.
-    /// The `#[doc(hidden)]` attribute hides it from public documentation, but it remains
-    /// accessible to integration tests in the `tests/` directory.
-    ///
-    /// Integration tests are compiled as separate crates, so `cfg(test)` doesn't apply.
-    /// This method is always compiled but hidden from docs to signal test-only usage.
+    /// **For test use only** - uses mock HDR controller to avoid Windows API dependencies.
     #[doc(hidden)]
     pub fn new_with_mock_hdr(
         config: AppConfig,

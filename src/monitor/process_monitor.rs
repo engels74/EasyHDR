@@ -114,8 +114,7 @@ pub struct ProcessMonitor {
     /// PID-based `AppIdentifier` cache to avoid repeated string allocations
     ///
     /// Maps PID → (`AppIdentifier`, `last_seen_timestamp`). Entries expire after 5s
-    /// to handle PID reuse. Reduces string allocations from ~250/poll to <10/poll.
-    /// Pre-allocated with capacity for 200 processes (typical system load).
+    /// to handle PID reuse.
     #[cfg_attr(not(windows), allow(dead_code))]
     app_id_cache: HashMap<u32, (AppIdentifier, Instant)>,
     /// Channel to send process events
@@ -200,36 +199,12 @@ impl ProcessMonitor {
     /// Get the number of completed poll cycles
     ///
     /// Used for testing and diagnostics to verify the monitor is actively polling.
-    /// Returns the count using Relaxed ordering since precise synchronization
-    /// is not required for diagnostic purposes.
-    ///
-    /// # Memory Ordering
-    ///
-    /// Uses `Ordering::Relaxed` because:
-    /// - This is purely a diagnostic counter for test verification
-    /// - No happens-before relationship needed with other operations
-    /// - Approximate count is acceptable (exact synchronization not required)
-    /// - Counter only increases monotonically (no complex state dependencies)
-    ///
-    /// # Test-Only API
-    ///
-    /// Hidden from documentation as this is internal test infrastructure.
-    /// Integration tests are compiled as separate crates, so `cfg(test)` doesn't apply.
-    /// This method is always compiled but hidden from docs to signal test-only usage.
     #[doc(hidden)]
     pub fn get_poll_cycle_count(&self) -> u64 {
         self.poll_cycle_count.load(Ordering::Relaxed)
     }
 
     /// Get a reference to the poll cycle counter for external monitoring
-    ///
-    /// Allows tests to monitor poll progress by holding an `Arc` reference
-    /// to the counter and checking it periodically without borrowing the
-    /// entire `ProcessMonitor` instance.
-    ///
-    /// # Memory Ordering
-    ///
-    /// Loads use `Ordering::Relaxed` for the same reasons as `get_poll_cycle_count()`.
     ///
     /// # Test-Only API
     ///
@@ -315,7 +290,6 @@ impl ProcessMonitor {
                 .max(self.estimated_process_count);
             let mut current_processes = HashSet::with_capacity(capacity);
 
-            // Initialize PROCESSENTRY32W structure
             #[expect(
                 clippy::cast_possible_truncation,
                 reason = "size_of::<PROCESSENTRY32W>() is a compile-time constant (592 bytes) that fits in u32"
@@ -485,12 +459,10 @@ impl ProcessMonitor {
     fn detect_changes(&mut self, current: HashSet<AppIdentifier>) {
         use tracing::info;
 
-        // Clone app list Arc (cheap pointer copy) - lock released immediately
-        // Lock hold time: O(1) - just copying an Arc pointer, not the Vec contents
         let apps = {
             let state = self.watch_state.read();
             Arc::clone(&state.apps)
-        }; // Lock is released here
+        };
 
         // Find started processes
         for app_id in current.difference(&self.running_processes) {
@@ -638,8 +610,6 @@ fn extract_win32_app_identifier(sz_exe_file: &[u16; 260], pid: u32) -> Option<Ap
 }
 
 /// Extract process name from szExeFile field
-///
-/// Converts a null-terminated wide string to a Rust String.
 #[cfg(windows)]
 fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
     // Find the null terminator

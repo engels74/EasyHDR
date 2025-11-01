@@ -33,9 +33,8 @@ const MIN_WINDOWS_BUILD: u32 = 19044;
 
 /// Main entry point for the application
 ///
-/// Performs complex initialization including logging, version detection, single-instance
+/// Performs initialization including logging, version detection, single-instance
 /// enforcement, HDR capability detection, and multi-threaded component startup.
-/// The length (102 lines) is justified by the sequential initialization sequence.
 #[expect(
     clippy::too_many_lines,
     reason = "Complex initialization sequence requires sequential setup of logging, version detection, single-instance enforcement, HDR capability detection, and multi-threaded component startup"
@@ -439,10 +438,6 @@ fn initialize_components(
 
     // Create bounded mpsc channels for communication with backpressure
     // Channel capacity of 32 provides sufficient buffering for event bursts
-    // (e.g., multiple apps starting simultaneously) while preventing unbounded
-    // memory growth. Typical usage: 1-5 events per second based on monitoring
-    // interval (500-1000ms). Bounded channels provide automatic backpressure
-    // when capacity is reached, ensuring system stability under load.
     let channel_capacity = 32;
     let (process_event_tx, process_event_rx) = mpsc::sync_channel::<ProcessEvent>(channel_capacity);
     let (hdr_state_tx, hdr_state_rx) = mpsc::sync_channel::<HdrStateEvent>(channel_capacity);
