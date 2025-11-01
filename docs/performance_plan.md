@@ -15,16 +15,16 @@
 
 ## Executive Summary
 
-Current bottleneck: Process monitor makes **300-500 Windows API calls** and **200-500 string allocations per second**. This plan reduces both by **90%+** through filtering, caching, and lock-free patterns.
+Current bottleneck: Process monitor makes **~230 Windows API calls** and **~596 allocations per second**. This plan reduces both by **90%+** through filtering, caching, and lock-free patterns.
 
 ### Key Metrics
 
 | Metric | Baseline (Phase 0) | Target | Improvement |
 |--------|-------------------|--------|-------------|
-| API calls/poll | TBD | 5-20 | 90% ↓ |
-| Allocations/sec | TBD | 5-10 | 95% ↓ |
-| Poll latency | TBD | 5-15ms | 85% ↓ |
-| Memory/poll | TBD | <100B | 95% ↓ |
+| CPU (poll_processes) | 90.9% | <20% | 78% ↓ |
+| Allocations/sec | 595.94/s | 5-10/s | 98% ↓ |
+| Allocations/poll | ~303 allocs | <10 allocs | 97% ↓ |
+| Poll latency (250p/10a) | 7.9 µs | 5-15 µs | Validate ↓ |
 
 ---
 
@@ -47,6 +47,24 @@ Current bottleneck: Process monitor makes **300-500 Windows API calls** and **20
 **Key Finding:** `poll_processes` consumes **90.9% CPU** because it calls `detect_uwp_process` for ALL ~230 enumerated processes. **Phase 1.1 filtering will eliminate 90%+ of these calls** by checking monitored apps first → **~9% CPU savings**.
 
 **Optimization Priority:** Phase 1.1 (Post-identification filtering) confirmed as highest-value optimization.
+
+**DHAT Allocation Baseline:** [docs/phase0/allocation-profiling-dhat/](../docs/phase0/allocation-profiling-dhat/)
+
+| Metric | Baseline | Target (Phase 1-2) | Reduction |
+|--------|----------|-------------------|-----------|
+| Allocation rate | 595.94 allocs/sec | 5-10 allocs/sec | 98% ↓ |
+| Allocations/poll | ~303 allocs | <10 allocs | 97% ↓ |
+| Primary hotspot | String allocations (95%) | Cached AppIdentifiers | Phase 1.2 |
+
+**Criterion Benchmark Baselines:** [docs/phase0/criterion-benchmark/](../docs/phase0/criterion-benchmark/)
+
+| Benchmark | 1 app | 5 apps | 10 apps | 50 apps | Target Impact |
+|-----------|-------|--------|---------|---------|---------------|
+| `poll_processes_simulation` (250 procs) | 1.7 µs | 4.2 µs | 7.9 µs | 33.5 µs | Phase 1.1: 90% ↓ |
+| `watch_list_clone` | 176 ns | 1.7 µs | 3.4 µs | 8.5 µs | Phase 2.1: 99% ↓ (to ~10 ns) |
+| `monitored_app_lookup` (O(n)) | 11.3 ns | 22.6 ns | 33.0 ns | 44.5 ns | Phase 3.2: 67% ↓ (to ~15 ns O(1)) |
+
+**Config Operations:** Serialize 53.6 µs, Deserialize 337.1 µs (not hot path, acceptable)
 
 ---
 
@@ -118,9 +136,9 @@ See [profiling_guide.md](profiling_guide.md) for DHAT allocation profiling, Crit
 - [x] **`poll_processes` identified as hotspot (>20% CPU)** - **ACHIEVED: 90.9%**
 - [x] **EasyHDR functions symbolicated** - **ACHIEVED** (Windows APIs partially unsymbolicated, acceptable)
 - [x] **Optimization targets confirmed** - **Phase 1.1 filtering is highest-value** (~9% CPU gain)
-- [ ] DHAT allocation profiling completed (200-500 allocs/sec baseline)
-- [ ] Criterion benchmarks with varying workloads (1/5/10/50 apps)
-- [ ] Hot paths documented ✅ (see Baseline Results above)
+- [x] **DHAT allocation profiling completed** - **ACHIEVED: 595.94 allocs/sec baseline** (target: 5-10 allocs/sec)
+- [x] **Criterion benchmarks with varying workloads** - **ACHIEVED: 1/5/10/50 apps × 100/250/500 procs** (12 scenarios)
+- [x] **Hot paths documented** - See Baseline Results above (CPU, allocations, benchmarks)
 
 ---
 
@@ -485,17 +503,17 @@ Each phase is independently revertible:
 | Metric | Baseline (Phase 0) | Target | Measured |
 |--------|-------------------|--------|----------|
 | **CPU Usage** | | | |
-| Process monitor | ___ % | 10-20% | ___ % |
-| Event handling | ___ % | 30-50% | ___ % |
-| Overall app | ___ % | 40-60% | ___ % |
+| Process monitor | 90.9% | 10-20% | ___ % |
+| Event handling | 1.94% | 1-5% | ___ % |
+| Overall app | TBD | 40-60% ↓ | ___ % |
 | **Memory** | | | |
-| Allocation rate | ___ /s | 5-10/s | ___ /s |
-| Per-poll alloc | ___ B | <100B | ___ B |
-| Peak memory | ___ KB | -15KB | ___ KB |
+| Allocation rate | 595.94/s | 5-10/s | ___ /s |
+| Allocations/poll | ~303 allocs | <10 allocs | ___ allocs |
+| Peak memory | TBD | -15KB | ___ KB |
 | **Latency** | | | |
-| Poll cycle | ___ ms | 5-15ms | ___ ms |
-| Event handling | ___ µs | -50% | ___ µs |
-| API calls/poll | ___ calls | 5-20 | ___ calls |
+| Poll cycle (250p/10a) | 7.9 µs | 5-15 µs | ___ µs |
+| Monitored app lookup | 44.5 ns (50a) | ~15 ns (O(1)) | ___ ns |
+| Watch list clone | 8.5 µs (50a) | ~10 ns | ___ ns |
 
 **Note:** Baseline column filled during Phase 0. Targets may adjust based on actual measurements.
 
