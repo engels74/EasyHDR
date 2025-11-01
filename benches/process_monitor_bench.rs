@@ -1,10 +1,5 @@
 //! Benchmarks for process monitoring hot paths
 //!
-//! This benchmark suite focuses on Phase 0 baseline profiling to identify:
-//! - Config access patterns (O(n) lookups - Phase 3.2 optimization target)
-//! - Watch list cloning overhead (Phase 2.1 optimization target)
-//! - String allocation patterns (Phase 1.2 optimization target)
-//!
 //! Note: Direct process polling benchmarks require Windows APIs and are better
 //! measured via integration tests and profiling tools (cargo-flamegraph, DHAT).
 //! See `docs/performance_plan.md` for profiling instructions.
@@ -20,7 +15,6 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 /// Create a mock configuration with varying numbers of monitored apps
-/// Phase 3.1: Returns `RwLock` instead of `Mutex` for concurrent reads
 fn create_mock_config(num_monitored: usize) -> Arc<parking_lot::RwLock<AppConfig>> {
     let mut config = AppConfig {
         monitored_apps: Vec::with_capacity(num_monitored),
@@ -72,7 +66,7 @@ fn create_mock_config(num_monitored: usize) -> Arc<parking_lot::RwLock<AppConfig
     Arc::new(parking_lot::RwLock::new(config))
 }
 
-/// Benchmark monitored app lookups (O(n) currently, Phase 3.2 target: O(1))
+/// Benchmark monitored app lookups
 ///
 /// This simulates the event handling pattern where we check if a process
 /// is in the monitored list. Currently uses O(n) iteration, target is O(1) `HashSet`.
@@ -84,7 +78,6 @@ fn bench_monitored_app_lookup(c: &mut Criterion) {
         let config = create_mock_config(num_apps);
 
         group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
-            // Phase 3.1: Use read lock for concurrent access
             let guard = config.read();
             let apps = &guard.monitored_apps;
 
@@ -110,7 +103,7 @@ fn bench_monitored_app_lookup(c: &mut Criterion) {
 
 /// Benchmark watch list operations
 ///
-/// Tests the overhead of cloning the watch list (Phase 2.1 optimization target)
+/// Benchmark watch list cloning overhead
 fn bench_watch_list_clone(c: &mut Criterion) {
     let mut group = c.benchmark_group("watch_list_clone");
 
@@ -119,7 +112,6 @@ fn bench_watch_list_clone(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
             b.iter(|| {
-                // Phase 3.1: Use read lock for concurrent access
                 let guard = config.read();
                 let apps = black_box(&guard.monitored_apps);
                 // Simulate current implementation: clone the entire Vec
@@ -133,7 +125,7 @@ fn bench_watch_list_clone(c: &mut Criterion) {
 
 /// Benchmark config access patterns
 ///
-/// Tests Mutex contention (Phase 3.1 `RwLock` optimization target)
+/// Benchmark config read contention with RwLock
 fn bench_config_read_contention(c: &mut Criterion) {
     let mut group = c.benchmark_group("config_read");
 
@@ -142,7 +134,6 @@ fn bench_config_read_contention(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
             b.iter(|| {
-                // Simulate frequent config reads (Phase 3.1: now uses RwLock)
                 let guard = config.read();
                 let apps = &guard.monitored_apps;
                 // Simulate checking if an app is monitored (O(n) currently)
@@ -163,7 +154,7 @@ fn bench_config_read_contention(c: &mut Criterion) {
 
 /// Benchmark string allocation patterns
 ///
-/// Tests allocation overhead from process name extraction (Phase 1.2 optimization target)
+/// Benchmark process name extraction allocation overhead
 fn bench_string_allocations(c: &mut Criterion) {
     let mut group = c.benchmark_group("string_allocations");
 
@@ -192,11 +183,7 @@ fn bench_string_allocations(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark simulated `poll_processes()` with varying workloads (Phase 4.1 requirement)
-///
-/// This benchmark simulates the complete poll cycle to test algorithmic complexity
-/// with different process counts and monitored app counts. Tests the O(n) vs O(1)
-/// lookup patterns that Phase 1-3 optimizations will address.
+/// Benchmark simulated `poll_processes()` with varying workloads
 ///
 /// **Test Matrix:** 3 process counts × 4 app counts = 12 combinations
 /// - Process counts: 100, 250, 500 (realistic Windows workloads)
@@ -303,8 +290,6 @@ fn bench_poll_processes_simulation(c: &mut Criterion) {
                             let process_name = process_names[(pid as usize) % process_names.len()];
 
                             // Simulate O(n) monitored app lookup (current implementation)
-                            // This is what Phase 3.2 will optimize to O(1) HashSet lookup
-                            // Phase 3.1: Use read lock for concurrent access
                             let guard = monitored_apps.read();
                             let is_monitored = guard.monitored_apps.iter().any(|app| {
                                 if let MonitoredApp::Win32(win32_app) = app {

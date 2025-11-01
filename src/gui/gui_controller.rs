@@ -89,7 +89,6 @@ impl GuiController {
         // Initialize settings properties from config
         {
             let controller_guard = controller.lock();
-            // Phase 3.1: Use read lock for concurrent access
             let config = controller_guard.config.read();
 
             main_window.set_settings_auto_start(config.preferences.auto_start);
@@ -230,7 +229,6 @@ impl GuiController {
             // Check user preference for close button behavior
             let should_minimize_to_tray = {
                 let controller_guard = controller_for_close.lock();
-                // Phase 3.1: Use read lock for concurrent access
                 let config = controller_guard.config.read();
                 config.preferences.minimize_to_tray_on_close
             };
@@ -637,7 +635,6 @@ impl GuiController {
 
         let show_notifications = {
             let controller_guard = controller.lock();
-            // Phase 3.1: Use read lock for concurrent access
             let config = controller_guard.config.read();
             config.preferences.show_tray_notifications
         };
@@ -704,7 +701,6 @@ impl GuiController {
 
         // Access the config to get the app UUID
         let app_id = {
-            // Phase 3.1: Use read lock for concurrent access
             let config = controller_guard.config.read();
             // Validate index is non-negative and within bounds
             // We check index < 0 first, then cast is safe
@@ -764,7 +760,6 @@ impl GuiController {
 
         // Access the config to get the app UUID
         let app_id = {
-            // Phase 3.1: Use read lock for concurrent access
             let config = controller_guard.config.read();
             // Validate index is non-negative and within bounds
             // We check index < 0 first, then cast is safe
@@ -843,7 +838,6 @@ impl GuiController {
         // Apply partial update pattern: mutate existing preferences to preserve update metadata
         let controller_guard = controller.lock();
         {
-            // Phase 3.1: Use write lock for exclusive access
             let mut config = controller_guard.config.write();
 
             // Update only the UI-controlled fields, preserving update check metadata
@@ -950,7 +944,6 @@ impl GuiController {
         // Check rate limiting
         let (should_check, last_check_time) = {
             let controller_guard = controller.lock();
-            // Phase 3.1: Use read lock for concurrent access
             let config = controller_guard.config.read();
             let last_check = config.preferences.last_update_check_time;
             drop(config);
@@ -1002,7 +995,6 @@ impl GuiController {
             // Update last check time and cache in config, then persist immediately
             {
                 let controller_guard = controller_clone.lock();
-                // Phase 3.1: Use write lock for exclusive access
                 let mut config = controller_guard.config.write();
                 config.preferences.last_update_check_time = UpdateChecker::current_timestamp();
 
@@ -1054,7 +1046,6 @@ impl GuiController {
         // Check if update notifications are enabled
         let show_notifications = {
             let controller_guard = controller.lock();
-            // Phase 3.1: Use read lock for concurrent access
             let config = controller_guard.config.read();
             config.preferences.show_update_notifications
         };
@@ -1658,7 +1649,6 @@ impl GuiController {
         // Update config with current window state
         let controller_guard = controller.lock();
         {
-            // Phase 3.1: Use write lock for exclusive access
             let mut config = controller_guard.config.write();
             config.window_state.x = position.x;
             config.window_state.y = position.y;
@@ -1738,7 +1728,6 @@ impl GuiController {
                         // Check user preference for minimize button behavior
                         let should_minimize_to_tray = {
                             let controller_guard = controller_handle.lock();
-                            // Phase 3.1: Use read lock for concurrent access
                             let config = controller_guard.config.read();
                             config.preferences.minimize_to_tray_on_minimize
                         };
@@ -1804,7 +1793,6 @@ impl GuiController {
         // Check if we should start minimized to tray or show the window
         let start_minimized = {
             let controller_guard = self.controller_handle.lock();
-            // Phase 3.1: Use read lock for concurrent access
             let config = controller_guard.config.read();
             config.preferences.start_minimized_to_tray
         };

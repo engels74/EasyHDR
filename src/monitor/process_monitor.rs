@@ -66,8 +66,8 @@ pub enum ProcessEvent {
 /// structure that can be updated atomically. This prevents race conditions where
 /// `poll_processes()` could observe an inconsistent state between the two caches.
 ///
-/// The `apps` field is wrapped in `Arc` to enable cheap cloning during event handling
-/// (Phase 2.1 optimization), while `identifiers` is owned directly for O(1) lookups.
+/// The `apps` field is wrapped in `Arc` to enable cheap cloning during event handling,
+/// while `identifiers` is owned directly for O(1) lookups.
 #[derive(Clone, Debug)]
 pub struct WatchState {
     /// Monitored applications (Arc-wrapped for cheap cloning during event handling)
@@ -111,7 +111,7 @@ pub struct ProcessMonitor {
     /// Shared with `AppController` via `Arc` for coordinated updates when GUI modifies
     /// the monitored app list.
     watch_state: Arc<RwLock<WatchState>>,
-    /// PID-based `AppIdentifier` cache to avoid repeated string allocations (Phase 1.2)
+    /// PID-based `AppIdentifier` cache to avoid repeated string allocations
     ///
     /// Maps PID → (`AppIdentifier`, `last_seen_timestamp`). Entries expire after 5s
     /// to handle PID reuse. Reduces string allocations from ~250/poll to <10/poll.
@@ -286,13 +286,11 @@ impl ProcessMonitor {
         {
             use tracing::{debug, warn};
 
-            // Phase 1.2: Expire stale cache entries (older than 5 seconds) to handle PID reuse
             const CACHE_EXPIRY: Duration = Duration::from_secs(5);
             let now = Instant::now();
             self.app_id_cache
                 .retain(|_pid, (_app_id, last_seen)| now.duration_since(*last_seen) < CACHE_EXPIRY);
 
-            // Phase 1.2: Cache hit rate instrumentation
             let mut cache_hits = 0usize;
             let mut cache_misses = 0usize;
 
@@ -339,7 +337,6 @@ impl ProcessMonitor {
                 let handle_result =
                     unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) };
 
-                // Phase 1.2: Check cache first before creating AppIdentifier
                 if let Some((cached_app_id, _)) = self.app_id_cache.get(&pid) {
                     cache_hits += 1;
                     // Cache hit - reuse existing AppIdentifier
@@ -373,7 +370,6 @@ impl ProcessMonitor {
                                         );
                                         current_processes.insert(app_id);
                                     }
-                                    // Early exit: skip unmonitored UWP apps (Phase 1.1 optimization)
                                 }
                                 Ok(None) => {
                                     // Win32 app - extract process name and check if monitored
@@ -386,7 +382,6 @@ impl ProcessMonitor {
                                         if self.watch_state.read().identifiers.contains(&app_id) {
                                             current_processes.insert(app_id);
                                         }
-                                        // Early exit: skip unmonitored Win32 apps (Phase 1.1 optimization)
                                     }
                                 }
                                 Err(e) => {
@@ -407,7 +402,6 @@ impl ProcessMonitor {
                                         if self.watch_state.read().identifiers.contains(&app_id) {
                                             current_processes.insert(app_id);
                                         }
-                                        // Early exit: skip unmonitored Win32 apps (Phase 1.1 optimization)
                                     }
                                 }
                             }
@@ -453,7 +447,6 @@ impl ProcessMonitor {
 
             debug!("Found {} running processes", current_processes.len());
 
-            // Phase 1.2: Log cache hit rate for performance monitoring
             let total_lookups = cache_hits + cache_misses;
             if total_lookups > 0 {
                 // Precision loss is acceptable for logging statistics
@@ -1139,7 +1132,7 @@ mod tests {
                 prop_assert_eq!(first_result_len, second_result_len);
             }
 
-            /// Property: PID cache handles reuse correctly with expiry (Phase 1.2)
+            /// Property: PID cache handles reuse correctly with expiry
             ///
             /// Tests that the cache expires entries after the expiry duration,
             /// preventing stale data from being returned when PIDs are reused.

@@ -24,8 +24,5 @@ target
 # xwin
 .xwin-*
 
-# temp
-docs/phase*
-
 # EasyHDR Config
 EasyHDR/config.json

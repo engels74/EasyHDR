@@ -189,7 +189,7 @@ jobs:
           - **Yellow colors:** System libraries (Windows APIs)
           - **Green colors:** Kernel functions
 
-          ## What to Look For (Phase 0 Success Criteria)
+          ## What to Look For
 
           **The flamegraph should show actual Rust function names, NOT raw memory addresses!**
 
@@ -224,7 +224,7 @@ jobs:
           ## Next Steps
 
           Use the flamegraph to:
-          1. Confirm ``poll_processes`` is the main CPU hotspot (Phase 0 baseline)
+          1. Confirm ``poll_processes`` is the main CPU hotspot
           2. Identify allocation-heavy paths (complement with DHAT profiling)
           3. Document baseline metrics in ``docs/performance_plan.md``
           "@
@@ -258,7 +258,7 @@ jobs:
 
       - name: Run allocation profiling
         run: |
-          # Run production allocation profiling (Phase 0 baseline requirement)
+          # Run production allocation profiling
           # This test exercises ProcessMonitor + AppController for 30 seconds
           # to capture realistic allocation patterns from production code
           # See tests/dhat_profiling_test.rs for implementation details
@@ -298,7 +298,7 @@ jobs:
           3. Load ``dhat-heap.json`` in the viewer
           4. Explore allocation patterns and stack traces
 
-          ## What to Look For (Phase 0 Success Criteria)
+          ## What to Look For
 
           **Critical validation - verify these metrics in the DHAT viewer:**
 
@@ -338,9 +338,9 @@ jobs:
           ## Next Steps
 
           Use this baseline to:
-          1. Document allocation rate in ``docs/performance_plan.md`` (Phase 0 baseline)
-          2. Identify optimization opportunities for Phase 1.2 (AppIdentifier cache)
-          3. Measure 95% allocation reduction after Phase 1.2 implementation
+          1. Document allocation rate in ``docs/performance_plan.md``
+          2. Identify optimization opportunities
+          3. Validate allocation improvements after optimizations
           "@ | Out-File -FilePath dhat-results/README.md -Encoding UTF8
 
       - name: Upload DHAT profiling artifacts
@@ -383,7 +383,7 @@ jobs:
           echo "5. Document baseline metrics in \`docs/performance_plan.md\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "## Phase 0 Success Criteria" >> $GITHUB_STEP_SUMMARY
+          echo "## Success Criteria" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- [ ] Flamegraph identifies \`poll_processes\` as hotspot (>20% CPU)" >> $GITHUB_STEP_SUMMARY
           echo "- [ ] Flamegraph shows \`handle_process_event\` contribution (>5% CPU)" >> $GITHUB_STEP_SUMMARY
