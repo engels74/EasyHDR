@@ -302,28 +302,34 @@ jobs:
 
           **Critical validation - verify these metrics in the DHAT viewer:**
 
-          - **Total runtime:** Should show ~30 seconds (``t-end`` field), NOT microseconds
-          - **Allocation rate:** Should show 200-500 allocations/sec (calculate: total blocks / runtime in seconds)
+          - **Thread verification success**: Check test output for "✓ ProcessMonitor verified"
+          - **Total runtime**: Should show ~30 seconds (``t-end`` field), NOT microseconds
+          - **Poll cycles**: Test output should show "Total poll cycles: 60+" (500ms interval = 60 cycles/30s)
+          - **Allocation rate**: Calculate: total blocks ÷ runtime in seconds = 200-500 allocs/sec
           - **Hot allocation paths (look for these in the call stacks):**
             - ``easyhdr::monitor::process_monitor::poll_processes``
             - ``alloc::string::String::from`` (process name extraction)
             - ``easyhdr::monitor::uwp::detect_uwp_process``
             - ``alloc::vec::Vec::clone`` (watch list cloning)
             - ``easyhdr::monitor::AppIdentifier`` creation
-          - **Memory per poll:** Baseline memory usage per poll cycle (divide total bytes by number of polls)
+            - ``easyhdr::controller::app_controller::handle_process_event``
 
           **Expected allocation hotspots:**
           1. Process name string allocations (~250 per poll)
           2. AppIdentifier creation in poll_processes
-          3. Watch list cloning overhead (if present in event handling)
+          3. Watch list cloning overhead (AppController event handling)
           4. UWP detection allocations
 
           ## Troubleshooting
 
+          **If test panics with "ProcessMonitor failed to complete 3 poll cycles":**
+          - Windows APIs (CreateToolhelp32Snapshot) are not available in CI
+          - Check CI logs for Windows API errors
+          - Verify mock HDR controller is being used (should be)
+
           **If runtime shows microseconds instead of 30 seconds:**
-          - The test didn't run long enough - check CI logs for errors
+          - The test didn't run long enough - check CI logs for panic/errors
           - Verify the test name in the workflow matches ``profile_production_allocation_patterns``
-          - Check if Windows APIs are accessible in CI environment
 
           **If allocation rate is >1000 allocs/sec:**
           - May indicate test infrastructure overhead instead of production code

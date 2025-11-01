@@ -7,9 +7,13 @@
 
 use parking_lot::Mutex;
 use std::collections::HashSet;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+
+#[cfg(windows)]
+use std::sync::atomic::Ordering;
 
 #[cfg(windows)]
 use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -77,6 +81,9 @@ pub struct ProcessMonitor {
     /// Estimated process count for capacity pre-allocation
     #[cfg_attr(not(windows), allow(dead_code))]
     estimated_process_count: usize,
+    /// Number of completed poll cycles (for testing/diagnostics)
+    #[cfg_attr(not(test), allow(dead_code))]
+    poll_cycle_count: Arc<AtomicU64>,
 }
 
 impl ProcessMonitor {
@@ -91,6 +98,7 @@ impl ProcessMonitor {
             interval,
             running_processes: HashSet::with_capacity(DEFAULT_PROCESS_COUNT),
             estimated_process_count: DEFAULT_PROCESS_COUNT,
+            poll_cycle_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -106,6 +114,38 @@ impl ProcessMonitor {
     /// Get a reference to the watch list for external updates
     pub fn get_watch_list_ref(&self) -> Arc<Mutex<Vec<MonitoredApp>>> {
         Arc::clone(&self.watch_list)
+    }
+
+    /// Get the number of completed poll cycles
+    ///
+    /// Used for testing and diagnostics to verify the monitor is actively polling.
+    /// Returns the count using Relaxed ordering since precise synchronization
+    /// is not required for diagnostic purposes.
+    ///
+    /// # Memory Ordering
+    ///
+    /// Uses `Ordering::Relaxed` because:
+    /// - This is purely a diagnostic counter for test verification
+    /// - No happens-before relationship needed with other operations
+    /// - Approximate count is acceptable (exact synchronization not required)
+    /// - Counter only increases monotonically (no complex state dependencies)
+    #[cfg(test)]
+    pub fn get_poll_cycle_count(&self) -> u64 {
+        self.poll_cycle_count.load(Ordering::Relaxed)
+    }
+
+    /// Get a reference to the poll cycle counter for external monitoring
+    ///
+    /// Allows tests to monitor poll progress by holding an `Arc` reference
+    /// to the counter and checking it periodically without borrowing the
+    /// entire `ProcessMonitor` instance.
+    ///
+    /// # Memory Ordering
+    ///
+    /// Loads use `Ordering::Relaxed` for the same reasons as `get_poll_cycle_count()`.
+    #[cfg(test)]
+    pub fn get_poll_cycle_count_ref(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.poll_cycle_count)
     }
 
     /// Start the monitoring thread
@@ -271,6 +311,10 @@ impl ProcessMonitor {
 
             // Detect changes and send events
             self.detect_changes(current_processes);
+
+            // Increment poll cycle counter for diagnostic purposes
+            // Relaxed ordering is sufficient - this is just a diagnostic counter
+            self.poll_cycle_count.fetch_add(1, Ordering::Relaxed);
 
             Ok(())
         }

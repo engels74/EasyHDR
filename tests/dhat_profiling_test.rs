@@ -256,36 +256,40 @@ fn profile_config_access() {
 /// This test exercises the full ProcessMonitor and AppController workload
 /// for 30 seconds to capture realistic allocation patterns from production code.
 ///
+/// **Test phases:**
+/// 1. **Thread verification (up to 10s)**: Waits for ProcessMonitor to complete
+///    at least 3 poll cycles to ensure threads are healthy before profiling
+/// 2. **DHAT profiling (30s)**: Captures allocations from production workload
+/// 3. **Shutdown**: Signals threads to stop and waits for cleanup
+///
 /// **Expected to profile:**
 /// - `poll_processes()` string allocations (~250 per poll)
 /// - Process name extraction from Windows APIs
 /// - AppIdentifier creation and cloning
-/// - Watch list clones in event handling
+/// - Watch list clones in event handling (AppController)
 /// - UWP detection allocations
 ///
 /// **Phase 0 Success Criteria:**
 /// - Allocation rate: 200-500 allocs/sec
-/// - Runtime: ~30 seconds (not microseconds)
+/// - Runtime: ~30 seconds DHAT profiling (plus ~5-10s verification)
 /// - Stack traces show `poll_processes`, `detect_uwp_process`, `String::from`
+/// - At least 60 poll cycles completed (30s ÷ 500ms = 60)
 ///
 /// **Implementation notes:**
-/// - Warmup period (5s) BEFORE DHAT profiling starts to exclude startup allocations
-/// - Shutdown signal using `Arc<AtomicBool>` for graceful thread coordination
-/// - Guideline: Line 96 - std::sync primitives for non-async code
+/// - Thread verification prevents capturing failed/non-running threads
+/// - Uses atomic counter to verify ProcessMonitor is actively polling
+/// - Test panics if threads don't start within 10 seconds (fail-fast)
+/// - Guideline compliance: Relaxed ordering for diagnostic counter (Line 96-100)
 #[test]
 #[cfg(windows)]
 fn profile_production_allocation_patterns() {
     println!("\n=== DHAT Allocation Profiling Test ===");
-    println!("This test will run for 35 seconds total (5s warmup + 30s profiling)");
+    println!("This test will run for ~40 seconds total (up to 10s verification + 30s profiling)");
     println!("Expected allocation patterns:");
     println!("  - Process name extraction (String::from)");
     println!("  - AppIdentifier creation in poll_processes");
-    println!("  - Watch list cloning overhead");
+    println!("  - Watch list cloning overhead (AppController)");
     println!("  - UWP detection allocations\n");
-
-    // Warmup phase: establish steady state before profiling
-    println!("Phase 1: Warmup (5 seconds) - establishing steady state...");
-    println!("  (Threads starting, caches populating, allocations NOT profiled)\n");
 
     // Create a realistic configuration with multiple monitored apps
     let config = create_profiling_config();
@@ -302,6 +306,10 @@ fn profile_production_allocation_patterns() {
     // Create process monitor with aggressive polling (500ms) to maximize allocations
     let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
     monitor.update_watch_list(apps);
+
+    // Get reference to poll cycle counter BEFORE moving monitor into thread
+    // This allows us to verify the monitor is actually running before profiling
+    let poll_counter = monitor.get_poll_cycle_count_ref();
 
     // Create app controller using mock HDR controller (test-only)
     // The profiling test measures allocation patterns in ProcessMonitor and AppController,
@@ -345,19 +353,42 @@ fn profile_production_allocation_patterns() {
         }
     });
 
-    // Warmup period: 5 seconds to allow threads to start and reach steady state
-    let warmup_start = Instant::now();
-    let warmup_duration = Duration::from_secs(5);
+    // Phase 1: Thread verification (wait for threads to start and complete polls)
+    println!("Phase 1: Verifying threads are running...");
+    println!("  Waiting for ProcessMonitor to complete at least 3 poll cycles...\n");
 
-    while warmup_start.elapsed() < warmup_duration {
-        let elapsed = warmup_start.elapsed().as_secs();
-        if elapsed > 0 && elapsed % 1 == 0 {
-            println!("  Warmup... {}s / 5s", elapsed);
+    let verification_start = Instant::now();
+    let verification_timeout = Duration::from_secs(10); // 10 seconds max
+
+    loop {
+        let cycle_count = poll_counter.load(Ordering::Relaxed);
+
+        if cycle_count >= 3 {
+            println!(
+                "  ✓ ProcessMonitor verified: {} poll cycles completed",
+                cycle_count
+            );
+            println!("  ✓ Threads are healthy and allocating\n");
+            break;
         }
+
+        if verification_start.elapsed() > verification_timeout {
+            panic!(
+                "ProcessMonitor failed to complete 3 poll cycles within 10 seconds. \
+                Completed: {} cycles. This indicates threads are not running or poll_processes() is failing.",
+                cycle_count
+            );
+        }
+
+        if cycle_count > 0 {
+            println!("  In progress... {} poll cycles completed", cycle_count);
+        }
+
         thread::sleep(Duration::from_millis(500));
     }
 
-    println!("\nPhase 2: Starting DHAT allocation profiling (30 seconds)...\n");
+    println!("Phase 2: Starting DHAT allocation profiling (30 seconds)...");
+    println!("  Threads verified healthy - now capturing allocation patterns\n");
 
     // NOW start DHAT profiler (after warmup completes)
     let _profiler = dhat::Profiler::new_heap();
@@ -380,7 +411,17 @@ fn profile_production_allocation_patterns() {
         thread::sleep(Duration::from_secs(1));
     }
 
+    let final_cycle_count = poll_counter.load(Ordering::Relaxed);
     println!("\nPhase 3: Profiling complete, shutting down threads...");
+    println!(
+        "  Total poll cycles during profiling: {}",
+        final_cycle_count
+    );
+    println!(
+        "  Expected allocations: {} to {} (200-300 allocs/poll)",
+        final_cycle_count * 200,
+        final_cycle_count * 300
+    );
 
     // Signal shutdown to threads
     // Ordering::Relaxed is sufficient - this is just a shutdown flag (Guideline Line 96)
