@@ -9,7 +9,7 @@ use crate::hdr::HdrController;
 use crate::monitor::{AppIdentifier, HdrStateEvent, ProcessEvent};
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 use uuid::Uuid;
@@ -41,10 +41,20 @@ pub struct AppController {
     hdr_state_receiver: Option<mpsc::Receiver<HdrStateEvent>>,
     /// State sender to GUI
     gui_state_sender: mpsc::SyncSender<AppState>,
-    /// Last toggle time for debouncing
-    last_toggle_time: Arc<Mutex<Instant>>,
-    /// Reference to `ProcessMonitor`'s watch list for updating
-    process_monitor_watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
+    /// Startup time for relative timestamp calculations (Phase 2.2)
+    ///
+    /// Used as the reference point for atomic timestamp operations.
+    /// Since `Instant` cannot be stored in an atomic directly, we store
+    /// elapsed nanoseconds from this startup time in `last_toggle_time_nanos`.
+    startup_time: Instant,
+    /// Last toggle time for debouncing (Phase 2.2: Atomic)
+    ///
+    /// Stores nanoseconds elapsed since `startup_time`. Uses `Ordering::Relaxed`
+    /// because precise synchronization is not needed for debouncing - approximate
+    /// timing within ~500ms window is acceptable.
+    last_toggle_time_nanos: Arc<AtomicU64>,
+    /// Reference to `ProcessMonitor`'s watch list for updating (Phase 2.1: Double-Arc)
+    process_monitor_watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
     /// Shared cache of monitored app identifiers (Phase 1.1)
     ///
     /// Synchronized with `ProcessMonitor` for fast O(1) lookups. Updated when
@@ -59,7 +69,7 @@ impl AppController {
         event_receiver: mpsc::Receiver<ProcessEvent>,
         hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
         gui_state_sender: mpsc::SyncSender<AppState>,
-        process_monitor_watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
+        process_monitor_watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
         monitored_identifiers: Arc<RwLock<HashSet<AppIdentifier>>>,
     ) -> Result<Self> {
         use tracing::info;
@@ -76,6 +86,9 @@ impl AppController {
         let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
         info!("Detected initial HDR state: {}", initial_hdr_state);
 
+        // Phase 2.2: Initialize startup time for atomic timestamp calculations
+        let startup_time = Instant::now();
+
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
             hdr_controller,
@@ -84,7 +97,8 @@ impl AppController {
             event_receiver: Some(event_receiver),
             hdr_state_receiver: Some(hdr_state_receiver),
             gui_state_sender,
-            last_toggle_time: Arc::new(Mutex::new(Instant::now())),
+            startup_time,
+            last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
             process_monitor_watch_list,
             monitored_identifiers,
         })
@@ -123,7 +137,7 @@ impl AppController {
         event_receiver: mpsc::Receiver<ProcessEvent>,
         hdr_state_receiver: mpsc::Receiver<HdrStateEvent>,
         gui_state_sender: mpsc::SyncSender<AppState>,
-        process_monitor_watch_list: Arc<Mutex<Vec<MonitoredApp>>>,
+        process_monitor_watch_list: Arc<Mutex<Arc<Vec<MonitoredApp>>>>,
         monitored_identifiers: Arc<RwLock<HashSet<AppIdentifier>>>,
     ) -> Result<Self> {
         use tracing::info;
@@ -140,6 +154,9 @@ impl AppController {
         let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
         info!("AppController initialized with mock HDR controller (test mode)");
 
+        // Phase 2.2: Initialize startup time for atomic timestamp calculations
+        let startup_time = Instant::now();
+
         Ok(Self {
             config: Arc::new(Mutex::new(config)),
             hdr_controller,
@@ -148,7 +165,8 @@ impl AppController {
             event_receiver: Some(event_receiver),
             hdr_state_receiver: Some(hdr_state_receiver),
             gui_state_sender,
-            last_toggle_time: Arc::new(Mutex::new(Instant::now())),
+            startup_time,
+            last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
             process_monitor_watch_list,
             monitored_identifiers,
         })
@@ -408,7 +426,16 @@ impl AppController {
                     );
 
                     // Debounce: wait 500ms before disabling to handle quick restarts
-                    let last_toggle = *self.last_toggle_time.lock();
+                    // Phase 2.2: Use atomic timestamp with Relaxed ordering
+                    // SAFETY: Relaxed ordering is sufficient for debouncing:
+                    // - Atomics guarantee cross-thread visibility even with Relaxed ordering
+                    // - No happens-before synchronization needed (approximate timing acceptable)
+                    // - Read/write don't synchronize other data structures
+                    // - Worst case: debounce window slightly off (acceptable for 500ms threshold)
+                    // - u64 nanos wraps after ~584 years (non-issue for debouncing)
+                    let last_toggle_nanos = self.last_toggle_time_nanos.load(Ordering::Relaxed);
+                    let last_toggle =
+                        self.startup_time + std::time::Duration::from_nanos(last_toggle_nanos);
                     if last_toggle.elapsed() < std::time::Duration::from_millis(500) {
                         debug!(
                             "Debouncing: last toggle was less than 500ms ago, skipping HDR disable"
@@ -495,7 +522,11 @@ impl AppController {
         self.current_hdr_state.store(enable, Ordering::SeqCst);
 
         // Update last toggle time for debouncing
-        *self.last_toggle_time.lock() = Instant::now();
+        // Phase 2.2: Store elapsed nanos since startup using atomic operation
+        // SAFETY: See handle_process_event for ordering rationale (Relaxed is sufficient)
+        let elapsed_nanos = self.startup_time.elapsed().as_nanos() as u64;
+        self.last_toggle_time_nanos
+            .store(elapsed_nanos, Ordering::Relaxed);
 
         Ok(())
     }
@@ -753,8 +784,9 @@ impl AppController {
             .collect();
 
         // Update both caches atomically (from caller's perspective)
+        // Phase 2.1: Wrap apps in Arc to enable cheap cloning during event handling
         let mut watch_list = self.process_monitor_watch_list.lock();
-        *watch_list = monitored_apps;
+        *watch_list = Arc::new(monitored_apps);
         drop(watch_list); // Release watch_list lock before acquiring write lock
 
         let mut monitored_ids = self.monitored_identifiers.write();
@@ -860,7 +892,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let controller = AppController::new(
@@ -890,7 +922,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -935,7 +967,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -973,7 +1005,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1011,7 +1043,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1065,7 +1097,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1141,7 +1173,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1199,7 +1231,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1264,7 +1296,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1311,7 +1343,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1383,7 +1415,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1451,7 +1483,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let controller = AppController::new(
@@ -1508,7 +1540,7 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1556,7 +1588,7 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1608,7 +1640,7 @@ mod tests {
         let (event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1677,7 +1709,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1697,8 +1729,8 @@ mod tests {
         assert_eq!(controller.active_process_count.load(Ordering::SeqCst), 1);
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
-        // Record the time of the first toggle
-        let first_toggle_time = *controller.last_toggle_time.lock();
+        // Record the time of the first toggle (Phase 2.2: atomic timestamp)
+        let first_toggle_nanos = controller.last_toggle_time_nanos.load(Ordering::Relaxed);
 
         // Wait a short time (less than 500ms)
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -1712,9 +1744,9 @@ mod tests {
         assert!(controller.current_hdr_state.load(Ordering::SeqCst));
 
         // Verify that the last toggle time hasn't changed (no toggle occurred)
-        let second_toggle_time = *controller.last_toggle_time.lock();
+        let second_toggle_nanos = controller.last_toggle_time_nanos.load(Ordering::Relaxed);
         assert_eq!(
-            first_toggle_time, second_toggle_time,
+            first_toggle_nanos, second_toggle_nanos,
             "Toggle time should not change during debounce"
         );
 
@@ -1756,7 +1788,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1829,7 +1861,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1874,7 +1906,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -1937,7 +1969,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -2009,7 +2041,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -2103,7 +2135,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
@@ -2186,7 +2218,7 @@ mod tests {
         let (_event_tx, event_rx) = mpsc::sync_channel(32);
         let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
         let (state_tx, _state_rx) = mpsc::sync_channel(32);
-        let watch_list = Arc::new(Mutex::new(Vec::new()));
+        let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
         let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
         let mut controller = AppController::new(
