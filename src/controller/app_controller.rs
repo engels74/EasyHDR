@@ -28,7 +28,8 @@ pub struct AppState {
 /// Application logic controller
 pub struct AppController {
     /// Application configuration (public for GUI access)
-    pub config: Arc<Mutex<AppConfig>>,
+    /// Phase 3.1: `RwLock` enables concurrent reads from multiple event handlers
+    pub config: Arc<RwLock<AppConfig>>,
     /// HDR controller
     hdr_controller: HdrController,
     /// Count of active monitored processes
@@ -89,8 +90,8 @@ impl AppController {
         // Phase 2.2: Initialize startup time for atomic timestamp calculations
         let startup_time = Instant::now();
 
-        Ok(Self {
-            config: Arc::new(Mutex::new(config)),
+        let controller = Self {
+            config: Arc::new(RwLock::new(config)),
             hdr_controller,
             active_process_count: AtomicUsize::new(0),
             current_hdr_state: AtomicBool::new(initial_hdr_state),
@@ -101,7 +102,12 @@ impl AppController {
             last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
             process_monitor_watch_list,
             monitored_identifiers,
-        })
+        };
+
+        // Phase 3.2: Initialize monitored_identifiers cache from config
+        controller.update_process_monitor_watch_list();
+
+        Ok(controller)
     }
 
     /// Create a new application controller with mock HDR controller
@@ -157,8 +163,8 @@ impl AppController {
         // Phase 2.2: Initialize startup time for atomic timestamp calculations
         let startup_time = Instant::now();
 
-        Ok(Self {
-            config: Arc::new(Mutex::new(config)),
+        let controller = Self {
+            config: Arc::new(RwLock::new(config)),
             hdr_controller,
             active_process_count: AtomicUsize::new(0),
             current_hdr_state: AtomicBool::new(initial_hdr_state),
@@ -169,7 +175,12 @@ impl AppController {
             last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
             process_monitor_watch_list,
             monitored_identifiers,
-        })
+        };
+
+        // Phase 3.2: Initialize monitored_identifiers cache from config
+        controller.update_process_monitor_watch_list();
+
+        Ok(controller)
     }
 
     /// Detect the current HDR state from the system by checking all HDR-capable displays
@@ -336,21 +347,12 @@ impl AppController {
                 debug!("Process started event: {:?}", app_id);
 
                 // Check if this app is in our monitored list and enabled
-                let config = self.config.lock();
-                let is_monitored = config
-                    .monitored_apps
-                    .iter()
-                    .any(|app| match (&app_id, app) {
-                        (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
-                            win32_app.enabled
-                                && win32_app.process_name.eq_ignore_ascii_case(process_name)
-                        }
-                        (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
-                            uwp_app.enabled && uwp_app.package_family_name == *package_family_name
-                        }
-                        _ => false, // Mismatched types (Win32 vs UWP)
-                    });
-                drop(config); // Release lock early
+                // Phase 3.2: Use O(1) HashSet lookup instead of O(n) iteration
+                // Normalize the identifier for case-insensitive matching (Win32 only)
+                let normalized_id = Self::normalize_app_identifier(&app_id);
+                let monitored_ids = self.monitored_identifiers.read();
+                let is_monitored = monitored_ids.contains(&normalized_id);
+                drop(monitored_ids); // Release lock early
 
                 if is_monitored {
                     match &app_id {
@@ -385,21 +387,12 @@ impl AppController {
                 debug!("Process stopped event: {:?}", app_id);
 
                 // Check if this app is in our monitored list and enabled
-                let config = self.config.lock();
-                let is_monitored = config
-                    .monitored_apps
-                    .iter()
-                    .any(|app| match (&app_id, app) {
-                        (AppIdentifier::Win32(process_name), MonitoredApp::Win32(win32_app)) => {
-                            win32_app.enabled
-                                && win32_app.process_name.eq_ignore_ascii_case(process_name)
-                        }
-                        (AppIdentifier::Uwp(package_family_name), MonitoredApp::Uwp(uwp_app)) => {
-                            uwp_app.enabled && uwp_app.package_family_name == *package_family_name
-                        }
-                        _ => false, // Mismatched types (Win32 vs UWP)
-                    });
-                drop(config); // Release lock early
+                // Phase 3.2: Use O(1) HashSet lookup instead of O(n) iteration
+                // Normalize the identifier for case-insensitive matching (Win32 only)
+                let normalized_id = Self::normalize_app_identifier(&app_id);
+                let monitored_ids = self.monitored_identifiers.read();
+                let is_monitored = monitored_ids.contains(&normalized_id);
+                drop(monitored_ids); // Release lock early
 
                 if is_monitored {
                     match &app_id {
@@ -524,6 +517,7 @@ impl AppController {
         // Update last toggle time for debouncing
         // Phase 2.2: Store elapsed nanos since startup using atomic operation
         // SAFETY: See handle_process_event for ordering rationale (Relaxed is sufficient)
+        #[allow(clippy::cast_possible_truncation)]
         let elapsed_nanos = self.startup_time.elapsed().as_nanos() as u64;
         self.last_toggle_time_nanos
             .store(elapsed_nanos, Ordering::Relaxed);
@@ -535,7 +529,8 @@ impl AppController {
     fn send_state_update(&self) {
         use tracing::{debug, warn};
 
-        let config = self.config.lock();
+        // Phase 3.1: Use read lock for concurrent access
+        let config = self.config.read();
         let active_apps: Vec<String> = config
             .monitored_apps
             .iter()
@@ -599,8 +594,9 @@ impl AppController {
         }
 
         // Add to config
+        // Phase 3.1: Use write lock for exclusive access
         {
-            let mut config = self.config.lock();
+            let mut config = self.config.write();
             config.monitored_apps.push(app);
         }
 
@@ -625,8 +621,9 @@ impl AppController {
         info!("Removing application with ID: {}", id);
 
         // Remove from config
+        // Phase 3.1: Use write lock for exclusive access
         {
-            let mut config = self.config.lock();
+            let mut config = self.config.write();
             config.monitored_apps.retain(|app| app.id() != &id);
         }
 
@@ -664,8 +661,9 @@ impl AppController {
         info!("Toggling application {} to enabled={}", id, enabled);
 
         // Update enabled flag
+        // Phase 3.1: Use write lock for exclusive access
         {
-            let mut config = self.config.lock();
+            let mut config = self.config.write();
             if let Some(app) = config.monitored_apps.iter_mut().find(|app| app.id() == &id) {
                 app.set_enabled(enabled);
             }
@@ -692,8 +690,9 @@ impl AppController {
         info!("Updating user preferences");
 
         // Update preferences
+        // Phase 3.1: Use write lock for exclusive access
         {
-            let mut config = self.config.lock();
+            let mut config = self.config.write();
             config.preferences = prefs;
         }
 
@@ -738,7 +737,8 @@ impl AppController {
     fn save_config_gracefully(&self) {
         use tracing::warn;
 
-        let config = self.config.lock();
+        // Phase 3.1: Use read lock for saving (no mutation needed)
+        let config = self.config.read();
         if let Err(e) = ConfigManager::save(&config) {
             warn!(
                 "Failed to save configuration to disk: {}. Continuing with in-memory config. \
@@ -748,15 +748,34 @@ impl AppController {
         }
     }
 
+    /// Normalize `AppIdentifier` for case-insensitive matching
+    ///
+    /// Win32 process names are normalized to lowercase for case-insensitive matching.
+    /// UWP package family names are case-sensitive and returned as-is.
+    ///
+    /// # Phase 3.2
+    ///
+    /// This normalization ensures that the O(1) `HashSet` lookup works correctly
+    /// even if the event contains a non-normalized identifier (e.g., from tests).
+    fn normalize_app_identifier(app_id: &AppIdentifier) -> AppIdentifier {
+        match app_id {
+            AppIdentifier::Win32(process_name) => AppIdentifier::Win32(process_name.to_lowercase()),
+            AppIdentifier::Uwp(package_family_name) => {
+                AppIdentifier::Uwp(package_family_name.clone())
+            }
+        }
+    }
+
     /// Update `ProcessMonitor` watch list with enabled monitored applications from config
     ///
     /// Filters the config to include only enabled applications (both Win32 and UWP)
-    /// and updates the `ProcessMonitor`'s watch list. Also rebuilds the monitored_identifiers
+    /// and updates the `ProcessMonitor`'s watch list. Also rebuilds the `monitored_identifiers`
     /// cache for fast O(1) filtering (Phase 1.1).
     fn update_process_monitor_watch_list(&self) {
         use tracing::debug;
 
-        let config = self.config.lock();
+        // Phase 3.1: Use read lock for reading monitored apps
+        let config = self.config.read();
         let monitored_apps: Vec<MonitoredApp> = config
             .monitored_apps
             .iter()
@@ -1259,7 +1278,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify it was added to config
-        let config = controller.config.lock();
+        let config = controller.config.read();
         assert_eq!(config.monitored_apps.len(), 1);
         assert_eq!(config.monitored_apps[0].display_name(), "New App");
         drop(config);
@@ -1314,7 +1333,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify it was removed from config
-        let config = controller.config.lock();
+        let config = controller.config.read();
         assert_eq!(config.monitored_apps.len(), 0);
         drop(config);
 
@@ -1375,7 +1394,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify enabled flag was updated
-        let config = controller.config.lock();
+        let config = controller.config.read();
         assert!(!config.monitored_apps[0].is_enabled());
         drop(config);
 
@@ -1389,7 +1408,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify enabled flag was updated
-        let config = controller.config.lock();
+        let config = controller.config.read();
         assert!(config.monitored_apps[0].is_enabled());
         drop(config);
 
@@ -1446,7 +1465,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Verify preferences were updated
-        let config = controller.config.lock();
+        let config = controller.config.read();
         assert!(config.preferences.auto_start);
         assert_eq!(config.preferences.monitoring_interval_ms, 2000);
         assert!(!config.preferences.show_tray_notifications);

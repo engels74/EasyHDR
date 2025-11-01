@@ -89,7 +89,8 @@ impl GuiController {
         // Initialize settings properties from config
         {
             let controller_guard = controller.lock();
-            let config = controller_guard.config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let config = controller_guard.config.read();
 
             main_window.set_settings_auto_start(config.preferences.auto_start);
             // Safe cast: monitoring_interval_ms is constrained to 500-2000ms range
@@ -229,7 +230,8 @@ impl GuiController {
             // Check user preference for close button behavior
             let should_minimize_to_tray = {
                 let controller_guard = controller_for_close.lock();
-                let config = controller_guard.config.lock();
+                // Phase 3.1: Use read lock for concurrent access
+                let config = controller_guard.config.read();
                 config.preferences.minimize_to_tray_on_close
             };
 
@@ -503,7 +505,8 @@ impl GuiController {
     /// The returned list is sorted alphabetically by display name (case-insensitive).
     fn collect_app_list_items(controller: &Arc<Mutex<AppController>>) -> Vec<crate::AppListItem> {
         let controller_guard = controller.lock();
-        let config = controller_guard.config.lock();
+        // Phase 3.1: Use read lock for concurrent access
+        let config = controller_guard.config.read();
 
         let mut items: Vec<_> = config
             .monitored_apps
@@ -634,7 +637,8 @@ impl GuiController {
 
         let show_notifications = {
             let controller_guard = controller.lock();
-            let config = controller_guard.config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let config = controller_guard.config.read();
             config.preferences.show_tray_notifications
         };
 
@@ -700,7 +704,8 @@ impl GuiController {
 
         // Access the config to get the app UUID
         let app_id = {
-            let config = controller_guard.config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let config = controller_guard.config.read();
             // Validate index is non-negative and within bounds
             // We check index < 0 first, then cast is safe
             #[expect(
@@ -759,7 +764,8 @@ impl GuiController {
 
         // Access the config to get the app UUID
         let app_id = {
-            let config = controller_guard.config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let config = controller_guard.config.read();
             // Validate index is non-negative and within bounds
             // We check index < 0 first, then cast is safe
             #[expect(
@@ -837,7 +843,8 @@ impl GuiController {
         // Apply partial update pattern: mutate existing preferences to preserve update metadata
         let controller_guard = controller.lock();
         {
-            let mut config = controller_guard.config.lock();
+            // Phase 3.1: Use write lock for exclusive access
+            let mut config = controller_guard.config.write();
 
             // Update only the UI-controlled fields, preserving update check metadata
             config.preferences.auto_start = auto_start;
@@ -857,7 +864,8 @@ impl GuiController {
         }
 
         // Save configuration to disk
-        let config = controller_guard.config.lock();
+        // Phase 3.1: Use read lock for saving (no mutation needed)
+        let config = controller_guard.config.read();
         if let Err(e) = easyhdr::config::ConfigManager::save(&config) {
             warn!(
                 "Failed to save configuration to disk: {}. Continuing with in-memory config. \
@@ -942,7 +950,8 @@ impl GuiController {
         // Check rate limiting
         let (should_check, last_check_time) = {
             let controller_guard = controller.lock();
-            let config = controller_guard.config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let config = controller_guard.config.read();
             let last_check = config.preferences.last_update_check_time;
             drop(config);
             drop(controller_guard);
@@ -993,7 +1002,8 @@ impl GuiController {
             // Update last check time and cache in config, then persist immediately
             {
                 let controller_guard = controller_clone.lock();
-                let mut config = controller_guard.config.lock();
+                // Phase 3.1: Use write lock for exclusive access
+                let mut config = controller_guard.config.write();
                 config.preferences.last_update_check_time = UpdateChecker::current_timestamp();
 
                 if let Ok(ref check_result) = result {
@@ -1044,7 +1054,8 @@ impl GuiController {
         // Check if update notifications are enabled
         let show_notifications = {
             let controller_guard = controller.lock();
-            let config = controller_guard.config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let config = controller_guard.config.read();
             config.preferences.show_update_notifications
         };
 
@@ -1142,7 +1153,8 @@ impl GuiController {
         info!("Releasing GUI resources (icon cache)");
 
         let controller_guard = controller.lock();
-        let mut config = controller_guard.config.lock();
+        // Phase 3.1: Use write lock for exclusive access
+        let mut config = controller_guard.config.write();
 
         // Release all icon data
         let mut released_count = 0;
@@ -1177,7 +1189,8 @@ impl GuiController {
         info!("Reloading GUI resources (icon cache)");
 
         let controller_guard = controller.lock();
-        let mut config = controller_guard.config.lock();
+        // Phase 3.1: Use write lock for exclusive access
+        let mut config = controller_guard.config.write();
 
         // Reload all icon data
         let mut reloaded_count = 0;
@@ -1576,7 +1589,8 @@ impl GuiController {
         info!("Restoring window state from config");
 
         let controller_guard = controller.lock();
-        let config = controller_guard.config.lock();
+        // Phase 3.1: Use read lock for concurrent access
+        let config = controller_guard.config.read();
         let window_state = &config.window_state;
 
         info!(
@@ -1644,7 +1658,8 @@ impl GuiController {
         // Update config with current window state
         let controller_guard = controller.lock();
         {
-            let mut config = controller_guard.config.lock();
+            // Phase 3.1: Use write lock for exclusive access
+            let mut config = controller_guard.config.write();
             config.window_state.x = position.x;
             config.window_state.y = position.y;
             config.window_state.width = size.width;
@@ -1723,7 +1738,8 @@ impl GuiController {
                         // Check user preference for minimize button behavior
                         let should_minimize_to_tray = {
                             let controller_guard = controller_handle.lock();
-                            let config = controller_guard.config.lock();
+                            // Phase 3.1: Use read lock for concurrent access
+                            let config = controller_guard.config.read();
                             config.preferences.minimize_to_tray_on_minimize
                         };
 
@@ -1788,7 +1804,8 @@ impl GuiController {
         // Check if we should start minimized to tray or show the window
         let start_minimized = {
             let controller_guard = self.controller_handle.lock();
-            let config = controller_guard.config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let config = controller_guard.config.read();
             config.preferences.start_minimized_to_tray
         };
 
