@@ -78,11 +78,11 @@ pub struct ProcessMonitor {
     ///
     /// Shared with `AppController` for synchronized updates. Allows O(1) lookups
     /// to skip processing unmonitored processes (~90% of enumerated processes).
-    /// RwLock enables concurrent reads in hot path (`poll_processes()`) without blocking.
+    /// `RwLock` enables concurrent reads in hot path (`poll_processes()`) without blocking.
     monitored_identifiers: Arc<RwLock<HashSet<AppIdentifier>>>,
-    /// PID-based AppIdentifier cache to avoid repeated string allocations (Phase 1.2)
+    /// PID-based `AppIdentifier` cache to avoid repeated string allocations (Phase 1.2)
     ///
-    /// Maps PID → (AppIdentifier, last_seen_timestamp). Entries expire after 5s
+    /// Maps PID → (`AppIdentifier`, `last_seen_timestamp`). Entries expire after 5s
     /// to handle PID reuse. Reduces string allocations from ~250/poll to <10/poll.
     /// Pre-allocated with capacity for 200 processes (typical system load).
     #[cfg_attr(not(windows), allow(dead_code))]
@@ -127,7 +127,7 @@ impl ProcessMonitor {
     ///
     /// Replaces the entire watch list with the provided applications.
     /// Only enabled applications should be passed to this method.
-    /// Also rebuilds the monitored_identifiers cache for fast O(1) filtering.
+    /// Also rebuilds the `monitored_identifiers` cache for fast O(1) filtering.
     pub fn update_watch_list(&self, monitored_apps: Vec<MonitoredApp>) {
         // Rebuild monitored identifiers set from the new watch list
         let identifiers: HashSet<AppIdentifier> = monitored_apps
@@ -256,6 +256,7 @@ impl ProcessMonitor {
             reason = "self is used on Windows but not in non-Windows stub implementation"
         )
     )]
+    #[allow(clippy::too_many_lines)]
     fn poll_processes(&mut self) -> Result<()> {
         #[cfg(windows)]
         {
@@ -1122,6 +1123,8 @@ mod tests {
                 pid in 100u32..10000u32,
                 app_name in "[a-zA-Z0-9_-]+"
             ) {
+                const CACHE_EXPIRY: Duration = Duration::from_secs(5);
+
                 let (tx, _rx) = mpsc::sync_channel(32);
                 let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
 
@@ -1139,12 +1142,13 @@ mod tests {
                 // Simulate time passing beyond expiry (5 seconds)
                 // We can't actually wait 5 seconds in a test, so we manually insert
                 // an old timestamp to simulate an expired entry
-                let old_time = initial_time - Duration::from_secs(6);
+                let old_time = initial_time
+                    .checked_sub(Duration::from_secs(6))
+                    .unwrap();
                 monitor.app_id_cache.insert(pid, (app_id.clone(), old_time));
 
                 // Simulate poll_processes expiry logic
                 let now = Instant::now();
-                const CACHE_EXPIRY: Duration = Duration::from_secs(5);
                 monitor.app_id_cache.retain(|_pid, (_app_id, last_seen)| {
                     now.duration_since(*last_seen) < CACHE_EXPIRY
                 });

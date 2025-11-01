@@ -20,7 +20,8 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 /// Create a mock configuration with varying numbers of monitored apps
-fn create_mock_config(num_monitored: usize) -> Arc<parking_lot::Mutex<AppConfig>> {
+/// Phase 3.1: Returns `RwLock` instead of `Mutex` for concurrent reads
+fn create_mock_config(num_monitored: usize) -> Arc<parking_lot::RwLock<AppConfig>> {
     let mut config = AppConfig {
         monitored_apps: Vec::with_capacity(num_monitored),
         preferences: UserPreferences {
@@ -68,7 +69,7 @@ fn create_mock_config(num_monitored: usize) -> Arc<parking_lot::Mutex<AppConfig>
         }));
     }
 
-    Arc::new(parking_lot::Mutex::new(config))
+    Arc::new(parking_lot::RwLock::new(config))
 }
 
 /// Benchmark monitored app lookups (O(n) currently, Phase 3.2 target: O(1))
@@ -83,7 +84,8 @@ fn bench_monitored_app_lookup(c: &mut Criterion) {
         let config = create_mock_config(num_apps);
 
         group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
-            let guard = config.lock();
+            // Phase 3.1: Use read lock for concurrent access
+            let guard = config.read();
             let apps = &guard.monitored_apps;
 
             b.iter(|| {
@@ -117,7 +119,8 @@ fn bench_watch_list_clone(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
             b.iter(|| {
-                let guard = config.lock();
+                // Phase 3.1: Use read lock for concurrent access
+                let guard = config.read();
                 let apps = black_box(&guard.monitored_apps);
                 // Simulate current implementation: clone the entire Vec
                 black_box(apps.clone());
@@ -139,8 +142,8 @@ fn bench_config_read_contention(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("apps", num_apps), &num_apps, |b, _| {
             b.iter(|| {
-                // Simulate frequent config reads (currently uses Mutex)
-                let guard = config.lock();
+                // Simulate frequent config reads (Phase 3.1: now uses RwLock)
+                let guard = config.read();
                 let apps = &guard.monitored_apps;
                 // Simulate checking if an app is monitored (O(n) currently)
                 let target = "chrome.exe";
@@ -301,7 +304,8 @@ fn bench_poll_processes_simulation(c: &mut Criterion) {
 
                             // Simulate O(n) monitored app lookup (current implementation)
                             // This is what Phase 3.2 will optimize to O(1) HashSet lookup
-                            let guard = monitored_apps.lock();
+                            // Phase 3.1: Use read lock for concurrent access
+                            let guard = monitored_apps.read();
                             let is_monitored = guard.monitored_apps.iter().any(|app| {
                                 if let MonitoredApp::Win32(win32_app) = app {
                                     // Simulate string comparison overhead

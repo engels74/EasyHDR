@@ -120,7 +120,8 @@ fn test_app_controller_hdr_logic_integration() {
         icon_data: None,
     }));
 
-    let watch_list = Arc::new(Mutex::new(Vec::new()));
+    // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
+    let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
     let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
     // Create the controller
@@ -211,7 +212,8 @@ fn test_multiple_apps_integration() {
         icon_data: None,
     }));
 
-    let watch_list = Arc::new(Mutex::new(Vec::new()));
+    // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
+    let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
     let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
     let controller = AppController::new(
@@ -246,7 +248,8 @@ fn test_disabled_apps_ignored() {
         icon_data: None,
     }));
 
-    let watch_list = Arc::new(Mutex::new(Vec::new()));
+    // Phase 2.1: Watch list uses Arc<Vec<MonitoredApp>> for cheap cloning
+    let watch_list = Arc::new(Mutex::new(Arc::new(Vec::new())));
     let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
     let controller = AppController::new(
