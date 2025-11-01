@@ -30,115 +30,62 @@ Current bottleneck: Process monitor makes **~230 Windows API calls** and **~596 
 
 ## Phase 0: Baseline Profiling (Week 0)
 
-**Goal:** Measure actual performance before optimization
+**Goal:** Establish performance baseline before optimization to enable objective measurement of improvements.
 **Status:** ✅ **BASELINE ESTABLISHED** - Ready for Phase 1 optimization
 
-### Baseline Results Summary
+**CI Automation:** The `profiling.yml` GitHub Actions workflow automatically generates CPU flamegraphs, allocation profiles (DHAT), and Criterion benchmarks on performance-related branches, ensuring reproducible profiling across environments.
 
-**Flamegraph:** [docs/phase0/cpu-profiling-flamegraph/cpu-flamegraph.svg](../docs/phase0/cpu-profiling-flamegraph/cpu-flamegraph.svg) | **Total Samples:** 2,480 (30-second run)
+### Why These Metrics Matter
 
-| Function | % CPU | Analysis |
-|----------|-------|----------|
-| **`poll_processes`** | **90.9%** | ✅ **THE bottleneck** - Phase 1.1 will target this |
-| `detect_uwp_process` | 9.96% | 🎯 **90% reduction expected** via early filtering |
-| `OpenProcess` (Win32 API) | 5.44% | Required for UWP (cannot optimize) |
-| `AppController::run` | 1.94% | ✅ Event handling is NOT a bottleneck |
+- **CPU profiling:** Identifies hot paths consuming the most execution time, guiding optimization priorities
+- **Allocation profiling:** Reveals memory churn that impacts performance and can cause fragmentation
+- **Benchmarks with varying workloads:** Tests scalability across realistic scenarios (1-50 monitored apps, 100-500 system processes)
+- **Config operations:** Validates that non-hot-path operations remain acceptable despite being unoptimized
 
-**Key Finding:** `poll_processes` consumes **90.9% CPU** because it calls `detect_uwp_process` for ALL ~230 enumerated processes. **Phase 1.1 filtering will eliminate 90%+ of these calls** by checking monitored apps first → **~9% CPU savings**.
+### Baseline Results
 
-**Optimization Priority:** Phase 1.1 (Post-identification filtering) confirmed as highest-value optimization.
+**CPU Hotspots** ([flamegraph](../docs/phase0/cpu-profiling-flamegraph/cpu-flamegraph.svg), 2,480 samples over 30s):
 
-**DHAT Allocation Baseline:** [docs/phase0/allocation-profiling-dhat/](../docs/phase0/allocation-profiling-dhat/)
+| Function | % CPU | Significance |
+|----------|-------|--------------|
+| **`poll_processes`** | **90.9%** | Primary bottleneck - targets ALL ~230 enumerated processes |
+| `detect_uwp_process` | 9.96% | Called for every process; Phase 1.1 filtering will eliminate 90%+ of calls |
+| `OpenProcess` (Win32 API) | 5.44% | Required for UWP detection (cannot optimize) |
+| `AppController::run` | 1.94% | Event handling is NOT a bottleneck |
+
+**Key Finding:** `poll_processes` spends most time calling `detect_uwp_process` for unmonitored processes. Early filtering (Phase 1.1) will skip processing for ~90% of enumerated processes, yielding ~9% CPU savings.
+
+**Allocation Profile** ([DHAT reports](../docs/phase0/allocation-profiling-dhat/)):
 
 | Metric | Baseline | Target (Phase 1-2) | Reduction |
 |--------|----------|-------------------|-----------|
 | Allocation rate | 595.94 allocs/sec | 5-10 allocs/sec | 98% ↓ |
 | Allocations/poll | ~303 allocs | <10 allocs | 97% ↓ |
-| Primary hotspot | String allocations (95%) | Cached AppIdentifiers | Phase 1.2 |
+| Primary source | String allocations (95%) | Cached AppIdentifiers | Phase 1.2 |
 
-**Criterion Benchmark Baselines:** [docs/phase0/criterion-benchmark/](../docs/phase0/criterion-benchmark/)
+**Why allocations matter:** Memory churn degrades cache locality and stresses the allocator even when total memory usage is low.
 
-| Benchmark | 1 app | 5 apps | 10 apps | 50 apps | Target Impact |
-|-----------|-------|--------|---------|---------|---------------|
+**Latency Benchmarks** ([Criterion reports](../docs/phase0/criterion-benchmark/)):
+
+| Benchmark | 1 app | 5 apps | 10 apps | 50 apps | Target Improvement |
+|-----------|-------|--------|---------|---------|-------------------|
 | `poll_processes_simulation` (250 procs) | 1.7 µs | 4.2 µs | 7.9 µs | 33.5 µs | Phase 1.1: 90% ↓ |
 | `watch_list_clone` | 176 ns | 1.7 µs | 3.4 µs | 8.5 µs | Phase 2.1: 99% ↓ (to ~10 ns) |
 | `monitored_app_lookup` (O(n)) | 11.3 ns | 22.6 ns | 33.0 ns | 44.5 ns | Phase 3.2: 67% ↓ (to ~15 ns O(1)) |
 
-**Config Operations:** Serialize 53.6 µs, Deserialize 337.1 µs (not hot path, acceptable)
+**Config operations:** Serialize 53.6 µs, Deserialize 337.1 µs (not in hot path, acceptable)
 
----
+### Optimization Priority
 
-### Quick Start: Run Profiling
+Phase 1.1 (post-identification filtering) confirmed as highest-value optimization based on flamegraph evidence showing unnecessary processing of unmonitored processes.
 
-**Automated (GitHub Actions):**
-```bash
-# Push to performance branch to trigger profiling
-git checkout -b feat/perf-phase-0-baseline
-git push origin feat/perf-phase-0-baseline
+### Baseline Context for Future Phases
 
-# Artifacts: cpu-profiling-flamegraph-{sha}.zip, criterion-benchmarks-{sha}.zip
-```
-
-**Local (Windows, optional):**
-```powershell
-# Generate flamegraph locally
-$env:RUSTFLAGS = "-C force-frame-pointers=yes"
-cargo flamegraph --profile profiling --test cpu_profiling_test --output cpu-flamegraph.svg -- --exact --nocapture profile_process_monitoring_hot_paths
-
-# View: Open cpu-flamegraph.svg in browser, search for "poll_processes"
-```
-
-See [profiling_guide.md](profiling_guide.md) for DHAT allocation profiling, Criterion benchmarks, and troubleshooting.
-
----
-
-### AI-Assisted Flamegraph Analysis (Quick Reference)
-
-**Claude can analyze SVG flamegraphs directly** - upload the SVG file (NOT PNG) for best results.
-
-**What Claude extracts:**
-- Hotspots (box width = CPU %)
-- Call stacks and execution paths
-- Allocation patterns (`String::from`, `Vec::push`)
-- Lock contention (`Mutex::lock`, `RwLock`)
-
-**Example prompts:**
-```
-"Identify the top 5 CPU hotspots in poll_processes"
-"What % of CPU is CreateToolhelp32Snapshot vs String allocations?"
-"Find all lock contention (Mutex, RwLock)"
-```
-
-**Critical requirement:** Flamegraph must show function names (e.g., `easyhdr::monitor::process_monitor::poll_processes`), NOT raw addresses (`0x7FFACB...`).
-
-**Current CI flamegraph status:** ✅ EasyHDR functions symbolicated, ⚠️ Windows APIs show raw addresses (acceptable - we can infer from context).
-
-**AI Analysis Capabilities:**
-- ✅ Identify EasyHDR hotspots (e.g., `poll_processes` at 90.9%)
-- ✅ Measure CPU time percentages from box widths
-- ✅ Trace call stacks (e.g., `poll_processes` → `detect_uwp_process` → `OpenProcess`)
-- ⚠️ Windows API names may need manual lookup if unsymbolicated
-
-**Why SVG > PNG:**
-- Text preserved (no OCR errors)
-- Precise measurements (exact percentages)
-- Hierarchical structure (call stack relationships)
-
-**If file too large (>300KB):**
-- Use browser search to find top hotspots first
-- Generate shorter profile (10-15s instead of 30s)
-- Ask specific questions instead of "analyze everything"
-
----
-
-### Success Criteria
-
-- [x] **`poll_processes` identified as hotspot (>20% CPU)** - **ACHIEVED: 90.9%**
-- [x] **EasyHDR functions symbolicated** - **ACHIEVED** (Windows APIs partially unsymbolicated, acceptable)
-- [x] **Optimization targets confirmed** - **Phase 1.1 filtering is highest-value** (~9% CPU gain)
-- [x] **DHAT allocation profiling completed** - **ACHIEVED: 595.94 allocs/sec baseline** (target: 5-10 allocs/sec)
-- [x] **Criterion benchmarks with varying workloads** - **ACHIEVED: 1/5/10/50 apps × 100/250/500 procs** (12 scenarios)
-- [x] **Hot paths documented** - See Baseline Results above (CPU, allocations, benchmarks)
+This baseline enables:
+- **Phase 1:** Measure API call reduction impact on CPU usage
+- **Phase 2:** Validate allocation reduction via DHAT comparison
+- **Phase 3:** Benchmark latency improvements from O(n) → O(1) lookups
+- **Phase 4:** Confirm all improvements hold under real-world workloads
 
 ---
 
