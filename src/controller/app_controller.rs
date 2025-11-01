@@ -29,33 +29,19 @@ pub struct AppState {
 pub struct AppController {
     /// Application configuration (public for GUI access)
     pub config: Arc<RwLock<AppConfig>>,
-    /// HDR controller
     hdr_controller: HdrController,
-    /// Count of active monitored processes
     active_process_count: AtomicUsize,
-    /// Current HDR state
     current_hdr_state: AtomicBool,
-    /// Event receiver from process monitor (taken when event loop starts)
+    /// Taken when event loop starts
     event_receiver: Option<mpsc::Receiver<ProcessEvent>>,
-    /// Event receiver from HDR state monitor (taken when event loop starts)
+    /// Taken when event loop starts
     hdr_state_receiver: Option<mpsc::Receiver<HdrStateEvent>>,
-    /// State sender to GUI
     gui_state_sender: mpsc::SyncSender<AppState>,
-    /// Startup time for relative timestamp calculations
-    ///
-    /// Used as the reference point for atomic timestamp operations.
-    /// Since `Instant` cannot be stored in an atomic directly, we store
-    /// elapsed nanoseconds from this startup time in `last_toggle_time_nanos`.
+    /// Reference point for atomic timestamp operations (nanoseconds stored in `last_toggle_time_nanos`)
     startup_time: Instant,
-    /// Last toggle time for debouncing
-    ///
-    /// Stores nanoseconds elapsed since `startup_time`.
+    /// Nanoseconds elapsed since `startup_time` for debouncing
     last_toggle_time_nanos: Arc<AtomicU64>,
-    /// Reference to `ProcessMonitor`'s unified watch state (app list + identifier cache)
-    ///
-    /// Shared with `ProcessMonitor` for atomic updates. Prevents race conditions where
-    /// `poll_processes()` could observe inconsistent state between the app list and
-    /// identifier cache during GUI updates.
+    /// Shared watch state with `ProcessMonitor` for atomic updates
     watch_state: Arc<RwLock<WatchState>>,
 }
 
@@ -327,11 +313,10 @@ impl AppController {
                         }
                     }
 
-                    // Increment active process count
                     let prev_count = self.active_process_count.fetch_add(1, Ordering::SeqCst);
                     debug!("Active process count: {} -> {}", prev_count, prev_count + 1);
 
-                    // If this is the first active process and HDR is off, enable HDR
+                    // Enable HDR when first monitored app starts
                     if prev_count == 0 && !self.current_hdr_state.load(Ordering::SeqCst) {
                         info!("First monitored application started, enabling HDR");
                         if let Err(e) = self.toggle_hdr(true) {
@@ -341,7 +326,6 @@ impl AppController {
                         debug!("HDR already enabled or other processes running, skipping toggle");
                     }
 
-                    // Send state update to GUI
                     self.send_state_update();
                 }
             }
@@ -366,8 +350,7 @@ impl AppController {
                         }
                     }
 
-                    // Decrement active process count using checked atomic pattern to prevent underflow
-                    // Uses fetch_update with saturating_sub to ensure count never wraps to usize::MAX
+                    // Decrement with saturating_sub to prevent underflow
                     let prev_count = self
                         .active_process_count
                         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
@@ -380,7 +363,7 @@ impl AppController {
                         prev_count.saturating_sub(1)
                     );
 
-                    // Debounce: wait 500ms before disabling to handle quick restarts
+                    // Debounce 500ms to handle quick restarts
                     // SAFETY: Relaxed ordering is sufficient for debouncing:
                     // - Atomics guarantee cross-thread visibility even with Relaxed ordering
                     // - No happens-before synchronization needed (approximate timing acceptable)
@@ -397,7 +380,7 @@ impl AppController {
                         return;
                     }
 
-                    // If this was the last active process and HDR is on, disable HDR
+                    // Disable HDR when last monitored app stops
                     if prev_count == 1 && self.current_hdr_state.load(Ordering::SeqCst) {
                         info!("Last monitored application stopped, disabling HDR");
                         if let Err(e) = self.toggle_hdr(false) {
@@ -407,7 +390,6 @@ impl AppController {
                         debug!("Other processes still running or HDR already off, skipping toggle");
                     }
 
-                    // Send state update to GUI
                     self.send_state_update();
                 }
             }

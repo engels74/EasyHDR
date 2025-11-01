@@ -111,27 +111,18 @@ pub struct ProcessMonitor {
     /// Shared with `AppController` via `Arc` for coordinated updates when GUI modifies
     /// the monitored app list.
     watch_state: Arc<RwLock<WatchState>>,
-    /// PID-based `AppIdentifier` cache to avoid repeated string allocations
-    ///
-    /// Maps PID → (`AppIdentifier`, `last_seen_timestamp`). Entries expire after 5s
-    /// to handle PID reuse.
+    /// PID → (`AppIdentifier`, timestamp) cache; expires after 5s to handle PID reuse
     #[cfg_attr(not(windows), allow(dead_code))]
     app_id_cache: HashMap<u32, (AppIdentifier, Instant)>,
-    /// Channel to send process events
     #[cfg_attr(not(windows), allow(dead_code))]
     event_sender: mpsc::SyncSender<ProcessEvent>,
-    /// Polling interval
     interval: Duration,
-    /// Previous snapshot of running processes (identified by `AppIdentifier`)
+    /// Previous snapshot for change detection
     #[cfg_attr(not(windows), allow(dead_code))]
     running_processes: HashSet<AppIdentifier>,
-    /// Estimated process count for capacity pre-allocation
     #[cfg_attr(not(windows), allow(dead_code))]
     estimated_process_count: usize,
-    /// Number of completed poll cycles (for testing/diagnostics)
-    ///
-    /// Used by both unit tests and integration tests (e.g., DHAT profiling).
-    /// Always compiled but only accessed through `#[doc(hidden)]` test methods.
+    /// Poll cycles completed (test/diagnostic counter)
     poll_cycle_count: Arc<AtomicU64>,
 }
 

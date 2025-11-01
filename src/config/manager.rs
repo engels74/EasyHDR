@@ -95,14 +95,8 @@ impl ConfigManager {
 
     /// Restore icons from disk cache in parallel
     ///
-    /// Loads cached icons for all monitored applications using parallel PNG decoding
-    /// with Rayon. For Win32 apps, validates cache freshness by comparing file modification
-    /// times. Cache failures are logged but don't prevent startup.
-    ///
-    /// Performance targets:
-    /// - Load 10 icons in <50ms
-    /// - Load 50 icons in <150ms
-    /// - Load 100 icons in <250ms
+    /// Uses Rayon for parallel PNG decoding. Win32 apps validate cache freshness via mtime.
+    /// Cache failures are logged but don't prevent startup.
     #[expect(
         clippy::unnecessary_wraps,
         reason = "Returns Result<()> for API consistency with other ConfigManager methods and to allow future error propagation. Current implementation uses graceful degradation where all errors are logged but don't prevent startup."
@@ -202,19 +196,8 @@ impl ConfigManager {
 
     /// Re-extract icons for apps that failed to load from cache
     ///
-    /// This method is called after `restore_icons_from_cache()` to handle cases where
-    /// the icon cache was cleared or icons failed to load. It re-extracts icons from
-    /// the source (exe files for Win32 apps, package metadata for UWP apps).
-    ///
-    /// # Icon Re-extraction Strategy
-    ///
-    /// - **Win32 apps**: Call `ensure_icon_loaded()` to extract from exe file
-    /// - **UWP apps**: Re-enumerate packages to find logo path, then extract icon
-    ///
-    /// # Graceful Degradation
-    ///
-    /// Errors during icon extraction are logged but don't prevent the method from
-    /// completing. Apps without icons will display with a default/placeholder icon.
+    /// Extracts from exe files (Win32) or package metadata (UWP). Errors are logged
+    /// but don't prevent completion; apps without icons use default/placeholder.
     #[expect(
         clippy::too_many_lines,
         reason = "Icon regeneration logic requires handling both Win32 and UWP apps with different extraction strategies; splitting would reduce cohesion"

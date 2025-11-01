@@ -240,39 +240,9 @@ fn verify_windows_version() -> Result<()> {
 ///
 /// # Safety
 ///
-/// This function contains unsafe code that is sound because:
-///
-/// 1. **Library Loading**: `LoadLibraryW` is called with a valid, null-terminated wide string
-///    for "ntdll.dll", which is a system DLL guaranteed to exist on all Windows systems.
-///
-/// 2. **Function Pointer Retrieval**: `GetProcAddress` is called with a valid module handle
-///    and a valid C string for "`RtlGetVersion`". We verify the returned pointer is not None
-///    before proceeding.
-///
-/// 3. **Transmute Soundness**: The transmute from `Option<FARPROC>` to `RtlGetVersionFn` is
-///    sound because:
-///    - We've verified the pointer is not None
-///    - The function signature `unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32`
-///      exactly matches the Windows API contract for `RtlGetVersion`
-///    - The calling convention ("system") matches the Windows ABI
-///
-/// 4. **Structure Initialization**: The `OSVERSIONINFOEXW` structure is properly initialized
-///    with the correct size in `dwOSVersionInfoSize`, which is required by the Windows API
-///    to prevent buffer overruns.
-///
-/// 5. **API Contract**: We check the return status from `RtlGetVersion` before using the result,
-///    ensuring we only read valid data.
-///
-/// # Invariants
-///
-/// - `ntdll.dll` must exist (guaranteed on all Windows systems)
-/// - `RtlGetVersion` must exist in ntdll.dll (guaranteed since Windows 2000)
-/// - The structure size must be set correctly before calling `RtlGetVersion`
-///
-/// # Potential Issues
-///
-/// - If the Windows API contract changes (extremely unlikely for this stable API)
-/// - If running on a non-Windows system (prevented by #[cfg(windows)])
+/// Sound FFI call: ntdll.dll and `RtlGetVersion` guaranteed present on Windows;
+/// function pointer validated before transmute; structure correctly sized with
+/// `dwOSVersionInfoSize`; return status checked before data access.
 #[cfg(windows)]
 #[expect(
     unsafe_code,
