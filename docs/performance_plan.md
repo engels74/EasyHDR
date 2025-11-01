@@ -382,13 +382,13 @@ drmemory -light -- ./target/release/easyhdr.exe
 - [x] ✅ **COMPLETE** - Baseline established (see Phase 0 section for metrics)
 
 ### Phase 1 (API Reduction)
-- [ ] 1.1 Post-identification filtering with RwLock implemented
-- [ ] 1.1 Shared cache synchronization protocol established (ProcessMonitor ↔ AppController)
-- [ ] 1.2 AppIdentifier cache with PID reuse test implemented (if Phase 0 confirms)
-- [ ] 1.2 Cache hit rate instrumentation added (tracing)
+- [x] 1.1 Post-identification filtering with RwLock implemented - Early-exit filtering in poll_processes()
+- [x] 1.1 Shared cache synchronization protocol established (ProcessMonitor ↔ AppController) - Arc<RwLock<HashSet<AppIdentifier>>> shared
+- [x] 1.2 AppIdentifier cache with PID reuse test implemented (if Phase 0 confirms) - HashMap<u32, (AppIdentifier, Instant)> with 5s expiry
+- [x] 1.2 Cache hit rate instrumentation added (tracing) - Debug logging with hit/miss counts and percentage
 - [ ] 1.2 Benchmark executed: `cargo bench --bench process_monitor_bench`
 - [ ] UWP detection still works correctly
-- [ ] Integration tests pass
+- [x] Integration tests pass - All 10 tests passed with --test-threads=1
 
 ### Phase 2 (Lock Elimination)
 - [ ] 2.1 Double-Arc watch list implemented

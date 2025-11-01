@@ -41,7 +41,9 @@ use easyhdr::controller::AppController;
 #[cfg(windows)]
 use easyhdr::monitor::ProcessMonitor;
 #[cfg(windows)]
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
+#[cfg(windows)]
+use std::collections::HashSet;
 #[cfg(windows)]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
@@ -310,6 +312,7 @@ fn profile_production_allocation_patterns() {
     // Get reference to poll cycle counter BEFORE moving monitor into thread
     // This allows us to verify the monitor is actually running before profiling
     let poll_counter = monitor.get_poll_cycle_count_ref();
+    let monitored_identifiers = monitor.get_monitored_identifiers_ref();
 
     // Create app controller using mock HDR controller (test-only)
     // The profiling test measures allocation patterns in ProcessMonitor and AppController,
@@ -321,6 +324,7 @@ fn profile_production_allocation_patterns() {
         hdr_state_rx,
         state_tx,
         watch_list.clone(),
+        monitored_identifiers,
     )
     .expect("Failed to create AppController with mock HDR");
 

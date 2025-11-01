@@ -11,7 +11,8 @@ use easyhdr::{
     hdr::HdrController,
     monitor::{ProcessEvent, ProcessMonitor},
 };
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::thread;
@@ -120,9 +121,17 @@ fn test_app_controller_hdr_logic_integration() {
     }));
 
     let watch_list = Arc::new(Mutex::new(Vec::new()));
+    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
     // Create the controller
-    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
+    let controller = AppController::new(
+        config,
+        event_rx,
+        hdr_state_rx,
+        state_tx,
+        watch_list,
+        monitored_identifiers,
+    );
 
     assert!(controller.is_ok(), "Controller creation should succeed");
 
@@ -203,8 +212,16 @@ fn test_multiple_apps_integration() {
     }));
 
     let watch_list = Arc::new(Mutex::new(Vec::new()));
+    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
-    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
+    let controller = AppController::new(
+        config,
+        event_rx,
+        hdr_state_rx,
+        state_tx,
+        watch_list,
+        monitored_identifiers,
+    );
 
     assert!(controller.is_ok());
 
@@ -230,8 +247,16 @@ fn test_disabled_apps_ignored() {
     }));
 
     let watch_list = Arc::new(Mutex::new(Vec::new()));
+    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
-    let controller = AppController::new(config, event_rx, hdr_state_rx, state_tx, watch_list);
+    let controller = AppController::new(
+        config,
+        event_rx,
+        hdr_state_rx,
+        state_tx,
+        watch_list,
+        monitored_identifiers,
+    );
 
     assert!(controller.is_ok());
 }

@@ -25,7 +25,8 @@
 use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, Win32App};
 use easyhdr::controller::AppController;
 use easyhdr::monitor::ProcessMonitor;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -62,6 +63,7 @@ fn profile_process_monitoring_hot_paths() {
     // Create process monitor with aggressive polling (500ms) to maximize CPU usage
     let monitor = ProcessMonitor::new(Duration::from_millis(500), process_tx);
     monitor.update_watch_list(create_monitored_apps());
+    let monitored_identifiers = monitor.get_monitored_identifiers_ref();
 
     // Create app controller
     let mut controller = AppController::new(
@@ -70,6 +72,7 @@ fn profile_process_monitoring_hot_paths() {
         hdr_state_rx,
         state_tx,
         watch_list.clone(),
+        monitored_identifiers,
     )
     .expect("Failed to create AppController");
 
@@ -210,9 +213,17 @@ fn profile_handle_process_event_throughput() {
     let (_hdr_state_tx, hdr_state_rx) = mpsc::sync_channel(32);
     let (state_tx, state_rx) = mpsc::sync_channel(32);
     let watch_list = Arc::new(Mutex::new(create_monitored_apps()));
+    let monitored_identifiers = Arc::new(RwLock::new(HashSet::new()));
 
-    let mut controller = AppController::new(config, process_rx, hdr_state_rx, state_tx, watch_list)
-        .expect("Failed to create AppController");
+    let mut controller = AppController::new(
+        config,
+        process_rx,
+        hdr_state_rx,
+        state_tx,
+        watch_list,
+        monitored_identifiers,
+    )
+    .expect("Failed to create AppController");
 
     // Start event loop to process events in a separate thread
     let _event_handle = thread::spawn(move || {
