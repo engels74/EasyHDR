@@ -22,7 +22,7 @@
 
 #![cfg(windows)]
 
-use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, Win32App};
+use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, Win32App, WindowState};
 use easyhdr::controller::AppController;
 use easyhdr::monitor::ProcessMonitor;
 use parking_lot::{Mutex, RwLock};
