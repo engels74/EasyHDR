@@ -262,7 +262,8 @@ jobs:
           # This test exercises ProcessMonitor + AppController for 30 seconds
           # to capture realistic allocation patterns from production code
           # See tests/dhat_profiling_test.rs for implementation details
-          cargo test --test dhat_profiling_test --release -- profile_production_allocation_patterns --nocapture
+          # Note: --exact flag ensures precise test name matching for cfg-gated tests
+          cargo test --test dhat_profiling_test --release -- profile_production_allocation_patterns --exact --nocapture
         continue-on-error: true
 
       - name: Generate DHAT report
