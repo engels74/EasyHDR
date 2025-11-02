@@ -290,7 +290,7 @@ impl HdrController {
                 WindowsVersion::Windows11_24H2 => {
                     debug!(
                         "Using Windows 11 24H2+ API (DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2) for adapter={:#x}:{:#x}, target={}",
-                        target.adapter_id.LowPart, target.adapter_id.HighPart,                         target.target_id
+                        target.adapter_id.LowPart, target.adapter_id.HighPart, target.target_id
                     );
 
                     let mut color_info = DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2::new(

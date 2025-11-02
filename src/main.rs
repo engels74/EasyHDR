@@ -240,9 +240,8 @@ fn get_windows_build_number() -> Result<u32> {
 
     unsafe {
         let ntdll_name = HSTRING::from("ntdll.dll");
-        let ntdll = LoadLibraryW(&ntdll_name).map_err(|e| {
-            EasyHdrError::HdrControlFailed(Box::new(e))
-        })?;
+        let ntdll =
+            LoadLibraryW(&ntdll_name).map_err(|e| EasyHdrError::HdrControlFailed(Box::new(e)))?;
 
         let proc_name = windows::core::s!("RtlGetVersion");
         let rtl_get_version_ptr = GetProcAddress(ntdll, proc_name);

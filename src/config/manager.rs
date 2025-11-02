@@ -188,11 +188,9 @@ impl ConfigManager {
         let apps_needing_icons_count = config
             .monitored_apps
             .iter()
-            .filter(|app| {
-                match app {
-                    MonitoredApp::Win32(win32) => win32.icon_data.is_none(),
-                    MonitoredApp::Uwp(uwp) => uwp.icon_data.is_none(),
-                }
+            .filter(|app| match app {
+                MonitoredApp::Win32(win32) => win32.icon_data.is_none(),
+                MonitoredApp::Uwp(uwp) => uwp.icon_data.is_none(),
             })
             .count();
 

@@ -424,25 +424,20 @@ impl ProcessMonitor {
     #[cfg_attr(not(windows), allow(dead_code))]
     fn is_monitored(app_id: &AppIdentifier, watch_list: &[MonitoredApp]) -> bool {
         match app_id {
-            AppIdentifier::Win32(process_name) => {
-                watch_list.iter().any(|app| {
-                    if let MonitoredApp::Win32(win32_app) = app {
-                        win32_app.enabled
-                            && win32_app.process_name.eq_ignore_ascii_case(process_name)
-                    } else {
-                        false
-                    }
-                })
-            }
-            AppIdentifier::Uwp(package_family_name) => {
-                watch_list.iter().any(|app| {
-                    if let MonitoredApp::Uwp(uwp_app) = app {
-                        uwp_app.enabled && uwp_app.package_family_name == *package_family_name
-                    } else {
-                        false
-                    }
-                })
-            }
+            AppIdentifier::Win32(process_name) => watch_list.iter().any(|app| {
+                if let MonitoredApp::Win32(win32_app) = app {
+                    win32_app.enabled && win32_app.process_name.eq_ignore_ascii_case(process_name)
+                } else {
+                    false
+                }
+            }),
+            AppIdentifier::Uwp(package_family_name) => watch_list.iter().any(|app| {
+                if let MonitoredApp::Uwp(uwp_app) = app {
+                    uwp_app.enabled && uwp_app.package_family_name == *package_family_name
+                } else {
+                    false
+                }
+            }),
         }
     }
 }
