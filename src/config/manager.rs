@@ -1,7 +1,4 @@
-//! Configuration manager for loading and saving application configuration
-//!
-//! This module provides functionality to load and save configuration to
-//! %APPDATA%\EasyHDR\config.json with atomic writes to prevent corruption.
+//! Configuration manager for loading and saving application configuration.
 
 use crate::config::models::AppConfig;
 use crate::error::{EasyHdrError, Result};
@@ -12,17 +9,13 @@ use tracing::{info, warn};
 pub struct ConfigManager;
 
 impl ConfigManager {
-    /// Get the path to the configuration file
-    ///
-    /// Returns: %APPDATA%\EasyHDR\config.json
+    /// Get the path to the configuration file.
     pub fn get_config_path() -> PathBuf {
         let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
         PathBuf::from(appdata).join("EasyHDR").join("config.json")
     }
 
-    /// Ensure the configuration directory exists
-    ///
-    /// Creates %APPDATA%\EasyHDR if it doesn't exist
+    /// Ensure the configuration directory exists.
     pub fn ensure_config_dir() -> Result<PathBuf> {
         use tracing::{debug, error};
 
@@ -41,10 +34,9 @@ impl ConfigManager {
         Ok(config_dir.to_path_buf())
     }
 
-    /// Load configuration from disk
+    /// Load configuration from disk.
     ///
-    /// If the configuration file doesn't exist or is corrupt, returns default configuration.
-    /// After loading, restores cached icons from disk in parallel for optimal performance.
+    /// Returns default configuration if the file doesn't exist or is corrupt.
     pub fn load() -> Result<AppConfig> {
         use tracing::error;
 
@@ -77,8 +69,6 @@ impl ConfigManager {
             }
         };
 
-        // Restore icons from cache in parallel
-        // Graceful degradation: errors are logged but don't prevent startup
         if let Err(e) = Self::restore_icons_from_cache(&mut config) {
             warn!(
                 "Failed to restore icons from cache: {}. Continuing without cached icons.",
@@ -86,17 +76,12 @@ impl ConfigManager {
             );
         }
 
-        // Re-extract icons for apps that failed to load from cache
-        // This handles the case where the icon cache was cleared
         Self::regenerate_missing_icons(&mut config);
 
         Ok(config)
     }
 
-    /// Restore icons from disk cache in parallel
-    ///
-    /// Uses Rayon for parallel PNG decoding. Win32 apps validate cache freshness via mtime.
-    /// Cache failures are logged but don't prevent startup.
+    /// Restore icons from disk cache in parallel.
     #[expect(
         clippy::unnecessary_wraps,
         reason = "Returns Result<()> for API consistency with other ConfigManager methods and to allow future error propagation. Current implementation uses graceful degradation where all errors are logged but don't prevent startup."
@@ -105,7 +90,6 @@ impl ConfigManager {
         use crate::config::models::MonitoredApp;
         use rayon::prelude::*;
 
-        // Early return if no apps to restore
         if config.monitored_apps.is_empty() {
             tracing::debug!("No monitored apps to restore icons for");
             return Ok(());
@@ -129,28 +113,21 @@ impl ConfigManager {
             config.monitored_apps.len()
         );
 
-        // Parallel icon loading
-        // Rayon automatically uses available CPU cores and degrades to sequential on single-core systems
         let icons: Vec<(uuid::Uuid, Vec<u8>)> = config
             .monitored_apps
             .par_iter()
             .filter_map(|app| {
-                // Determine source path for cache validation
-                // Win32 apps: use exe_path for mtime comparison
-                // UWP apps: no source path (no validation)
                 let source_path = match app {
                     MonitoredApp::Win32(win32) => Some(win32.exe_path.as_path()),
                     MonitoredApp::Uwp(_) => None,
                 };
 
-                // Load icon from cache with validation
                 match cache.load_icon(*app.id(), source_path) {
                     Ok(Some(icon_data)) => {
                         tracing::trace!("Restored icon for app {} from cache", app.id());
                         Some((*app.id(), icon_data))
                     }
                     Ok(None) => {
-                        // Cache miss or stale cache - will need to re-extract
                         tracing::debug!(
                             "Cache miss for app {} ({})",
                             app.display_name(),
@@ -159,7 +136,6 @@ impl ConfigManager {
                         None
                     }
                     Err(e) => {
-                        // Log error but continue with other icons
                         tracing::warn!(
                             "Failed to load cached icon for app {} ({}): {}. Icon will need to be re-extracted.",
                             app.display_name(),
@@ -172,7 +148,6 @@ impl ConfigManager {
             })
             .collect();
 
-        // Apply loaded icons sequentially to avoid mutable iterator issues
         let restored_count = icons.len();
         for (app_id, icon_data) in icons {
             if let Some(app) = config.monitored_apps.iter_mut().find(|a| *a.id() == app_id) {
@@ -180,7 +155,6 @@ impl ConfigManager {
             }
         }
 
-        // Log count of restored icons
         if restored_count > 0 {
             tracing::info!(
                 "Restored {} cached icon{} from disk",
@@ -194,10 +168,7 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// Re-extract icons for apps that failed to load from cache
-    ///
-    /// Extracts from exe files (Win32) or package metadata (UWP). Errors are logged
-    /// but don't prevent completion; apps without icons use default/placeholder.
+    /// Re-extract icons for apps that failed to load from cache.
     #[expect(
         clippy::too_many_lines,
         reason = "Icon regeneration logic requires handling both Win32 and UWP apps with different extraction strategies; splitting would reduce cohesion"
@@ -209,18 +180,15 @@ impl ConfigManager {
         #[cfg(windows)]
         use crate::uwp;
 
-        // Early return if no apps to process
         if config.monitored_apps.is_empty() {
             tracing::debug!("No monitored apps to regenerate icons for");
             return;
         }
 
-        // Count apps that need icon regeneration
         let apps_needing_icons_count = config
             .monitored_apps
             .iter()
             .filter(|app| {
-                // Check if icon_data is None without borrowing mutably
                 match app {
                     MonitoredApp::Win32(win32) => win32.icon_data.is_none(),
                     MonitoredApp::Uwp(uwp) => uwp.icon_data.is_none(),
@@ -256,7 +224,6 @@ impl ConfigManager {
             }
         };
 
-        // For UWP apps, we need to enumerate packages to get logo paths
         #[cfg(windows)]
         let uwp_packages = {
             match uwp::enumerate_packages() {
@@ -273,23 +240,19 @@ impl ConfigManager {
 
         let mut regenerated_count = 0;
 
-        // Process each app
         for app in &mut config.monitored_apps {
-            // Skip apps that already have icons
             if app.icon_data_mut().is_some() {
                 continue;
             }
 
             match app {
                 MonitoredApp::Win32(win32_app) => {
-                    // For Win32 apps, use ensure_icon_loaded() to extract from exe
                     if win32_app.ensure_icon_loaded().is_some() {
                         tracing::debug!(
                             "Regenerated icon for Win32 app '{}' from exe",
                             win32_app.display_name
                         );
 
-                        // Cache the regenerated icon
                         if let (Some(cache), Some(icon_data)) = (&cache, &win32_app.icon_data) {
                             if let Err(e) = cache.save_icon(win32_app.id, icon_data) {
                                 tracing::warn!(
@@ -310,15 +273,12 @@ impl ConfigManager {
                     }
                 }
                 MonitoredApp::Uwp(uwp_app) => {
-                    // For UWP apps, we need to find the package and extract the logo
                     #[cfg(windows)]
                     if let Some(packages) = &uwp_packages {
-                        // Find the matching package by package_family_name
                         if let Some(pkg) = packages
                             .iter()
                             .find(|p| p.package_family_name == uwp_app.package_family_name)
                         {
-                            // Extract icon from logo stream if available
                             if let Some(logo_stream) = &pkg.logo_stream {
                                 match uwp::extract_icon_from_stream(logo_stream) {
                                     Ok(icon_data) if !icon_data.is_empty() => {
@@ -327,7 +287,6 @@ impl ConfigManager {
                                             uwp_app.display_name
                                         );
 
-                                        // Cache the regenerated icon
                                         if let Some(cache) = &cache {
                                             if let Err(e) = cache.save_icon(uwp_app.id, &icon_data)
                                             {
@@ -339,7 +298,6 @@ impl ConfigManager {
                                             }
                                         }
 
-                                        // Record icon in memory profiler
                                         memory_profiler::get_profiler()
                                             .record_icon_cached(icon_data.len());
 
@@ -393,9 +351,7 @@ impl ConfigManager {
         }
     }
 
-    /// Save configuration to disk with atomic write
-    ///
-    /// Uses a temporary file and rename to ensure atomic write operation.
+    /// Save configuration to disk with atomic write.
     pub fn save(config: &AppConfig) -> Result<()> {
         use tracing::{debug, error};
 
@@ -407,7 +363,6 @@ impl ConfigManager {
             EasyHdrError::ConfigError(crate::error::StringError::new("Invalid config path"))
         })?;
 
-        // Atomic write: write to temp file, then rename
         let temp_path = config_dir.join("config.json.tmp");
 
         debug!("Serializing configuration to JSON");

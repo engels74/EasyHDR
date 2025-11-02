@@ -1,7 +1,4 @@
-//! Application controller implementation
-//!
-//! This module implements the main application logic controller that
-//! coordinates between process monitoring and HDR control.
+//! Application controller implementation.
 
 use crate::config::{AppConfig, ConfigManager, MonitoredApp, UserPreferences};
 use crate::error::{EasyHdrError, Result};
@@ -59,12 +56,9 @@ impl AppController {
         let hdr_controller = HdrController::new().map_err(|e| {
             use tracing::error;
             error!("Failed to initialize HDR controller: {e}");
-            // Preserve error chain by wrapping the source error
             EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
 
-        // Detect the actual current HDR state at startup
-        // This ensures the GUI displays the correct initial state
         let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
         info!("Detected initial HDR state: {}", initial_hdr_state);
 
@@ -101,15 +95,12 @@ impl AppController {
     ) -> Result<Self> {
         use tracing::info;
 
-        // Use mock HDR controller instead of real one
         let hdr_controller = HdrController::new_mock().map_err(|e| {
             use tracing::error;
             error!("Failed to initialize mock HDR controller: {e}");
-            // Preserve error chain by wrapping the source error
             EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
 
-        // Detect initial HDR state (will be false for mock, but maintains code path)
         let initial_hdr_state = Self::detect_current_hdr_state(&hdr_controller);
         info!("AppController initialized with mock HDR controller (test mode)");
 
@@ -133,20 +124,17 @@ impl AppController {
         Ok(controller)
     }
 
-    /// Detect the current HDR state from the system by checking all HDR-capable displays
+    /// Detect the current HDR state from the system by checking all HDR-capable displays.
     fn detect_current_hdr_state(hdr_controller: &HdrController) -> bool {
-        // Delegate to the shared implementation in HdrController
         hdr_controller.detect_current_hdr_state()
     }
 
     /// Take ownership of the event receiver if it hasn't been taken yet.
-    /// Returns None if already taken. Caller should treat None as a no-op.
     fn take_event_receiver(&mut self) -> Option<mpsc::Receiver<ProcessEvent>> {
         self.event_receiver.take()
     }
 
     /// Take ownership of the HDR state receiver if it hasn't been taken yet.
-    /// Returns None if already taken. Caller should treat None as a no-op.
     fn take_hdr_state_receiver(&mut self) -> Option<mpsc::Receiver<HdrStateEvent>> {
         self.hdr_state_receiver.take()
     }
@@ -170,36 +158,30 @@ impl AppController {
         use std::time::Duration;
         use tracing::warn;
 
-        // Check for process events with timeout to allow periodic HDR state checks
         match event_receiver.recv_timeout(Duration::from_millis(100)) {
             Ok(event) => process_handler(event),
-            Err(RecvTimeoutError::Timeout) => {
-                // Timeout is normal - just continue to check HDR state events
-            }
+            Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => {
                 warn!("Process event receiver channel disconnected. Exiting event loop.");
                 return false;
             }
         }
 
-        // Check for HDR state events (non-blocking, drain all available)
         loop {
             match hdr_state_receiver.try_recv() {
                 Ok(event) => hdr_handler(event),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     warn!("HDR state receiver channel disconnected.");
-                    // Continue processing process events even if HDR monitor stops
                     break;
                 }
             }
         }
 
-        true // Continue loop
+        true
     }
 
     /// Run the main event loop to receive process and HDR state events.
-    /// Uses 100ms timeout to ensure prompt HDR state change detection.
     pub fn run(&mut self) {
         use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
         use std::time::Duration;
@@ -215,24 +197,19 @@ impl AppController {
             return;
         };
 
-        // Main event loop
         info!("Entering main event loop (process events + HDR state events)");
         loop {
-            // Check for process events with timeout to allow periodic HDR state checks
             match event_receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => {
                     self.handle_process_event(event);
                 }
-                Err(RecvTimeoutError::Timeout) => {
-                    // Timeout is normal - just continue to check HDR state events
-                }
+                Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => {
                     warn!("Process event receiver channel disconnected. Exiting event loop.");
                     break;
                 }
             }
 
-            // Check for HDR state events (non-blocking, drain all available)
             loop {
                 match hdr_state_receiver.try_recv() {
                     Ok(event) => {
@@ -241,7 +218,6 @@ impl AppController {
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         warn!("HDR state receiver channel disconnected.");
-                        // Continue processing process events even if HDR monitor stops
                         break;
                     }
                 }
@@ -287,6 +263,7 @@ impl AppController {
     }
 
     /// Handle a process event to automatically toggle HDR.
+    ///
     /// Enables HDR when first monitored app starts, disables when last one stops.
     /// Uses 500ms debouncing to prevent rapid toggling during app restarts.
     fn handle_process_event(&mut self, event: ProcessEvent) {
@@ -296,12 +273,10 @@ impl AppController {
             ProcessEvent::Started(app_id) => {
                 debug!("Process started event: {:?}", app_id);
 
-                // Check if this app is in our monitored list and enabled
-                // Normalize the identifier for case-insensitive matching (Win32 only)
                 let normalized_id = Self::normalize_app_identifier(&app_id);
                 let state = self.watch_state.read();
                 let is_monitored = state.identifiers.contains(&normalized_id);
-                drop(state); // Release lock early
+                drop(state);
 
                 if is_monitored {
                     match &app_id {
@@ -316,7 +291,6 @@ impl AppController {
                     let prev_count = self.active_process_count.fetch_add(1, Ordering::SeqCst);
                     debug!("Active process count: {} -> {}", prev_count, prev_count + 1);
 
-                    // Enable HDR when first monitored app starts
                     if prev_count == 0 && !self.current_hdr_state.load(Ordering::SeqCst) {
                         info!("First monitored application started, enabling HDR");
                         if let Err(e) = self.toggle_hdr(true) {
@@ -333,12 +307,10 @@ impl AppController {
             ProcessEvent::Stopped(app_id) => {
                 debug!("Process stopped event: {:?}", app_id);
 
-                // Check if this app is in our monitored list and enabled
-                // Normalize the identifier for case-insensitive matching (Win32 only)
                 let normalized_id = Self::normalize_app_identifier(&app_id);
                 let state = self.watch_state.read();
                 let is_monitored = state.identifiers.contains(&normalized_id);
-                drop(state); // Release lock early
+                drop(state);
 
                 if is_monitored {
                     match &app_id {
@@ -350,7 +322,6 @@ impl AppController {
                         }
                     }
 
-                    // Decrement with saturating_sub to prevent underflow
                     let prev_count = self
                         .active_process_count
                         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
@@ -363,13 +334,6 @@ impl AppController {
                         prev_count.saturating_sub(1)
                     );
 
-                    // Debounce 500ms to handle quick restarts
-                    // SAFETY: Relaxed ordering is sufficient for debouncing:
-                    // - Atomics guarantee cross-thread visibility even with Relaxed ordering
-                    // - No happens-before synchronization needed (approximate timing acceptable)
-                    // - Read/write don't synchronize other data structures
-                    // - Worst case: debounce window slightly off (acceptable for 500ms threshold)
-                    // - u64 nanos wraps after ~584 years (non-issue for debouncing)
                     let last_toggle_nanos = self.last_toggle_time_nanos.load(Ordering::Relaxed);
                     let last_toggle =
                         self.startup_time + std::time::Duration::from_nanos(last_toggle_nanos);
@@ -380,7 +344,6 @@ impl AppController {
                         return;
                     }
 
-                    // Disable HDR when last monitored app stops
                     if prev_count == 1 && self.current_hdr_state.load(Ordering::SeqCst) {
                         info!("Last monitored application stopped, disabling HDR");
                         if let Err(e) = self.toggle_hdr(false) {
@@ -397,6 +360,7 @@ impl AppController {
     }
 
     /// Handle an HDR state event from external Windows settings changes.
+    ///
     /// Updates internal state and GUI without calling `toggle_hdr()` since the change already occurred.
     fn handle_hdr_state_event(&mut self, event: HdrStateEvent) {
         use tracing::{debug, info};
@@ -414,26 +378,21 @@ impl AppController {
             }
         }
 
-        // Send state update to GUI to reflect the external change
-        debug!("Sending state update to GUI after external HDR state change");
         self.send_state_update();
     }
 
-    /// Toggle HDR state globally on all displays and update debouncing timestamp
+    /// Toggle HDR state globally on all displays and update debouncing timestamp.
     fn toggle_hdr(&mut self, enable: bool) -> Result<()> {
         use tracing::{info, warn};
 
         info!("Toggling HDR: {}", if enable { "ON" } else { "OFF" });
 
-        // Call HDR controller to set HDR state globally
         let results = self.hdr_controller.set_hdr_global(enable).map_err(|e| {
             use tracing::error;
             error!("Failed to set HDR state globally: {e}");
-            // Preserve error chain by wrapping the source error
             EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
 
-        // Log results for each display
         for (target, result) in results {
             match result {
                 Ok(()) => {
@@ -454,11 +413,8 @@ impl AppController {
             }
         }
 
-        // Update current HDR state
         self.current_hdr_state.store(enable, Ordering::SeqCst);
 
-        // Update last toggle time for debouncing
-        // SAFETY: See handle_process_event for ordering rationale (Relaxed is sufficient)
         #[allow(clippy::cast_possible_truncation)]
         let elapsed_nanos = self.startup_time.elapsed().as_nanos() as u64;
         self.last_toggle_time_nanos
@@ -467,7 +423,7 @@ impl AppController {
         Ok(())
     }
 
-    /// Send current state update to GUI (HDR state, active apps, process count)
+    /// Send current state update to GUI.
     fn send_state_update(&self) {
         use tracing::{debug, warn};
 
@@ -500,15 +456,10 @@ impl AppController {
     }
 
     /// Send initial state to GUI and populate `ProcessMonitor` watch list.
-    /// Call once after initialization to display all configured apps.
     pub fn send_initial_state(&self) {
         use tracing::info;
 
         info!("Sending initial state update to populate GUI");
-
-        // Populate ProcessMonitor watch list with enabled apps from loaded config
-        // This is critical for process detection to work after startup
-        info!("Initializing ProcessMonitor watch list from loaded configuration");
         self.update_process_monitor_watch_list();
 
         self.send_state_update();
@@ -560,32 +511,23 @@ impl AppController {
 
         info!("Removing application with ID: {}", id);
 
-        // Remove from config
         {
             let mut config = self.config.write();
             config.monitored_apps.retain(|app| app.id() != &id);
         }
 
-        // Clean up cached icon (graceful failure)
         if let Ok(cache) = crate::utils::icon_cache::IconCache::new(
             crate::utils::icon_cache::IconCache::default_cache_dir(),
         ) {
             if let Err(e) = cache.remove_icon(id) {
                 warn!("Failed to remove cached icon for app {}: {}", id, e);
-                // Continue with app removal despite cache cleanup failure
             }
         } else {
             warn!("Failed to initialize icon cache for cleanup of app {}", id);
-            // Continue with app removal despite cache initialization failure
         }
 
-        // Save configuration - if this fails, we continue with in-memory config
         self.save_config_gracefully();
-
-        // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
-
-        // Send state update to GUI
         self.send_state_update();
 
         info!("Application removed successfully");
@@ -599,7 +541,6 @@ impl AppController {
 
         info!("Toggling application {} to enabled={}", id, enabled);
 
-        // Update enabled flag
         {
             let mut config = self.config.write();
             if let Some(app) = config.monitored_apps.iter_mut().find(|app| app.id() == &id) {
@@ -607,13 +548,8 @@ impl AppController {
             }
         }
 
-        // Save configuration - if this fails, we continue with in-memory config
         self.save_config_gracefully();
-
-        // Update ProcessMonitor watch list
         self.update_process_monitor_watch_list();
-
-        // Send state update to GUI
         self.send_state_update();
 
         info!("Application enabled state updated successfully");
@@ -627,13 +563,11 @@ impl AppController {
 
         info!("Updating user preferences");
 
-        // Update preferences
         {
             let mut config = self.config.write();
             config.preferences = prefs;
         }
 
-        // Save configuration - if this fails, we continue with in-memory config
         self.save_config_gracefully();
 
         info!("User preferences updated successfully");
@@ -649,7 +583,6 @@ impl AppController {
         let displays = self.hdr_controller.refresh_displays().map_err(|e| {
             use tracing::error;
             error!("Failed to refresh display list: {e}");
-            // Preserve error chain by wrapping the source error
             EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
         info!(
@@ -684,13 +617,9 @@ impl AppController {
         }
     }
 
-    /// Normalize `AppIdentifier` for case-insensitive matching
+    /// Normalize `AppIdentifier` for case-insensitive matching.
     ///
-    /// Win32 process names are normalized to lowercase for case-insensitive matching.
-    /// UWP package family names are case-sensitive and returned as-is.
-    ///
-    /// This normalization ensures that the O(1) `HashSet` lookup works correctly
-    /// even if the event contains a non-normalized identifier (e.g., from tests).
+    /// Win32 process names are normalized to lowercase. UWP package family names are case-sensitive.
     fn normalize_app_identifier(app_id: &AppIdentifier) -> AppIdentifier {
         match app_id {
             AppIdentifier::Win32(process_name) => AppIdentifier::Win32(process_name.to_lowercase()),
@@ -700,11 +629,7 @@ impl AppController {
         }
     }
 
-    /// Update `ProcessMonitor` watch list with enabled monitored applications from config
-    ///
-    /// Filters the config to include only enabled applications (both Win32 and UWP)
-    /// and updates the `ProcessMonitor`'s watch list. Also rebuilds the `monitored_identifiers`
-    /// cache for fast O(1) filtering.
+    /// Update `ProcessMonitor` watch list with enabled monitored applications from config.
     fn update_process_monitor_watch_list(&self) {
         use tracing::debug;
 
@@ -734,8 +659,6 @@ impl AppController {
             })
             .collect();
 
-        // Atomically update both the app list and identifier cache
-        // This prevents race conditions where poll_processes() could see inconsistent state
         let mut state = self.watch_state.write();
         *state = WatchState {
             apps: Arc::new(monitored_apps),

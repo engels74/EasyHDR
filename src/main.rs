@@ -44,7 +44,6 @@ fn main() -> Result<()> {
     let profiler = startup_profiler::get_profiler();
     profiler.record_phase(StartupPhase::AppStart);
 
-    // Initialize logging first so we can log errors
     utils::init_logging().context("Failed to initialize logging system")?;
     profiler.record_phase(StartupPhase::LoggingInit);
 
@@ -72,7 +71,6 @@ fn main() -> Result<()> {
 
     info!("Single instance check passed");
 
-    // Detect Windows version and verify compatibility
     if let Err(e) =
         verify_windows_version().context("Failed to verify Windows version compatibility")
     {
@@ -88,7 +86,6 @@ fn main() -> Result<()> {
 
     info!("Windows version check passed");
 
-    // Load configuration
     let config = ConfigManager::load().context("Failed to load application configuration")?;
     profiler.record_phase(StartupPhase::ConfigLoad);
     info!(
@@ -96,8 +93,6 @@ fn main() -> Result<()> {
         config.monitored_apps.len()
     );
 
-    // Initialize core components
-    // This may fail if run on macOS (development environment)
     #[cfg_attr(not(windows), allow(unused_variables))]
     let (process_monitor, gui_controller, should_show_hdr_warning) =
         match initialize_components(&config).context("Failed to initialize core components") {
@@ -115,12 +110,10 @@ fn main() -> Result<()> {
                     return Err(e);
                 }
 
-                // On Windows, show error dialog
                 #[cfg(windows)]
                 {
                     use easyhdr::error::get_user_friendly_error;
 
-                    // Try to downcast to EasyHdrError for user-friendly message
                     let error_message =
                         if let Some(easy_hdr_error) = e.downcast_ref::<EasyHdrError>() {
                             get_user_friendly_error(easy_hdr_error)
@@ -148,23 +141,15 @@ fn main() -> Result<()> {
         memory_profiler::get_profiler().log_stats();
     }
 
-    // Start background threads
     info!("Starting process monitor thread");
     let _monitor_handle = process_monitor.start();
-
-    // Note: AppController thread is started inside initialize_components
-    // after GUI initialization to prevent deadlock during window state restoration
 
     profiler.record_phase(StartupPhase::AppReady);
     profiler.log_summary();
 
-    // Show HDR warning dialog if needed (after GUI is ready but before event loop)
-    // This ensures the dialog doesn't block the GUI from appearing
     #[cfg(windows)]
     if should_show_hdr_warning {
-        // Spawn the warning dialog in a separate thread so it doesn't block the GUI
         std::thread::spawn(|| {
-            // Small delay to ensure the main window is visible first
             std::thread::sleep(std::time::Duration::from_millis(500));
             show_warning_dialog(
                 "No HDR-capable displays were detected.\n\n\
@@ -178,7 +163,6 @@ fn main() -> Result<()> {
         });
     }
 
-    // Run GUI event loop (blocks until application exits)
     info!("Starting GUI event loop");
     gui_controller
         .run()
@@ -204,8 +188,6 @@ fn verify_windows_version() -> Result<()> {
 
         let version = WindowsVersion::detect().context("Failed to detect Windows version")?;
 
-        // Get the actual build number for detailed checking
-        // We need to check if it's at least Windows 10 21H2 (build 19044)
         let build_number =
             get_windows_build_number().context("Failed to retrieve Windows build number")?;
 
@@ -228,7 +210,6 @@ fn verify_windows_version() -> Result<()> {
 
     #[cfg(not(windows))]
     {
-        // On non-Windows platforms, return an error
         Err(EasyHdrError::ConfigError(easyhdr::error::StringError::new(
             "EasyHDR is a Windows-only application",
         ))
@@ -258,14 +239,11 @@ fn get_windows_build_number() -> Result<u32> {
     type RtlGetVersionFn = unsafe extern "system" fn(*mut OSVERSIONINFOEXW) -> i32;
 
     unsafe {
-        // Load ntdll.dll
         let ntdll_name = HSTRING::from("ntdll.dll");
         let ntdll = LoadLibraryW(&ntdll_name).map_err(|e| {
-            // Preserve error chain by wrapping the source error
             EasyHdrError::HdrControlFailed(Box::new(e))
         })?;
 
-        // Get RtlGetVersion function pointer
         let proc_name = windows::core::s!("RtlGetVersion");
         let rtl_get_version_ptr = GetProcAddress(ntdll, proc_name);
 
@@ -280,7 +258,6 @@ fn get_windows_build_number() -> Result<u32> {
 
         let rtl_get_version: RtlGetVersionFn = transmute(rtl_get_version_ptr);
 
-        // Prepare version info structure
         #[expect(
             clippy::cast_possible_truncation,
             reason = "size_of::<OSVERSIONINFOEXW>() is a compile-time constant that fits in u32"
@@ -290,7 +267,6 @@ fn get_windows_build_number() -> Result<u32> {
             ..Default::default()
         };
 
-        // Call RtlGetVersion
         let status = rtl_get_version(&raw mut version_info);
 
         if status != 0 {
@@ -314,14 +290,12 @@ fn log_hdr_startup_summary(hdr_controller: &HdrController) {
 
     info!("=== HDR Startup Summary ===");
 
-    // Log Windows version information
     let windows_version = hdr_controller.get_windows_version();
     let build_number = WindowsVersion::get_build_number().unwrap_or(0);
 
     info!("Windows Version: {:?}", windows_version);
     info!("Windows Build Number: {}", build_number);
 
-    // Log display information
     let displays = hdr_controller.get_display_cache();
     info!("Total Displays Detected: {}", displays.len());
 
@@ -331,7 +305,6 @@ fn log_hdr_startup_summary(hdr_controller: &HdrController) {
         return;
     }
 
-    // Log detailed information for each display
     for (index, disp) in displays.iter().enumerate() {
         info!("--- Display {} ---", index);
         info!(
@@ -341,7 +314,6 @@ fn log_hdr_startup_summary(hdr_controller: &HdrController) {
         info!("  Target ID: {}", disp.target_id);
         info!("  HDR Supported: {}", disp.supports_hdr);
 
-        // Try to get current HDR state
         if disp.supports_hdr {
             match hdr_controller.is_hdr_enabled(disp) {
                 Ok(enabled) => {
@@ -356,7 +328,6 @@ fn log_hdr_startup_summary(hdr_controller: &HdrController) {
         }
     }
 
-    // Summary statistics
     let hdr_capable_count = displays.iter().filter(|d| d.supports_hdr).count();
     info!(
         "HDR-Capable Displays: {} of {}",
@@ -368,9 +339,7 @@ fn log_hdr_startup_summary(hdr_controller: &HdrController) {
 }
 
 #[cfg(not(windows))]
-fn log_hdr_startup_summary(_hdr_controller: &HdrController) {
-    // No-op on non-Windows platforms
-}
+fn log_hdr_startup_summary(_hdr_controller: &HdrController) {}
 
 /// Initializes all core components including HDR controller, process monitor,
 /// HDR state monitor, app controller, and GUI. Returns a tuple of
@@ -381,16 +350,12 @@ fn initialize_components(
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
 
-    // First, create a temporary HdrController to check for HDR-capable displays
-    // This is just for the warning message - AppController will create its own
     info!("Checking for HDR-capable displays");
     let temp_hdr_controller = HdrController::new().context("Failed to create HDR controller")?;
     profiler.record_phase(StartupPhase::HdrControllerInit);
 
-    // Log comprehensive startup summary for diagnostics
     log_hdr_startup_summary(&temp_hdr_controller);
 
-    // Check if any displays support HDR and warn if none found
     let hdr_capable_count = temp_hdr_controller
         .get_display_cache()
         .iter()
@@ -406,14 +371,11 @@ fn initialize_components(
         false
     };
 
-    // Create bounded mpsc channels for communication with backpressure
-    // Channel capacity of 32 provides sufficient buffering for event bursts
     let channel_capacity = 32;
     let (process_event_tx, process_event_rx) = mpsc::sync_channel::<ProcessEvent>(channel_capacity);
     let (hdr_state_tx, hdr_state_rx) = mpsc::sync_channel::<HdrStateEvent>(channel_capacity);
     let (app_state_tx, app_state_rx) = mpsc::sync_channel::<AppState>(channel_capacity);
 
-    // Create ProcessMonitor with configured interval
     let monitoring_interval = Duration::from_millis(config.preferences.monitoring_interval_ms);
     info!(
         "Creating process monitor with interval: {:?}",
@@ -423,7 +385,6 @@ fn initialize_components(
     let watch_state_ref = process_monitor.get_watch_state_ref();
     profiler.record_phase(StartupPhase::ProcessMonitorInit);
 
-    // Create HdrStateMonitor for real-time HDR state change detection
     info!("Creating HDR state monitor");
     let hdr_state_monitor = HdrStateMonitor::new(
         HdrController::new().context("Failed to create HDR controller for state monitoring")?,
@@ -432,7 +393,6 @@ fn initialize_components(
     .context("Failed to create HDR state monitor")?;
     profiler.record_phase(StartupPhase::HdrMonitorInit);
 
-    // Create AppController (it will create its own HdrController)
     info!("Creating application controller");
     let app_controller = AppController::new(
         config.clone(),
@@ -444,31 +404,22 @@ fn initialize_components(
     .context("Failed to create application controller")?;
     profiler.record_phase(StartupPhase::AppControllerInit);
 
-    // Wrap AppController in Arc<Mutex<>> for sharing between GUI and background thread
     let app_controller_handle = Arc::new(Mutex::new(app_controller));
 
-    // Create GuiController first (before starting the controller thread)
-    // This allows the GUI to initialize and lock the controller temporarily during setup
     info!("Creating GUI controller");
     let gui_controller = GuiController::new(Arc::clone(&app_controller_handle), app_state_rx)
         .context("Failed to create GUI controller")?;
     profiler.record_phase(StartupPhase::GuiControllerInit);
 
-    // Start AppController event loop in background thread AFTER GUI is initialized
-    // This prevents a deadlock where the controller thread holds the lock while
-    // the GUI is trying to initialize and needs temporary access to the controller
     info!("Starting application controller thread");
     let _controller_handle = AppController::spawn_event_loop(Arc::clone(&app_controller_handle));
 
-    // Send initial state update to populate GUI with apps from config
-    // This ensures the GUI displays all monitored applications on startup
     info!("Sending initial state to populate GUI");
     {
         let controller_guard = app_controller_handle.lock();
         controller_guard.send_initial_state();
     }
 
-    // Start HDR state monitor in background thread
     info!("Starting HDR state monitor thread");
     let _hdr_monitor_handle = hdr_state_monitor.start();
 

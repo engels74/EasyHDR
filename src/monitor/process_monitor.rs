@@ -1,9 +1,7 @@
-//! Process monitoring implementation
+//! Process monitoring implementation.
 //!
 //! Polls Windows processes and detects state changes. Matches by executable filename only
-//! (lowercase, no extension), not full path. Name collisions trigger HDR for all matching processes.
-//!
-//! **Limitation:** Use unique executable names to avoid false positives.
+//! (lowercase, no extension). Name collisions trigger HDR for all matching processes.
 
 use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
@@ -92,24 +90,14 @@ impl WatchState {
     }
 }
 
-/// Process monitor that polls for running processes
+/// Process monitor that polls for running processes.
 ///
-/// Monitors running processes at regular intervals and detects state changes
-/// for configured applications. Uses Windows Toolhelp32 API for process enumeration.
-///
-/// **Known Limitation:** Matches processes by executable filename only (without path or extension).
-/// Multiple processes with the same filename will all be detected as the same application.
+/// Matches processes by executable filename only (without path or extension).
 pub struct ProcessMonitor {
-    /// Combined watch list and identifier cache for atomic state updates
+    /// Combined watch list and identifier cache for atomic state updates.
     ///
-    /// Stores both the monitored applications list and the identifier cache in a single
-    /// atomic structure wrapped in `RwLock`. This enables:
-    /// - Atomic updates: Both caches updated simultaneously, preventing race conditions
-    /// - Concurrent reads: Multiple threads can read during `poll_processes()` hot path
-    /// - Cheap cloning: `apps` field uses Arc for O(1) clones during event handling
-    ///
-    /// Shared with `AppController` via `Arc` for coordinated updates when GUI modifies
-    /// the monitored app list.
+    /// Prevents race conditions by updating both caches simultaneously. Shared with
+    /// `AppController` via `Arc` for coordinated updates.
     watch_state: Arc<RwLock<WatchState>>,
     /// PID → (`AppIdentifier`, timestamp) cache; expires after 5s to handle PID reuse
     #[cfg_attr(not(windows), allow(dead_code))]
@@ -143,16 +131,11 @@ impl ProcessMonitor {
         }
     }
 
-    /// Update the list of monitored applications to watch
+    /// Update the list of monitored applications to watch.
     ///
-    /// Replaces the entire watch list with the provided applications.
-    /// Only enabled applications should be passed to this method.
-    /// Also rebuilds the `monitored_identifiers` cache for fast O(1) filtering.
-    ///
-    /// This method performs an atomic update of both the app list and identifier cache,
-    /// preventing race conditions where `poll_processes()` could observe inconsistent state.
+    /// Only enabled applications should be passed. Performs atomic update of both app list
+    /// and identifier cache to prevent race conditions.
     pub fn update_watch_list(&self, monitored_apps: Vec<MonitoredApp>) {
-        // Rebuild monitored identifiers set from the new watch list
         let identifiers: HashSet<AppIdentifier> = monitored_apps
             .iter()
             .map(|app| match app {
@@ -165,8 +148,6 @@ impl ProcessMonitor {
             })
             .collect();
 
-        // Atomically update both the app list and identifier cache
-        // This prevents race conditions where poll_processes() could see inconsistent state
         let mut state = self.watch_state.write();
         *state = WatchState {
             apps: Arc::new(monitored_apps),
@@ -174,15 +155,7 @@ impl ProcessMonitor {
         };
     }
 
-    /// Get a reference to the watch state for external updates
-    ///
-    /// Returns a shared reference to the combined watch list and identifier cache.
-    /// This enables `AppController` to share the same state and perform coordinated
-    /// updates when the GUI modifies the monitored app list.
-    ///
-    /// The unified state structure ensures atomic updates and prevents race conditions
-    /// where `poll_processes()` could observe inconsistent state between the app list
-    /// and identifier cache.
+    /// Get a reference to the watch state for external updates.
     pub fn get_watch_state_ref(&self) -> Arc<RwLock<WatchState>> {
         Arc::clone(&self.watch_state)
     }
@@ -219,19 +192,12 @@ impl ProcessMonitor {
         })
     }
 
-    /// Poll processes and detect changes
-    ///
-    /// Enumerates all running processes using Windows Toolhelp32 API, extracts process names
-    /// (lowercase, without extension), and detects state transitions.
+    /// Poll processes and detect changes.
     ///
     /// # Safety
     ///
-    /// `CreateToolhelp32Snapshot` called with valid flags (`TH32CS_SNAPPROCESS`, PID 0).
-    /// Return value validated via `map_err`; errors propagated. Handle wrapped in
-    /// `SnapshotGuard` (RAII) for cleanup. `PROCESSENTRY32W` initialized with correct
-    /// `dwSize` to prevent buffer overruns. `Process32FirstW`/`NextW` return codes checked
-    /// before data access; `ERROR_NO_MORE_FILES` handled as iteration end. `&raw mut entry`
-    /// valid (stack variable, correct size).
+    /// `CreateToolhelp32Snapshot` called with valid flags. Handle wrapped in `SnapshotGuard` (RAII).
+    /// `PROCESSENTRY32W` initialized with correct `dwSize`. Return codes checked before data access.
     #[cfg_attr(
         windows,
         expect(
@@ -260,21 +226,16 @@ impl ProcessMonitor {
             let mut cache_hits = 0usize;
             let mut cache_misses = 0usize;
 
-            // Take a snapshot of all running processes
             let snapshot = unsafe {
                 CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).map_err(|e| {
                     use tracing::error;
                     error!("Windows API error - CreateToolhelp32Snapshot failed: {e}");
-                    // Preserve error chain by wrapping the source error
                     EasyHdrError::ProcessMonitorError(Box::new(e))
                 })?
             };
 
-            // Ensure snapshot handle is closed when we're done
             let _guard = SnapshotGuard(snapshot);
 
-            // Build a set of currently running process identifiers
-            // Pre-allocate capacity based on previous snapshot size to avoid rehashing
             let capacity = self
                 .running_processes
                 .len()
@@ -290,42 +251,31 @@ impl ProcessMonitor {
                 ..Default::default()
             };
 
-            // Get the first process
             let mut has_process = unsafe { Process32FirstW(snapshot, &raw mut entry).is_ok() };
 
-            // Iterate through all processes
             while has_process {
                 let pid = entry.th32ProcessID;
 
-                // Try to open process handle for UWP detection
-                // Use PROCESS_QUERY_LIMITED_INFORMATION for minimal access rights
                 let handle_result =
                     unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) };
 
                 if let Some((cached_app_id, _)) = self.app_id_cache.get(&pid) {
                     cache_hits += 1;
-                    // Cache hit - reuse existing AppIdentifier
                     if self.watch_state.read().identifiers.contains(cached_app_id) {
                         current_processes.insert(cached_app_id.clone());
-                        // Update timestamp for this entry
                         self.app_id_cache.insert(pid, (cached_app_id.clone(), now));
                     }
                 } else {
-                    // Cache miss - need to create new AppIdentifier
                     cache_misses += 1;
 
                     match handle_result {
                         Ok(handle) => {
-                            // Ensure handle is closed when we're done
                             let _guard = ProcessHandleGuard(handle);
 
-                            // Try UWP detection first
                             match unsafe { crate::uwp::detect_uwp_process(handle) } {
                                 Ok(Some(family_name)) => {
-                                    // UWP app detected - check if monitored before inserting
                                     let app_id = AppIdentifier::Uwp(family_name);
 
-                                    // Cache the AppIdentifier for this PID
                                     self.app_id_cache.insert(pid, (app_id.clone(), now));
 
                                     if self.watch_state.read().identifiers.contains(&app_id) {
@@ -337,11 +287,9 @@ impl ProcessMonitor {
                                     }
                                 }
                                 Ok(None) => {
-                                    // Win32 app - extract process name and check if monitored
                                     if let Some(app_id) =
                                         extract_win32_app_identifier(&entry.szExeFile, pid)
                                     {
-                                        // Cache the AppIdentifier for this PID
                                         self.app_id_cache.insert(pid, (app_id.clone(), now));
 
                                         if self.watch_state.read().identifiers.contains(&app_id) {
@@ -350,18 +298,14 @@ impl ProcessMonitor {
                                     }
                                 }
                                 Err(e) => {
-                                    // UWP detection failed - log error with context but continue
-                                    // This is non-fatal; we'll treat it as Win32 fallback
                                     warn!(
                                         "Failed to detect UWP package for process ID {}: {:#}",
                                         pid, e
                                     );
 
-                                    // Fallback to Win32 detection
                                     if let Some(app_id) =
                                         extract_win32_app_identifier(&entry.szExeFile, pid)
                                     {
-                                        // Cache the AppIdentifier for this PID
                                         self.app_id_cache.insert(pid, (app_id.clone(), now));
 
                                         if self.watch_state.read().identifiers.contains(&app_id) {
@@ -372,36 +316,28 @@ impl ProcessMonitor {
                             }
                         }
                         Err(e) => {
-                            // Failed to open process handle - this is common for system processes
-                            // or processes with higher privileges. Log at debug level and continue.
                             debug!("Failed to open process handle for PID {}: {}", pid, e);
 
-                            // Fallback to Win32 detection using process name
                             if let Some(app_id) =
                                 extract_win32_app_identifier(&entry.szExeFile, pid)
                             {
-                                // Cache the AppIdentifier for this PID
                                 self.app_id_cache.insert(pid, (app_id.clone(), now));
 
                                 if self.watch_state.read().identifiers.contains(&app_id) {
                                     current_processes.insert(app_id);
                                 }
-                                // Early exit: skip unmonitored Win32 apps (Phase 1.1 optimization)
                             }
                         }
                     }
                 }
 
-                // Get the next process
                 has_process = unsafe {
                     match Process32NextW(snapshot, &raw mut entry) {
                         Ok(()) => true,
                         Err(e) => {
-                            // ERROR_NO_MORE_FILES is expected at the end
                             if e.code() == ERROR_NO_MORE_FILES.to_hresult() {
                                 false
                             } else {
-                                // Log other errors but continue
                                 warn!("Error iterating processes: {e}");
                                 false
                             }
@@ -414,7 +350,6 @@ impl ProcessMonitor {
 
             let total_lookups = cache_hits + cache_misses;
             if total_lookups > 0 {
-                // Precision loss is acceptable for logging statistics
                 #[allow(clippy::cast_precision_loss)]
                 let hit_rate = (cache_hits as f64 / total_lookups as f64) * 100.0;
                 debug!(
@@ -423,11 +358,8 @@ impl ProcessMonitor {
                 );
             }
 
-            // Detect changes and send events
             self.detect_changes(current_processes);
 
-            // Increment poll cycle counter for diagnostic purposes
-            // Relaxed ordering is sufficient - this is just a diagnostic counter
             self.poll_cycle_count.fetch_add(1, Ordering::Relaxed);
 
             Ok(())
@@ -435,17 +367,13 @@ impl ProcessMonitor {
 
         #[cfg(not(windows))]
         {
-            // Non-Windows platforms not supported
             Err(EasyHdrError::ProcessMonitorError(
                 crate::error::StringError::new("Process monitoring is only supported on Windows"),
             ))
         }
     }
 
-    /// Detect changes between current and previous snapshots
-    ///
-    /// Compares the current process snapshot with the previous one to identify
-    /// which monitored processes have started or stopped, then sends appropriate events.
+    /// Detect changes between current and previous snapshots.
     #[cfg_attr(not(windows), allow(dead_code))]
     fn detect_changes(&mut self, current: HashSet<AppIdentifier>) {
         use tracing::info;
@@ -455,9 +383,7 @@ impl ProcessMonitor {
             Arc::clone(&state.apps)
         };
 
-        // Find started processes
         for app_id in current.difference(&self.running_processes) {
-            // Check if this app identifier is monitored
             if Self::is_monitored(app_id, &apps) {
                 info!("Detected process started: {:?}", app_id);
                 if let Err(e) = self
@@ -473,9 +399,7 @@ impl ProcessMonitor {
             }
         }
 
-        // Find stopped processes
         for app_id in self.running_processes.difference(&current) {
-            // Check if this app identifier is monitored
             if Self::is_monitored(app_id, &apps) {
                 info!("Detected process stopped: {:?}", app_id);
                 if let Err(e) = self
@@ -491,23 +415,16 @@ impl ProcessMonitor {
             }
         }
 
-        // Update estimated process count for next iteration's capacity hint
-        // Use exponential moving average to smooth out variations
         self.estimated_process_count = (self.estimated_process_count * 3 + current.len()) / 4;
 
         self.running_processes = current;
     }
 
-    /// Check if an app identifier is monitored
-    ///
-    /// Pattern matches on the `AppIdentifier` and checks against the `MonitoredApp` enum.
-    /// For Win32 apps, matches against `Win32App` `process_name` (case-insensitive).
-    /// For UWP apps, matches against `UwpApp` `package_family_name` (exact match).
+    /// Check if an app identifier is monitored.
     #[cfg_attr(not(windows), allow(dead_code))]
     fn is_monitored(app_id: &AppIdentifier, watch_list: &[MonitoredApp]) -> bool {
         match app_id {
             AppIdentifier::Win32(process_name) => {
-                // Match against Win32App process_name (case-insensitive)
                 watch_list.iter().any(|app| {
                     if let MonitoredApp::Win32(win32_app) = app {
                         win32_app.enabled
@@ -518,7 +435,6 @@ impl ProcessMonitor {
                 })
             }
             AppIdentifier::Uwp(package_family_name) => {
-                // Match against UwpApp package_family_name (exact match)
                 watch_list.iter().any(|app| {
                     if let MonitoredApp::Uwp(uwp_app) = app {
                         uwp_app.enabled && uwp_app.package_family_name == *package_family_name
@@ -531,21 +447,15 @@ impl ProcessMonitor {
     }
 }
 
-/// RAII guard for Windows snapshot handle
-///
-/// Ensures the snapshot handle is properly closed when the guard goes out of scope.
+/// RAII guard for Windows snapshot handle.
 #[cfg(windows)]
 struct SnapshotGuard(windows::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl Drop for SnapshotGuard {
-    /// Closes the snapshot handle
-    ///
     /// # Safety
     ///
-    /// Handle from `CreateToolhelp32Snapshot` (valid or error; only valid stored). Guard
-    /// owns handle (closed once, not cloned/shared). `CloseHandle` safe on valid snapshot
-    /// handles; result ignored (no destructor recovery).
+    /// Handle from `CreateToolhelp32Snapshot`. Guard owns handle (closed once, not cloned/shared).
     #[expect(
         unsafe_code,
         reason = "Windows FFI for CloseHandle to release snapshot handle"
@@ -557,21 +467,15 @@ impl Drop for SnapshotGuard {
     }
 }
 
-/// RAII guard for Windows process handle
-///
-/// Ensures the process handle is properly closed when the guard goes out of scope.
+/// RAII guard for Windows process handle.
 #[cfg(windows)]
 struct ProcessHandleGuard(windows::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 impl Drop for ProcessHandleGuard {
-    /// Closes the process handle
-    ///
     /// # Safety
     ///
-    /// Handle from `OpenProcess` (valid or error; only valid stored). Guard owns handle
-    /// (closed once, not cloned/shared). `CloseHandle` safe on valid process handles;
-    /// result ignored (no destructor recovery).
+    /// Handle from `OpenProcess`. Guard owns handle (closed once, not cloned/shared).
     #[expect(
         unsafe_code,
         reason = "Windows FFI for CloseHandle to release process handle"
@@ -583,10 +487,7 @@ impl Drop for ProcessHandleGuard {
     }
 }
 
-/// Helper to extract Win32 app identifier from process entry
-///
-/// Extracts the process name from szExeFile, converts it to lowercase without extension,
-/// and returns it as an `AppIdentifier`. Logs a debug message with PID for traceability.
+/// Helper to extract Win32 app identifier from process entry.
 ///
 /// Returns `None` if the process name cannot be extracted (invalid UTF-16, etc.).
 #[cfg(windows)]
@@ -600,30 +501,20 @@ fn extract_win32_app_identifier(sz_exe_file: &[u16; 260], pid: u32) -> Option<Ap
     })
 }
 
-/// Extract process name from szExeFile field
+/// Extract process name from szExeFile field.
 #[cfg(windows)]
 fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
-    // Find the null terminator
     let len = sz_exe_file
         .iter()
         .position(|&c| c == 0)
         .unwrap_or(sz_exe_file.len());
 
-    // Convert to String
     String::from_utf16(&sz_exe_file[..len]).ok()
 }
 
-/// Extract filename without extension and convert to lowercase
-///
-/// Normalizes process names for case-insensitive matching.
-///
-/// Examples:
-/// - "C:\\Windows\\System32\\notepad.exe" -> "notepad"
-/// - "game.exe" -> "game"
-/// - "MyApp.EXE" -> "myapp"
+/// Extract filename without extension and convert to lowercase.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn extract_filename_without_extension(path: &str) -> String {
-    // Extract filename from path
     let filename = if let Some(pos) = path.rfind('\\') {
         &path[pos + 1..]
     } else if let Some(pos) = path.rfind('/') {
@@ -632,14 +523,12 @@ fn extract_filename_without_extension(path: &str) -> String {
         path
     };
 
-    // Remove extension
     let name_without_ext = if let Some(pos) = filename.rfind('.') {
         &filename[..pos]
     } else {
         filename
     };
 
-    // Convert to lowercase for case-insensitive matching
     name_without_ext.to_lowercase()
 }
 
