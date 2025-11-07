@@ -71,7 +71,7 @@ jobs:
           echo "See attached artifacts for detailed Criterion reports." >> benchmark-summary.md
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: criterion-benchmarks-${{ github.sha }}
           path: |
@@ -234,7 +234,7 @@ jobs:
           Write-Host "✓ Profiling report generated successfully"
 
       - name: Upload CPU profiling artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: cpu-profiling-flamegraph-${{ github.sha }}
           path: profiling-results/
@@ -344,7 +344,7 @@ jobs:
           "@ | Out-File -FilePath dhat-results/README.md -Encoding UTF8
 
       - name: Upload DHAT profiling artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: allocation-profiling-dhat-${{ github.sha }}
           path: dhat-results/
