@@ -47,7 +47,7 @@ fn test_process_monitor_cpu_usage() {
     let wall_elapsed = wall_start.elapsed();
 
     // Calculate CPU usage percentage
-    let cpu_time_used = cpu_end - cpu_start;
+    let cpu_time_used = cpu_end.saturating_sub(cpu_start);
     let cpu_percentage = (cpu_time_used.as_secs_f64() / wall_elapsed.as_secs_f64()) * 100.0;
 
     println!("\nResults:");
@@ -157,7 +157,7 @@ fn test_process_monitor_cpu_usage_different_intervals() {
         let cpu_end = get_process_cpu_time().expect("Failed to get final CPU time");
         let wall_elapsed = wall_start.elapsed();
 
-        let cpu_time_used = cpu_end - cpu_start;
+        let cpu_time_used = cpu_end.saturating_sub(cpu_start);
         let cpu_percentage = (cpu_time_used.as_secs_f64() / wall_elapsed.as_secs_f64()) * 100.0;
 
         println!("  CPU usage: {cpu_percentage:.2}%");
