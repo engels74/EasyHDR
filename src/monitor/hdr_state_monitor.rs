@@ -239,10 +239,8 @@ impl HdrStateMonitor {
             event_sender: self.event_sender.clone(),
             recheck_count: Arc::new(Mutex::new(0)),
             cached_hdr_capable_count: Arc::new(Mutex::new(initial_hdr_count)),
-            // Initialize to past time to allow immediate first refresh
-            last_display_refresh: Arc::new(Mutex::new(
-                std::time::Instant::now() - std::time::Duration::from_secs(10),
-            )),
+            // None means never refreshed, allowing immediate first refresh
+            last_display_refresh: Arc::new(Mutex::new(None)),
         });
 
         unsafe {
@@ -324,7 +322,8 @@ struct MonitorState {
     /// Cached count of HDR-capable displays for change detection
     cached_hdr_capable_count: Arc<Mutex<usize>>,
     /// Last time display configuration was refreshed (for debouncing)
-    last_display_refresh: Arc<Mutex<std::time::Instant>>,
+    /// `None` means never refreshed, allowing immediate first refresh
+    last_display_refresh: Arc<Mutex<Option<std::time::Instant>>>,
 }
 
 // Thread-local storage for monitor state
@@ -512,15 +511,17 @@ fn check_display_configuration_change() -> bool {
     MONITOR_STATE_TLS.with(|cell| {
         if let Some(state) = cell.borrow().as_ref() {
             // Check debounce - don't refresh too frequently
-            let last_refresh = *state.last_display_refresh.lock();
-            if last_refresh.elapsed()
-                < std::time::Duration::from_millis(DISPLAY_REFRESH_DEBOUNCE_MS)
-            {
-                debug!(
-                    "Display refresh debounced ({}ms since last)",
-                    last_refresh.elapsed().as_millis()
-                );
-                return false;
+            // None means never refreshed, so allow first refresh
+            if let Some(last_refresh) = *state.last_display_refresh.lock() {
+                if last_refresh.elapsed()
+                    < std::time::Duration::from_millis(DISPLAY_REFRESH_DEBOUNCE_MS)
+                {
+                    debug!(
+                        "Display refresh debounced ({}ms since last)",
+                        last_refresh.elapsed().as_millis()
+                    );
+                    return false;
+                }
             }
 
             // Re-enumerate displays
@@ -538,7 +539,7 @@ fn check_display_configuration_change() -> bool {
             drop(controller);
 
             // Update last refresh time
-            *state.last_display_refresh.lock() = std::time::Instant::now();
+            *state.last_display_refresh.lock() = Some(std::time::Instant::now());
 
             // Check if HDR-capable count changed
             let mut cached_count = state.cached_hdr_capable_count.lock();
@@ -675,6 +676,8 @@ mod tests {
             cached_hdr_state: Arc::new(Mutex::new(false)),
             event_sender: tx,
             recheck_count: Arc::new(Mutex::new(0)),
+            cached_hdr_capable_count: Arc::new(Mutex::new(0)),
+            last_display_refresh: Arc::new(Mutex::new(None)),
         };
 
         // Verify state structure
