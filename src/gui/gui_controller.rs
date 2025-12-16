@@ -107,6 +107,8 @@ impl GuiController {
             main_window.set_settings_show_update_notifications(
                 config.preferences.show_update_notifications,
             );
+            main_window
+                .set_settings_auto_open_release_page(config.preferences.auto_open_release_page);
             main_window.set_settings_minimize_to_tray_on_minimize(
                 config.preferences.minimize_to_tray_on_minimize,
             );
@@ -160,6 +162,7 @@ impl GuiController {
                   monitoring_interval_ms,
                   show_tray_notifications,
                   show_update_notifications,
+                  auto_open_release_page,
                   minimize_to_tray_on_minimize,
                   minimize_to_tray_on_close,
                   start_minimized_to_tray| {
@@ -169,6 +172,7 @@ impl GuiController {
                     monitoring_interval_ms,
                     show_tray_notifications,
                     show_update_notifications,
+                    auto_open_release_page,
                     minimize_to_tray_on_minimize,
                     minimize_to_tray_on_close,
                     start_minimized_to_tray,
@@ -832,6 +836,7 @@ impl GuiController {
         monitoring_interval_ms: i32,
         show_tray_notifications: bool,
         show_update_notifications: bool,
+        auto_open_release_page: bool,
         minimize_to_tray_on_minimize: bool,
         minimize_to_tray_on_close: bool,
         start_minimized_to_tray: bool,
@@ -840,11 +845,12 @@ impl GuiController {
         use tracing::{info, warn};
 
         info!(
-            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}, show_update_notifications={}, minimize_to_tray_on_minimize={}, minimize_to_tray_on_close={}, start_minimized_to_tray={}",
+            "Saving settings: auto_start={}, monitoring_interval_ms={}, show_tray_notifications={}, show_update_notifications={}, auto_open_release_page={}, minimize_to_tray_on_minimize={}, minimize_to_tray_on_close={}, start_minimized_to_tray={}",
             auto_start,
             monitoring_interval_ms,
             show_tray_notifications,
             show_update_notifications,
+            auto_open_release_page,
             minimize_to_tray_on_minimize,
             minimize_to_tray_on_close,
             start_minimized_to_tray
@@ -866,6 +872,7 @@ impl GuiController {
             }
             config.preferences.show_tray_notifications = show_tray_notifications;
             config.preferences.show_update_notifications = show_update_notifications;
+            config.preferences.auto_open_release_page = auto_open_release_page;
             config.preferences.minimize_to_tray_on_minimize = minimize_to_tray_on_minimize;
             config.preferences.minimize_to_tray_on_close = minimize_to_tray_on_close;
             config.preferences.start_minimized_to_tray = start_minimized_to_tray;
@@ -934,6 +941,7 @@ impl GuiController {
         _monitoring_interval_ms: i32,
         _show_tray_notifications: bool,
         _show_update_notifications: bool,
+        _auto_open_release_page: bool,
         _minimize_to_tray_on_minimize: bool,
         _minimize_to_tray_on_close: bool,
         _start_minimized_to_tray: bool,
@@ -1058,11 +1066,14 @@ impl GuiController {
     ) {
         use tracing::info;
 
-        // Check if update notifications are enabled
-        let show_notifications = {
+        // Check if update notifications are enabled and if we should auto-open the release page
+        let (show_notifications, auto_open_release_page) = {
             let controller_guard = controller.lock();
             let config = controller_guard.config.read();
-            config.preferences.show_update_notifications
+            (
+                config.preferences.show_update_notifications,
+                config.preferences.auto_open_release_page,
+            )
         };
 
         if result.update_available {
@@ -1079,7 +1090,11 @@ impl GuiController {
                     result.current_version, result.latest_version
                 );
 
-                Self::show_update_notification(&message, &result.releases_url);
+                Self::show_update_notification(
+                    &message,
+                    &result.releases_url,
+                    auto_open_release_page,
+                );
             } else {
                 info!("Update notification suppressed (user preference)");
             }
@@ -1094,7 +1109,7 @@ impl GuiController {
 
     /// Show an update notification with a link to releases
     #[cfg(windows)]
-    fn show_update_notification(message: &str, releases_url: &str) {
+    fn show_update_notification(message: &str, releases_url: &str, auto_open_release_page: bool) {
         use tauri_winrt_notification::{Duration, Toast};
         use tracing::warn;
 
@@ -1108,8 +1123,8 @@ impl GuiController {
 
         if let Err(e) = toast.show() {
             warn!("Failed to show update notification: {}", e);
-        } else {
-            // Open the releases page in the default browser
+        } else if auto_open_release_page {
+            // Open the releases page in the default browser only if user preference is enabled
             // Note: This is a simplified implementation. In a production app,
             // you might want to handle the notification click event properly.
             std::thread::spawn(move || {
@@ -1123,7 +1138,11 @@ impl GuiController {
 
     /// Show an update notification (stub for non-Windows)
     #[cfg(not(windows))]
-    fn show_update_notification(_message: &str, _releases_url: &str) {
+    fn show_update_notification(
+        _message: &str,
+        _releases_url: &str,
+        _auto_open_release_page: bool,
+    ) {
         // No-op on non-Windows platforms
     }
 

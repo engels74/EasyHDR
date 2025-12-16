@@ -23,6 +23,7 @@ fn create_mock_config(num_monitored: usize) -> Arc<parking_lot::RwLock<AppConfig
             monitoring_interval_ms: 1000,
             show_tray_notifications: false,
             show_update_notifications: false,
+            auto_open_release_page: false,
             minimize_to_tray_on_minimize: false,
             minimize_to_tray_on_close: false,
             start_minimized_to_tray: false,

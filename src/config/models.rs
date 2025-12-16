@@ -607,6 +607,9 @@ pub struct UserPreferences {
     /// Whether to show notifications when application updates are available
     #[serde(default = "default_show_update_notifications")]
     pub show_update_notifications: bool,
+    /// Whether to automatically open the GitHub release page when updates are detected
+    #[serde(default)]
+    pub auto_open_release_page: bool,
     /// Whether to minimize to tray when minimize button is clicked (true) or minimize to taskbar (false)
     pub minimize_to_tray_on_minimize: bool,
     /// Whether to minimize to tray when close button is clicked (true) or close the application (false)
@@ -647,6 +650,7 @@ impl Default for UserPreferences {
             monitoring_interval_ms: 1000,
             show_tray_notifications: true,
             show_update_notifications: true,
+            auto_open_release_page: false,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
             start_minimized_to_tray: false,
@@ -989,6 +993,7 @@ mod tests {
             monitoring_interval_ms: 2000,
             show_tray_notifications: false,
             show_update_notifications: true,
+            auto_open_release_page: false,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
             start_minimized_to_tray: true,

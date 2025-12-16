@@ -17,6 +17,7 @@ fn create_large_config() -> AppConfig {
             monitoring_interval_ms: 1000,
             show_tray_notifications: true,
             show_update_notifications: true,
+            auto_open_release_page: false,
             minimize_to_tray_on_minimize: true,
             minimize_to_tray_on_close: false,
             start_minimized_to_tray: false,
