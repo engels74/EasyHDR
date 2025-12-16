@@ -43,12 +43,22 @@ const TIMER_ID_HDR_RECHECK: usize = 1; // Periodic recheck timer
 /// HDR state change events
 ///
 /// These events are sent when the HDR state changes externally (e.g., via Windows settings)
+/// or when display configuration changes (HDR-capable displays added/removed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HdrStateEvent {
     /// HDR was enabled (detected via Windows display change notification)
     Enabled,
     /// HDR was disabled (detected via Windows display change notification)
     Disabled,
+    /// Display configuration changed - HDR-capable displays added or removed
+    ///
+    /// This event is sent when the number of HDR-capable displays changes,
+    /// allowing the application to refresh its display cache and enable HDR
+    /// toggling if displays become available after startup.
+    DisplayConfigurationChanged {
+        /// Number of HDR-capable displays now available
+        hdr_capable_count: usize,
+    },
 }
 
 /// HDR state monitor
@@ -214,11 +224,25 @@ impl HdrStateMonitor {
             .collect();
 
         // Create shared state for window procedure
+        // Get initial HDR-capable count for change detection
+        let initial_hdr_count = self
+            .hdr_controller
+            .lock()
+            .get_display_cache()
+            .iter()
+            .filter(|d| d.supports_hdr)
+            .count();
+
         let monitor_state = Arc::new(MonitorState {
             hdr_controller: self.hdr_controller.clone(),
             cached_hdr_state: self.cached_hdr_state.clone(),
             event_sender: self.event_sender.clone(),
             recheck_count: Arc::new(Mutex::new(0)),
+            cached_hdr_capable_count: Arc::new(Mutex::new(initial_hdr_count)),
+            // Initialize to past time to allow immediate first refresh
+            last_display_refresh: Arc::new(Mutex::new(
+                std::time::Instant::now() - std::time::Duration::from_secs(10),
+            )),
         });
 
         unsafe {
@@ -297,6 +321,10 @@ struct MonitorState {
     cached_hdr_state: Arc<Mutex<bool>>,
     event_sender: mpsc::SyncSender<HdrStateEvent>,
     recheck_count: Arc<Mutex<u32>>, // Counter for remaining rechecks
+    /// Cached count of HDR-capable displays for change detection
+    cached_hdr_capable_count: Arc<Mutex<usize>>,
+    /// Last time display configuration was refreshed (for debouncing)
+    last_display_refresh: Arc<Mutex<std::time::Instant>>,
 }
 
 // Thread-local storage for monitor state
@@ -333,12 +361,18 @@ unsafe extern "system" fn window_proc(
         WM_DISPLAYCHANGE => {
             debug!("Received WM_DISPLAYCHANGE message");
 
-            // Try immediate check
+            // First check if display configuration changed (HDR displays added/removed)
+            // This must happen before HDR state check since it refreshes the display cache
+            let config_changed = check_display_configuration_change();
+
+            // Then check HDR state change
             if check_hdr_state_change() {
                 // State changed immediately - cancel any pending rechecks
                 stop_periodic_rechecks(hwnd);
-            } else {
-                // State didn't change - start periodic rechecks
+            } else if !config_changed {
+                // Only start rechecks if neither config nor state changed
+                // If config changed but state didn't, the display cache was refreshed
+                // which is sufficient
                 debug!(
                     "HDR state unchanged on WM_DISPLAYCHANGE, starting periodic rechecks ({}ms interval, max {} rechecks)",
                     RECHECK_INTERVAL_MS, MAX_RECHECK_COUNT
@@ -458,6 +492,84 @@ fn stop_periodic_rechecks(hwnd: HWND) {
             }
         }
     });
+}
+
+// Debounce interval for display re-enumeration (milliseconds)
+#[cfg(windows)]
+const DISPLAY_REFRESH_DEBOUNCE_MS: u64 = 1000;
+
+/// Check if display configuration has changed (HDR displays added/removed)
+///
+/// Re-enumerates displays and compares HDR-capable count with cached value.
+/// Sends `DisplayConfigurationChanged` event if count changed.
+///
+/// # Returns
+///
+/// Returns `true` if configuration changed and event was sent, `false` otherwise.
+/// Uses debouncing to prevent excessive API calls during rapid display changes.
+#[cfg(windows)]
+fn check_display_configuration_change() -> bool {
+    MONITOR_STATE_TLS.with(|cell| {
+        if let Some(state) = cell.borrow().as_ref() {
+            // Check debounce - don't refresh too frequently
+            let last_refresh = *state.last_display_refresh.lock();
+            if last_refresh.elapsed()
+                < std::time::Duration::from_millis(DISPLAY_REFRESH_DEBOUNCE_MS)
+            {
+                debug!(
+                    "Display refresh debounced ({}ms since last)",
+                    last_refresh.elapsed().as_millis()
+                );
+                return false;
+            }
+
+            // Re-enumerate displays
+            let mut controller = state.hdr_controller.lock();
+            if let Err(e) = controller.enumerate_displays() {
+                warn!("Failed to re-enumerate displays: {}", e);
+                return false;
+            }
+
+            let new_hdr_count = controller
+                .get_display_cache()
+                .iter()
+                .filter(|d| d.supports_hdr)
+                .count();
+            drop(controller);
+
+            // Update last refresh time
+            *state.last_display_refresh.lock() = std::time::Instant::now();
+
+            // Check if HDR-capable count changed
+            let mut cached_count = state.cached_hdr_capable_count.lock();
+            if new_hdr_count != *cached_count {
+                info!(
+                    "Display configuration changed: HDR-capable displays {} -> {}",
+                    *cached_count, new_hdr_count
+                );
+                *cached_count = new_hdr_count;
+
+                // Send event
+                let event = HdrStateEvent::DisplayConfigurationChanged {
+                    hdr_capable_count: new_hdr_count,
+                };
+                if let Err(e) = state.event_sender.send(event) {
+                    warn!("Failed to send display configuration change event: {}", e);
+                } else {
+                    debug!("Sent display configuration change event: {:?}", event);
+                }
+                return true;
+            }
+
+            debug!(
+                "Display configuration unchanged: {} HDR-capable displays",
+                new_hdr_count
+            );
+            false
+        } else {
+            false
+        }
+    })
 }
 
 /// Check HDR state and send event if changed

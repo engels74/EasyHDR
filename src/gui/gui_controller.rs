@@ -650,6 +650,21 @@ impl GuiController {
                     };
                     tray_icon_mut.show_notification(message);
                 }
+
+                // Show startup warning notification (no HDR displays detected)
+                if state.show_no_hdr_warning {
+                    info!("Showing no HDR displays warning notification");
+                    tray_icon_mut.show_notification(
+                        "No HDR-capable displays detected. HDR toggling will not work until an HDR display is connected."
+                    );
+                }
+
+                // Show HDR displays available notification
+                if state.show_hdr_available_notification {
+                    info!("Showing HDR displays available notification");
+                    tray_icon_mut
+                        .show_notification("HDR displays detected! HDR toggling is now available.");
+                }
             }
             Err(_) => {
                 warn!("Tray icon borrow failed, skipping tray update");

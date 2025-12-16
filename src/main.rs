@@ -35,9 +35,12 @@ const MIN_WINDOWS_BUILD: u32 = 19044;
 ///
 /// Performs initialization including logging, version detection, single-instance
 /// enforcement, HDR capability detection, and multi-threaded component startup.
-#[expect(
-    clippy::too_many_lines,
-    reason = "Complex initialization sequence requires sequential setup of logging, version detection, single-instance enforcement, HDR capability detection, and multi-threaded component startup"
+#[cfg_attr(
+    windows,
+    expect(
+        clippy::too_many_lines,
+        reason = "Complex initialization sequence requires sequential setup of logging, version detection, single-instance enforcement, HDR capability detection, and multi-threaded component startup"
+    )
 )]
 fn main() -> Result<()> {
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
@@ -147,20 +150,11 @@ fn main() -> Result<()> {
     profiler.record_phase(StartupPhase::AppReady);
     profiler.log_summary();
 
+    // Note: HDR warning notification is now handled via AppState.show_no_hdr_warning
+    // and shown as a non-blocking tray notification by the GUI controller
     #[cfg(windows)]
     if should_show_hdr_warning {
-        std::thread::spawn(|| {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            show_warning_dialog(
-                "No HDR-capable displays were detected.\n\n\
-                 The application will run, but HDR toggling will not work until \
-                 an HDR-capable display is connected.\n\n\
-                 Please ensure:\n\
-                 - Your display supports HDR\n\
-                 - Display drivers are up to date\n\
-                 - HDR is enabled in Windows display settings",
-            );
-        });
+        info!("No HDR-capable displays detected at startup - notification will be shown via tray");
     }
 
     info!("Starting GUI event loop");

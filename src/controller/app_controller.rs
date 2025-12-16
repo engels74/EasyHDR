@@ -20,6 +20,16 @@ pub struct AppState {
     pub active_apps: Vec<String>,
     /// Last event message
     pub last_event: String,
+    /// Flag to show "HDR displays now available" notification
+    ///
+    /// Set to true when HDR displays become available after being unavailable.
+    /// GUI should show notification and then clear this flag.
+    pub show_hdr_available_notification: bool,
+    /// Flag to show startup warning that no HDR displays were found
+    ///
+    /// Set to true on first state update if no HDR displays were detected at startup.
+    /// GUI should show notification and then clear this flag.
+    pub show_no_hdr_warning: bool,
 }
 
 /// Application logic controller
@@ -40,6 +50,19 @@ pub struct AppController {
     last_toggle_time_nanos: Arc<AtomicU64>,
     /// Shared watch state with `ProcessMonitor` for atomic updates
     watch_state: Arc<RwLock<WatchState>>,
+    /// Tracks whether HDR displays are currently available
+    ///
+    /// Used to detect when HDR displays become available after being unavailable,
+    /// allowing the app to show a notification and enable HDR toggling.
+    hdr_displays_available: AtomicBool,
+    /// Flag to show HDR available notification on next state update
+    ///
+    /// Set when HDR displays become available, cleared after notification is sent.
+    pending_hdr_available_notification: AtomicBool,
+    /// Flag to show startup warning on first state update
+    ///
+    /// Set if no HDR displays were detected at startup, cleared after notification is sent.
+    pending_no_hdr_warning: AtomicBool,
 }
 
 impl AppController {
@@ -64,6 +87,15 @@ impl AppController {
 
         let startup_time = Instant::now();
 
+        // Check if HDR displays are available at startup
+        let hdr_displays_available = hdr_controller
+            .get_display_cache()
+            .iter()
+            .any(|d| d.supports_hdr);
+
+        // If no HDR displays found at startup, schedule a warning notification
+        let show_startup_warning = !hdr_displays_available;
+
         let controller = Self {
             config: Arc::new(RwLock::new(config)),
             hdr_controller,
@@ -75,6 +107,9 @@ impl AppController {
             startup_time,
             last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
             watch_state,
+            hdr_displays_available: AtomicBool::new(hdr_displays_available),
+            pending_hdr_available_notification: AtomicBool::new(false),
+            pending_no_hdr_warning: AtomicBool::new(show_startup_warning),
         };
 
         controller.update_process_monitor_watch_list();
@@ -106,6 +141,12 @@ impl AppController {
 
         let startup_time = Instant::now();
 
+        // Mock controller has empty display cache
+        let hdr_displays_available = hdr_controller
+            .get_display_cache()
+            .iter()
+            .any(|d| d.supports_hdr);
+
         let controller = Self {
             config: Arc::new(RwLock::new(config)),
             hdr_controller,
@@ -117,6 +158,10 @@ impl AppController {
             startup_time,
             last_toggle_time_nanos: Arc::new(AtomicU64::new(0)),
             watch_state,
+            hdr_displays_available: AtomicBool::new(hdr_displays_available),
+            pending_hdr_available_notification: AtomicBool::new(false),
+            // Don't show warning for mock controller (test mode)
+            pending_no_hdr_warning: AtomicBool::new(false),
         };
 
         controller.update_process_monitor_watch_list();
@@ -363,7 +408,7 @@ impl AppController {
     ///
     /// Updates internal state and GUI without calling `toggle_hdr()` since the change already occurred.
     fn handle_hdr_state_event(&mut self, event: HdrStateEvent) {
-        use tracing::{debug, info};
+        use tracing::{debug, info, warn};
 
         match event {
             HdrStateEvent::Enabled => {
@@ -375,6 +420,48 @@ impl AppController {
                 info!("HDR was disabled externally (via Windows settings)");
                 self.current_hdr_state.store(false, Ordering::SeqCst);
                 debug!("Updated internal HDR state to: false");
+            }
+            HdrStateEvent::DisplayConfigurationChanged { hdr_capable_count } => {
+                info!(
+                    "Display configuration changed: {} HDR-capable display(s) detected",
+                    hdr_capable_count
+                );
+
+                // Refresh local display cache
+                if let Err(e) = self.refresh_displays() {
+                    warn!("Failed to refresh display cache: {}", e);
+                }
+
+                // Track state transition for notification
+                let was_unavailable = !self.hdr_displays_available.load(Ordering::SeqCst);
+                let now_available = hdr_capable_count > 0;
+                self.hdr_displays_available
+                    .store(now_available, Ordering::SeqCst);
+
+                // Show notification when HDR displays become available after being unavailable
+                if was_unavailable && now_available {
+                    info!("HDR displays now available - scheduling notification");
+                    self.pending_hdr_available_notification
+                        .store(true, Ordering::SeqCst);
+                }
+
+                // If HDR displays are now available and we have active monitored processes,
+                // attempt to enable HDR
+                let active_count = self.active_process_count.load(Ordering::SeqCst);
+                let current_hdr = self.current_hdr_state.load(Ordering::SeqCst);
+
+                if now_available && active_count > 0 && !current_hdr {
+                    info!(
+                        "HDR displays now available with {} active monitored process(es), enabling HDR",
+                        active_count
+                    );
+                    if let Err(e) = self.toggle_hdr(true) {
+                        warn!(
+                            "Failed to enable HDR after display configuration change: {}",
+                            e
+                        );
+                    }
+                }
             }
         }
 
@@ -437,6 +524,13 @@ impl AppController {
         drop(config);
 
         let hdr_enabled = self.current_hdr_state.load(Ordering::SeqCst);
+
+        // Atomically get and clear the pending notification flags
+        let show_hdr_available_notification = self
+            .pending_hdr_available_notification
+            .swap(false, Ordering::SeqCst);
+        let show_no_hdr_warning = self.pending_no_hdr_warning.swap(false, Ordering::SeqCst);
+
         let state = AppState {
             hdr_enabled,
             active_apps,
@@ -444,9 +538,14 @@ impl AppController {
                 "Active processes: {}",
                 self.active_process_count.load(Ordering::SeqCst)
             ),
+            show_hdr_available_notification,
+            show_no_hdr_warning,
         };
 
-        debug!("Sending state update to GUI: HDR enabled = {}", hdr_enabled);
+        debug!(
+            "Sending state update to GUI: HDR enabled = {}, show HDR available notification = {}, show no HDR warning = {}",
+            hdr_enabled, show_hdr_available_notification, show_no_hdr_warning
+        );
 
         if let Err(e) = self.gui_state_sender.send(state) {
             warn!("Failed to send state update to GUI: {}", e);
