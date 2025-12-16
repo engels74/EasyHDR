@@ -35,13 +35,6 @@ const MIN_WINDOWS_BUILD: u32 = 19044;
 ///
 /// Performs initialization including logging, version detection, single-instance
 /// enforcement, HDR capability detection, and multi-threaded component startup.
-#[cfg_attr(
-    windows,
-    expect(
-        clippy::too_many_lines,
-        reason = "Complex initialization sequence requires sequential setup of logging, version detection, single-instance enforcement, HDR capability detection, and multi-threaded component startup"
-    )
-)]
 fn main() -> Result<()> {
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
@@ -439,17 +432,4 @@ fn show_error_and_exit(message: &str) {
 fn show_error_and_exit(message: &str) {
     eprintln!("ERROR: {message}");
     std::process::exit(1);
-}
-
-/// Shows a warning dialog (non-blocking).
-#[cfg(windows)]
-fn show_warning_dialog(message: &str) {
-    use rfd::MessageDialog;
-
-    MessageDialog::new()
-        .set_title("EasyHDR - Warning")
-        .set_description(message)
-        .set_buttons(rfd::MessageButtons::Ok)
-        .set_level(rfd::MessageLevel::Warning)
-        .show();
 }
