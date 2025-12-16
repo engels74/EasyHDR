@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Codebase Search
+
+**Always use the `mcp__auggie-mcp__codebase-retrieval` tool as the primary method for:**
+- Exploring the codebase and understanding architecture
+- Finding existing patterns before implementing new features
+- Locating relevant code when the exact file location is unknown
+- Gathering context before making edits
+- Planning tasks in plan mode
+
+This semantic search tool provides better results than grep/find for understanding code relationships. Use grep only for finding exact string matches or all occurrences of a known identifier.
+
 ## Project Overview
 
 EasyHDR is a Windows-only application that automatically toggles HDR (High Dynamic Range) on/off based on running applications. It uses Windows Display Configuration APIs with version-specific implementations for Windows 10, Windows 11, and Windows 11 24H2+.
