@@ -35,7 +35,7 @@ anyhow = "1.0"
 semver = "1.0"
 
 # HTTP client for update checking (blocking API, no async runtime needed)
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 
 # Logging
 tracing = "0.1"
