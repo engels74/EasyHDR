@@ -42,6 +42,7 @@ allow = [
     "MIT",
     "MPL-2.0",
     "NCSA",
+    "OpenSSL",
     "Unicode-3.0",
     "Zlib",
     # Slint custom licenses
