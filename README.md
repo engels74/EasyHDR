@@ -128,4 +128,3 @@ cargo +nightly fuzz run fuzz_windows_api -- -max_total_time=60
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See [LICENSE](LICENSE) for details.
-

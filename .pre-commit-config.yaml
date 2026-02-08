@@ -1,0 +1,41 @@
+repos:
+  # ── Standard hooks (well-tested, community-maintained) ──────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+      - id: check-added-large-files
+        args: ['--maxkb=2048']
+
+  # ── Project-specific Rust hooks ─────────────────────────────────────────
+  - repo: local
+    hooks:
+      # ── Commit-stage hooks ──────────────────────────────────────────────
+      - id: cargo-fmt
+        name: Cargo Fmt
+        entry: cargo fmt --all -- --check
+        language: system
+        pass_filenames: false
+        types: [rust]
+
+      - id: cargo-clippy
+        name: Cargo Clippy
+        entry: bash -c 'if [ "$OS" = "Windows_NT" ]; then cargo clippy --all-targets --all-features -- -D warnings; else cargo xwin clippy --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings; fi'
+        language: system
+        pass_filenames: false
+        types: [rust]
+
+      # ── Push-stage hooks ────────────────────────────────────────────────
+      - id: cargo-test
+        name: Cargo Test
+        entry: bash -c 'if [ "$OS" = "Windows_NT" ]; then cargo test --lib; else cargo xwin check --lib --target x86_64-pc-windows-msvc; fi'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
