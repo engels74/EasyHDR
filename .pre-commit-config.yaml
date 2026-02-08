@@ -1,55 +1,23 @@
 repos:
+  # ── Standard hooks (well-tested, community-maintained) ──────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+      - id: check-added-large-files
+        args: ['--maxkb=2048']
+
+  # ── Project-specific Rust hooks ─────────────────────────────────────────
   - repo: local
     hooks:
       # ── Commit-stage hooks ──────────────────────────────────────────────
-      - id: trailing-whitespace
-        name: Trim Trailing Whitespace
-        entry: perl -pi -e 's/[^\S\n\r]+$//'
-        language: system
-        types: [text]
-
-      - id: end-of-file-fixer
-        name: Fix End of Files
-        entry: bash -c 'for f in "$@"; do [ -s "$f" ] && [ -n "$(tail -c1 "$f")" ] && echo >> "$f"; done; exit 0' _
-        language: system
-        types: [text]
-
-      - id: check-yaml
-        name: Check YAML
-        entry: uv run --with pyyaml python3 -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]"
-        language: system
-        types: [yaml]
-
-      - id: check-toml
-        name: Check TOML
-        entry: uv run python3 -c "import sys, tomllib; [tomllib.load(open(f,'rb')) for f in sys.argv[1:]]"
-        language: system
-        types: [toml]
-
-      - id: check-merge-conflict
-        name: Check Merge Conflicts
-        entry: bash -c 'for f in "$@"; do if grep -En "^(<{7}|>{7}|={7})([[:space:]]|$)" "$f"; then echo "Merge conflict found in $f"; exit 1; fi; done' _
-        language: system
-        types: [text]
-
-      - id: detect-private-key
-        name: Detect Private Keys
-        entry: bash -c 'for f in "$@"; do if grep -El "-----BEGIN (RSA |DSA |EC |PGP |OPENSSH )?PRIVATE KEY" "$f"; then echo "Private key found in $f"; exit 1; fi; done' _
-        language: system
-        types: [text]
-
-      - id: no-commit-to-branch
-        name: No Commit to Branch
-        entry: bash -c 'branch=$(git rev-parse --abbrev-ref HEAD); [ "$branch" != "main" ] && [ "$branch" != "master" ]'
-        language: system
-        pass_filenames: false
-        stages: [pre-commit]
-
-      - id: check-added-large-files
-        name: Check Added Large Files
-        entry: bash -c 'for f in "$@"; do size=$(wc -c < "$f"); [ "$size" -gt 2097152 ] && echo "$f is too large ($size bytes)" && exit 1; done; exit 0' _
-        language: system
-
       - id: cargo-fmt
         name: Cargo Fmt
         entry: cargo fmt --all -- --check
