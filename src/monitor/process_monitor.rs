@@ -552,10 +552,14 @@ fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
     )
 )]
 fn extract_filename_without_extension(path: &str) -> String {
-    std::path::Path::new(path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or(path)
+    // Use manual separator handling instead of std::path::Path to stay
+    // platform-agnostic: Path treats '\' as a separator only on Windows,
+    // but this function must parse Windows-style paths on any host.
+    let filename = path.rfind(['\\', '/']).map_or(path, |pos| &path[pos + 1..]);
+
+    filename
+        .rfind('.')
+        .map_or(filename, |pos| &filename[..pos])
         .to_lowercase()
 }
 
