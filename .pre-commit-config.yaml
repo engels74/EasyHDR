@@ -59,7 +59,7 @@ repos:
 
       - id: cargo-clippy
         name: Cargo Clippy
-        entry: cargo clippy --all-targets --all-features -- -D warnings
+        entry: bash -c 'if [ "$OS" = "Windows_NT" ]; then cargo clippy --all-targets --all-features -- -D warnings; else cargo xwin clippy --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings; fi'
         language: system
         pass_filenames: false
         types: [rust]
@@ -67,7 +67,7 @@ repos:
       # ── Push-stage hooks ────────────────────────────────────────────────
       - id: cargo-test
         name: Cargo Test
-        entry: cargo test --lib
+        entry: bash -c 'if [ "$OS" = "Windows_NT" ]; then cargo test --lib; else cargo xwin check --lib --target x86_64-pc-windows-msvc; fi'
         language: system
         pass_filenames: false
         stages: [pre-push]
