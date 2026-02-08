@@ -1,9 +1,6 @@
-#![allow(clippy::unwrap_used)]
 //! Benchmarks for HDR state detection
 //!
 //! Note: These benchmarks are Windows-only and will be skipped on other platforms.
-
-#![allow(missing_docs)]
 
 use criterion::{criterion_group, criterion_main};
 

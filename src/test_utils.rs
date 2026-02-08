@@ -1,4 +1,7 @@
-#![allow(clippy::unwrap_used)] // Tests use .unwrap() for brevity
+#![expect(
+    clippy::unwrap_used,
+    reason = "Test utilities use .unwrap() for brevity"
+)]
 
 //! Shared test utilities for `EasyHDR` unit tests.
 //!

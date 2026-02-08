@@ -1880,7 +1880,6 @@ impl GuiController {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use easyhdr::error::EasyHdrError;
 

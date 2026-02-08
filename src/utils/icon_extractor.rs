@@ -529,7 +529,7 @@ fn get_filename_fallback(path: &Path) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::path::PathBuf;

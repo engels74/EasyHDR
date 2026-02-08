@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! DHAT allocation profiling test for baseline measurements
 //!
 //! This test instruments the application with DHAT to measure allocation patterns

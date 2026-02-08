@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used)]
 //! Memory usage tests
 //!
 //! This test module verifies that the application uses less than 50MB RAM during monitoring.

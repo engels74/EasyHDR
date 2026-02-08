@@ -1,11 +1,9 @@
-#![allow(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used)]
 //! Benchmarks for UWP detection and package family name extraction
 //!
 //! These benchmarks validate performance targets:
 //! - UWP detection overhead <2ms per polling cycle
 //! - UWP detection for 150-250 processes within 1.25ms
-
-#![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
 

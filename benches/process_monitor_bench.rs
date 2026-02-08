@@ -1,11 +1,8 @@
-#![allow(clippy::unwrap_used)]
 //! Benchmarks for process monitoring hot paths
 //!
 //! Note: Direct process polling benchmarks require Windows APIs and are better
 //! measured via integration tests and profiling tools (cargo-flamegraph, DHAT).
 //! See `docs/performance_plan.md` for profiling instructions.
-
-#![allow(missing_docs)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use easyhdr::config::models::Win32App;

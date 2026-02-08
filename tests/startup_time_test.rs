@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Startup time tests
 //!
 //! This test module verifies that the application displays the GUI within 200ms

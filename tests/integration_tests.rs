@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used)]
 //! Integration tests for `EasyHDR`
 //!
 //! Tests configuration persistence, process monitoring, HDR control,

@@ -159,7 +159,6 @@ impl AutoStartManager {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     #[cfg(windows)]
     use super::{APP_NAME, AutoStartManager, RUN_KEY_PATH};

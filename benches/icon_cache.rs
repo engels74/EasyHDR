@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Benchmarks for icon cache parallel loading performance
 //!
 //! This benchmark measures the performance of parallel icon loading using Rayon.
@@ -8,8 +7,6 @@
 //! - 10 apps: <50ms
 //! - 50 apps: <150ms
 //! - 100 apps: <250ms
-
-#![allow(missing_docs)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use easyhdr::utils::icon_cache::IconCache;

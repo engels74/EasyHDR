@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! Integration tests for UWP process detection
 //!
 //! Tests the `ProcessMonitor`'s ability to detect UWP applications using the

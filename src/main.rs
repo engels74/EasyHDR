@@ -9,7 +9,10 @@
     missing_docs,
     reason = "Slint-generated code from include_modules! lacks doc comments"
 )]
-#![allow(clippy::unwrap_used)] // Slint-generated code from include_modules! uses .unwrap() extensively
+#![expect(
+    clippy::unwrap_used,
+    reason = "Slint-generated code from include_modules! uses .unwrap() extensively"
+)]
 
 // GUI module is only in the binary, not the library
 mod gui;

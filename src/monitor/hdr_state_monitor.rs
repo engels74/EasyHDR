@@ -626,7 +626,6 @@ fn check_hdr_state_change() -> bool {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -455,7 +455,6 @@ impl TrayIcon {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     #[test]
     #[cfg(windows)]

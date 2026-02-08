@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! CPU profiling test for flamegraph analysis
 //!
 //! This test exercises the hot paths in process monitoring and event handling

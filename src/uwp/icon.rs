@@ -482,7 +482,7 @@ fn create_placeholder_rgba() -> Vec<u8> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::io::Write;

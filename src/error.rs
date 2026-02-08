@@ -27,6 +27,7 @@ impl StringError {
 /// Structured error types for icon cache operations following thiserror pattern.
 /// All errors preserve source chains via `#[source]` for full observability.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 #[expect(
     missing_docs,
     reason = "Error variant documentation provides sufficient context; individual field documentation would be redundant for self-explanatory fields like 'path', 'source', and 'app_id'"
@@ -136,6 +137,7 @@ pub enum IconCacheError {
 
 /// Main error type for `EasyHDR` application
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum EasyHdrError {
     /// HDR is not supported on the display
     #[error("HDR not supported on this display")]
@@ -310,7 +312,6 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

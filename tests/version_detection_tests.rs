@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used)]
 //! Integration tests for Windows version detection
 //!
 //! These tests verify the version detection logic with various scenarios
