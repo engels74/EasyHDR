@@ -10,31 +10,31 @@ repos:
 
       - id: end-of-file-fixer
         name: Fix End of Files
-        entry: bash -c 'for f in "$@"; do [ -s "$f" ] && [ -n "$(tail -c1 "$f")" ] && echo >> "$f"; done; exit 0'
+        entry: bash -c 'for f in "$@"; do [ -s "$f" ] && [ -n "$(tail -c1 "$f")" ] && echo >> "$f"; done; exit 0' _
         language: system
         types: [text]
 
       - id: check-yaml
         name: Check YAML
-        entry: uv run --with pyyaml python3 -c "import sys, yaml; yaml.safe_load(open(sys.argv[1]))"
+        entry: uv run --with pyyaml python3 -c "import sys, yaml; [yaml.safe_load(open(f)) for f in sys.argv[1:]]"
         language: system
         types: [yaml]
 
       - id: check-toml
         name: Check TOML
-        entry: uv run python3 -c "import sys, tomllib; tomllib.load(open(sys.argv[1],'rb'))"
+        entry: uv run python3 -c "import sys, tomllib; [tomllib.load(open(f,'rb')) for f in sys.argv[1:]]"
         language: system
         types: [toml]
 
       - id: check-merge-conflict
         name: Check Merge Conflicts
-        entry: bash -c 'for f in "$@"; do if grep -En "^(<{7}|>{7}|={7})(\s|$)" "$f"; then echo "Merge conflict found in $f"; exit 1; fi; done'
+        entry: bash -c 'for f in "$@"; do if grep -En "^(<{7}|>{7}|={7})([[:space:]]|$)" "$f"; then echo "Merge conflict found in $f"; exit 1; fi; done' _
         language: system
         types: [text]
 
       - id: detect-private-key
         name: Detect Private Keys
-        entry: bash -c 'for f in "$@"; do if grep -El "-----BEGIN (RSA |DSA |EC |PGP |OPENSSH )?PRIVATE KEY" "$f"; then echo "Private key found in $f"; exit 1; fi; done'
+        entry: bash -c 'for f in "$@"; do if grep -El "-----BEGIN (RSA |DSA |EC |PGP |OPENSSH )?PRIVATE KEY" "$f"; then echo "Private key found in $f"; exit 1; fi; done' _
         language: system
         types: [text]
 
@@ -47,7 +47,7 @@ repos:
 
       - id: check-added-large-files
         name: Check Added Large Files
-        entry: bash -c 'for f in "$@"; do size=$(wc -c < "$f"); [ "$size" -gt 2097152 ] && echo "$f is too large ($size bytes)" && exit 1; done; exit 0'
+        entry: bash -c 'for f in "$@"; do size=$(wc -c < "$f"); [ "$size" -gt 2097152 ] && echo "$f is too large ($size bytes)" && exit 1; done; exit 0' _
         language: system
 
       - id: cargo-fmt
