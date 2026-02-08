@@ -1,6 +1,5 @@
+#![expect(clippy::unwrap_used)]
 //! Benchmarks for configuration serialization and deserialization
-
-#![allow(missing_docs)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use easyhdr::config::models::Win32App;

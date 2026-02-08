@@ -15,5 +15,9 @@ pub mod utils;
 #[cfg(windows)]
 pub mod uwp;
 
+// Shared test utilities (only compiled during testing)
+#[cfg(test)]
+pub(crate) mod test_utils;
+
 // Re-export commonly used types
 pub use error::{EasyHdrError, Result};

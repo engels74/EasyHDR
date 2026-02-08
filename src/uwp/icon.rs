@@ -212,7 +212,10 @@ pub fn extract_icon(_logo_path: &Path) -> Result<Vec<u8>> {
 /// # }
 /// ```
 #[cfg(windows)]
-#[allow(clippy::too_many_lines)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "UWP icon stream extraction involves multiple sequential WinRT API calls"
+)]
 pub fn extract_icon_from_stream(
     stream_ref: &windows::Storage::Streams::RandomAccessStreamReference,
 ) -> Result<Vec<u8>> {
@@ -479,6 +482,7 @@ fn create_placeholder_rgba() -> Vec<u8> {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::io::Write;

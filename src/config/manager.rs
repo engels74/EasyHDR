@@ -251,14 +251,14 @@ impl ConfigManager {
                             win32_app.display_name
                         );
 
-                        if let (Some(cache), Some(icon_data)) = (&cache, &win32_app.icon_data) {
-                            if let Err(e) = cache.save_icon(win32_app.id, icon_data) {
-                                tracing::warn!(
-                                    "Failed to cache regenerated icon for '{}': {}",
-                                    win32_app.display_name,
-                                    e
-                                );
-                            }
+                        if let (Some(cache), Some(icon_data)) = (&cache, &win32_app.icon_data)
+                            && let Err(e) = cache.save_icon(win32_app.id, icon_data)
+                        {
+                            tracing::warn!(
+                                "Failed to cache regenerated icon for '{}': {}",
+                                win32_app.display_name,
+                                e
+                            );
                         }
 
                         regenerated_count += 1;
@@ -272,61 +272,47 @@ impl ConfigManager {
                 }
                 MonitoredApp::Uwp(uwp_app) => {
                     #[cfg(windows)]
-                    if let Some(packages) = &uwp_packages {
-                        if let Some(pkg) = packages
+                    if let Some(packages) = &uwp_packages
+                        && let Some(pkg) = packages
                             .iter()
                             .find(|p| p.package_family_name == uwp_app.package_family_name)
-                        {
-                            if let Some(logo_stream) = &pkg.logo_stream {
-                                match uwp::extract_icon_from_stream(logo_stream) {
-                                    Ok(icon_data) if !icon_data.is_empty() => {
-                                        tracing::debug!(
-                                            "Regenerated icon for UWP app '{}' from package",
-                                            uwp_app.display_name
-                                        );
-
-                                        if let Some(cache) = &cache {
-                                            if let Err(e) = cache.save_icon(uwp_app.id, &icon_data)
-                                            {
-                                                tracing::warn!(
-                                                    "Failed to cache regenerated UWP icon for '{}': {}",
-                                                    uwp_app.display_name,
-                                                    e
-                                                );
-                                            }
-                                        }
-
-                                        memory_profiler::get_profiler()
-                                            .record_icon_cached(icon_data.len());
-
-                                        uwp_app.icon_data = Some(icon_data);
-                                        regenerated_count += 1;
-                                    }
-                                    Ok(_) => {
-                                        tracing::debug!(
-                                            "Icon extraction returned empty data for UWP app '{}'",
-                                            uwp_app.display_name
-                                        );
-                                    }
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            "Failed to regenerate icon for UWP app '{}': {}",
-                                            uwp_app.display_name,
-                                            e
-                                        );
-                                    }
-                                }
-                            } else {
+                        && let Some(logo_stream) = &pkg.logo_stream
+                    {
+                        match uwp::extract_icon_from_stream(logo_stream) {
+                            Ok(icon_data) if !icon_data.is_empty() => {
                                 tracing::debug!(
-                                    "No logo path available for UWP app '{}'",
+                                    "Regenerated icon for UWP app '{}' from package",
+                                    uwp_app.display_name
+                                );
+
+                                if let Some(cache) = &cache
+                                    && let Err(e) = cache.save_icon(uwp_app.id, &icon_data)
+                                {
+                                    tracing::warn!(
+                                        "Failed to cache regenerated UWP icon for '{}': {}",
+                                        uwp_app.display_name,
+                                        e
+                                    );
+                                }
+
+                                memory_profiler::get_profiler().record_icon_cached(icon_data.len());
+
+                                uwp_app.icon_data = Some(icon_data);
+                                regenerated_count += 1;
+                            }
+                            Ok(_) => {
+                                tracing::debug!(
+                                    "Icon extraction returned empty data for UWP app '{}'",
                                     uwp_app.display_name
                                 );
                             }
-                        } else {
-                            tracing::warn!(
-                                "UWP package '{}' not found during icon regeneration",
-                                uwp_app.package_family_name
-                            );
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to regenerate icon for UWP app '{}': {}",
+                                    uwp_app.display_name,
+                                    e
+                                );
+                            }
                         }
                     }
 
@@ -393,117 +379,14 @@ impl ConfigManager {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config::models::{MonitoredApp, Win32App};
+    use crate::test_utils::{AppdataGuard, create_test_dir};
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Mutex;
-    use tempfile::TempDir;
     use uuid::Uuid;
-
-    // Global mutex to serialize tests that modify the APPDATA environment variable.
-    // This prevents race conditions when multiple tests run in parallel and try to
-    // set different APPDATA values.
-    static APPDATA_LOCK: Mutex<()> = Mutex::new(());
-
-    /// Helper function to create a temporary test directory using tempfile
-    /// Returns a `TempDir` that automatically cleans up when dropped
-    fn create_test_dir() -> TempDir {
-        tempfile::tempdir().expect("Failed to create temp directory")
-    }
-
-    /// Helper to set APPDATA for a test scope
-    /// Returns a guard that restores the original value when dropped
-    ///
-    /// # Safety Considerations
-    ///
-    /// This guard uses `std::env::set_var` and `std::env::remove_var`, which are marked
-    /// unsafe because they can cause data races when other threads are reading environment
-    /// variables concurrently.
-    ///
-    /// **Safety Invariants:**
-    /// 1. Each test gets its own unique `TempDir`, so parallel tests write to different paths
-    /// 2. The guard is RAII-based and restores the original value on drop, preventing
-    ///    environment pollution between tests
-    /// 3. No other threads should be spawned or running during the lifetime of this guard
-    ///    within the same test function
-    ///
-    /// **Why this is safe in parallel test execution:**
-    /// - While `std::env::set_var` is unsafe, the actual risk is when threads read env vars
-    ///   while another thread modifies them
-    /// - Each test function runs in its own thread with its own stack frame
-    /// - The `ConfigManager` being tested is not spawning additional threads
-    /// - The guard ensures cleanup even on panic via Drop
-    /// - The modification is scoped to the test function's lifetime
-    /// - Tests can safely run in parallel (`cargo test --lib`) without `--test-threads=1`
-    ///
-    /// **Note:** While these tests CAN run in parallel, they can also run single-threaded
-    /// if needed for other reasons (e.g., debugging, Miri analysis).
-    struct AppdataGuard {
-        original: Option<String>,
-        // Lock guard must be held for the lifetime of this struct to ensure exclusive
-        // access to APPDATA environment variable across parallel tests
-        _lock: std::sync::MutexGuard<'static, ()>,
-    }
-
-    #[expect(
-        unsafe_code,
-        reason = "Test-only code that modifies environment variables with documented safety invariants. Safe in parallel test execution."
-    )]
-    impl AppdataGuard {
-        fn new(temp_dir: &TempDir) -> Self {
-            // Acquire lock to serialize APPDATA modifications across parallel tests
-            let lock = APPDATA_LOCK.lock().unwrap();
-
-            let original = std::env::var("APPDATA").ok();
-            // SAFETY: This is safe because:
-            // 1. Each test gets its own unique TempDir path (no shared state between tests)
-            // 2. The guard is RAII-based and restores the original value on drop
-            // 3. The APPDATA_LOCK mutex ensures tests modify APPDATA serially, not concurrently
-            // 4. Each test runs in its own thread with isolated stack frame
-            // See struct-level documentation for full safety invariants.
-            unsafe {
-                std::env::set_var("APPDATA", temp_dir.path());
-            }
-            Self {
-                original,
-                _lock: lock,
-            }
-        }
-    }
-
-    #[expect(
-        unsafe_code,
-        reason = "Test-only code that restores environment variables with documented safety invariants. Safe in parallel test execution."
-    )]
-    impl Drop for AppdataGuard {
-        fn drop(&mut self) {
-            // SAFETY: This is safe because:
-            // 1. Each test has its own guard instance (no shared state)
-            // 2. We're restoring the original state, preventing test pollution
-            // 3. No other threads are accessing environment variables within this test
-            // 4. Drop runs in the same thread that created the guard
-            // See struct-level documentation for full safety invariants.
-            if let Some(ref original) = self.original {
-                unsafe {
-                    std::env::set_var("APPDATA", original);
-                }
-            } else {
-                unsafe {
-                    std::env::remove_var("APPDATA");
-                }
-            }
-        }
-    }
-
-    /// Helper function to clean up test directory (deprecated - use `TempDir` instead)
-    #[expect(dead_code)]
-    fn cleanup_test_dir(dir: &PathBuf) {
-        if dir.exists() {
-            fs::remove_dir_all(dir).ok();
-        }
-    }
 
     #[test]
     fn test_config_path() {

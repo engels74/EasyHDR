@@ -91,7 +91,7 @@ fn profile_process_monitoring_hot_paths() {
 
     while start.elapsed() < duration {
         let elapsed = start.elapsed().as_secs();
-        if elapsed > 0 && elapsed % 5 == 0 {
+        if elapsed > 0 && elapsed.is_multiple_of(5) {
             println!("  Profiling... {}s / {}s", elapsed, duration.as_secs());
         }
         thread::sleep(Duration::from_secs(1));

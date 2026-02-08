@@ -502,7 +502,10 @@ impl AppController {
 
         self.current_hdr_state.store(enable, Ordering::SeqCst);
 
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "Elapsed nanos will not exceed u64::MAX within application lifetime"
+        )]
         let elapsed_nanos = self.startup_time.elapsed().as_nanos() as u64;
         self.last_toggle_time_nanos
             .store(elapsed_nanos, Ordering::Relaxed);
@@ -769,94 +772,14 @@ impl AppController {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config::models::Win32App;
     use crate::config::{AppConfig, MonitoredApp};
+    use crate::test_utils::{AppdataGuard, create_test_dir};
     use std::path::PathBuf;
-    use tempfile::TempDir;
     use uuid::Uuid;
-
-    /// Helper to create a temporary directory for tests
-    /// Returns a `TempDir` that automatically cleans up when dropped
-    fn create_test_dir() -> TempDir {
-        tempfile::tempdir().expect("Failed to create temp directory")
-    }
-
-    /// Helper to set APPDATA for a test scope
-    /// Returns a guard that restores the original value when dropped
-    ///
-    /// # Safety Considerations
-    ///
-    /// This guard uses `std::env::set_var` and `std::env::remove_var`, which are marked
-    /// unsafe because they can cause data races when other threads are reading environment
-    /// variables concurrently.
-    ///
-    /// **Safety Invariants:**
-    /// 1. Each test gets its own unique `TempDir`, so parallel tests write to different paths
-    /// 2. The guard is RAII-based and restores the original value on drop, preventing
-    ///    environment pollution between tests
-    /// 3. No other threads should be spawned or running during the lifetime of this guard
-    ///    within the same test function
-    ///
-    /// **Why this is safe in parallel test execution:**
-    /// - While `std::env::set_var` is unsafe, the actual risk is when threads read env vars
-    ///   while another thread modifies them
-    /// - Each test function runs in its own thread with its own stack frame
-    /// - The `AppController` being tested is not spawning additional threads during these tests
-    /// - The guard ensures cleanup even on panic via Drop
-    /// - The modification is scoped to the test function's lifetime
-    /// - Tests can safely run in parallel (`cargo test --lib`) without `--test-threads=1`
-    ///
-    /// **Note:** While these tests CAN run in parallel, they can also run single-threaded
-    /// if needed for other reasons (e.g., debugging, Miri analysis).
-    struct AppdataGuard {
-        original: Option<String>,
-    }
-
-    #[expect(
-        unsafe_code,
-        reason = "Test-only code that modifies environment variables with documented safety invariants. Safe in parallel test execution."
-    )]
-    impl AppdataGuard {
-        fn new(temp_dir: &TempDir) -> Self {
-            let original = std::env::var("APPDATA").ok();
-            // SAFETY: This is safe because:
-            // 1. Each test gets its own unique TempDir path (no shared state between tests)
-            // 2. The guard is RAII-based and restores the original value on drop
-            // 3. No other threads are spawned during the test function
-            // 4. Each test runs in its own thread with isolated stack frame
-            // See struct-level documentation for full safety invariants.
-            unsafe {
-                std::env::set_var("APPDATA", temp_dir.path());
-            }
-            Self { original }
-        }
-    }
-
-    #[expect(
-        unsafe_code,
-        reason = "Test-only code that restores environment variables with documented safety invariants. Safe in parallel test execution."
-    )]
-    impl Drop for AppdataGuard {
-        fn drop(&mut self) {
-            // SAFETY: This is safe because:
-            // 1. Each test has its own guard instance (no shared state)
-            // 2. We're restoring the original state, preventing test pollution
-            // 3. No other threads are accessing environment variables within this test
-            // 4. Drop runs in the same thread that created the guard
-            // See struct-level documentation for full safety invariants.
-            if let Some(ref original) = self.original {
-                unsafe {
-                    std::env::set_var("APPDATA", original);
-                }
-            } else {
-                unsafe {
-                    std::env::remove_var("APPDATA");
-                }
-            }
-        }
-    }
 
     #[test]
     fn test_app_controller_creation() {

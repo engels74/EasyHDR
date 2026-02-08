@@ -1,3 +1,4 @@
+#![expect(clippy::unwrap_used)]
 //! Integration tests for icon persistence
 //!
 //! These tests validate the full icon caching lifecycle including:

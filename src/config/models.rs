@@ -46,7 +46,6 @@ pub struct UwpApp {
 
 /// Represents a monitored application (Win32 or UWP)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[allow(clippy::large_enum_variant)] // Win32App and UwpApp are similarly sized
 pub enum MonitoredApp {
     /// Traditional Win32 desktop application
     Win32(Win32App),
@@ -596,7 +595,10 @@ impl<'de> Deserialize<'de> for AppConfig {
 
 /// User preferences and settings
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Boolean preferences map 1:1 to user-facing settings toggles"
+)]
 pub struct UserPreferences {
     /// Whether to auto-start on Windows login
     pub auto_start: bool,
@@ -672,6 +674,7 @@ impl Default for WindowState {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

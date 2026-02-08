@@ -829,7 +829,11 @@ impl GuiController {
     /// (`last_update_check_time`, `cached_latest_version`) as per Rust-Bible
     /// "State Persistence & I/O Discipline" guidelines.
     #[cfg(windows)]
-    #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        clippy::too_many_arguments,
+        reason = "Parameters mirror Slint UI settings dialog fields"
+    )]
     fn save_settings(
         controller: &Arc<Mutex<AppController>>,
         auto_start: bool,
@@ -934,7 +938,11 @@ impl GuiController {
 
     /// Stub implementation for non-Windows platforms
     #[cfg(not(windows))]
-    #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        clippy::too_many_arguments,
+        reason = "Non-Windows stub mirrors Windows implementation signature"
+    )]
     fn save_settings(
         _controller: &Arc<Mutex<AppController>>,
         _auto_start: bool,

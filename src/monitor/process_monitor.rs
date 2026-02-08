@@ -100,15 +100,33 @@ pub struct ProcessMonitor {
     /// `AppController` via `Arc` for coordinated updates.
     watch_state: Arc<RwLock<WatchState>>,
     /// PID → (`AppIdentifier`, timestamp) cache; expires after 5s to handle PID reuse
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        all(not(windows), not(test)),
+        expect(dead_code, reason = "Field used only on Windows for process detection")
+    )]
     app_id_cache: HashMap<u32, (AppIdentifier, Instant)>,
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        all(not(windows), not(test)),
+        expect(
+            dead_code,
+            reason = "Field used only on Windows for process event dispatch"
+        )
+    )]
     event_sender: mpsc::SyncSender<ProcessEvent>,
     interval: Duration,
     /// Previous snapshot for change detection
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        all(not(windows), not(test)),
+        expect(dead_code, reason = "Field used only on Windows for change detection")
+    )]
     running_processes: HashSet<AppIdentifier>,
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        all(not(windows), not(test)),
+        expect(
+            dead_code,
+            reason = "Field used only on Windows for capacity estimation"
+        )
+    )]
     estimated_process_count: usize,
     /// Poll cycles completed (test/diagnostic counter)
     poll_cycle_count: Arc<AtomicU64>,
@@ -212,7 +230,10 @@ impl ProcessMonitor {
             reason = "self is used on Windows but not in non-Windows stub implementation"
         )
     )]
-    #[allow(clippy::too_many_lines)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Complex polling logic with UWP detection requires extended function body"
+    )]
     fn poll_processes(&mut self) -> Result<()> {
         #[cfg(windows)]
         {
@@ -350,7 +371,10 @@ impl ProcessMonitor {
 
             let total_lookups = cache_hits + cache_misses;
             if total_lookups > 0 {
-                #[allow(clippy::cast_precision_loss)]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "f64 has sufficient precision for process count statistics"
+                )]
                 let hit_rate = (cache_hits as f64 / total_lookups as f64) * 100.0;
                 debug!(
                     "AppIdentifier cache: {} hits, {} misses ({:.1}% hit rate)",
@@ -374,7 +398,13 @@ impl ProcessMonitor {
     }
 
     /// Detect changes between current and previous snapshots.
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        all(not(windows), not(test)),
+        expect(
+            dead_code,
+            reason = "Function used only on Windows for process change detection"
+        )
+    )]
     fn detect_changes(&mut self, current: HashSet<AppIdentifier>) {
         use tracing::info;
 
@@ -421,7 +451,13 @@ impl ProcessMonitor {
     }
 
     /// Check if an app identifier is monitored.
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        all(not(windows), not(test)),
+        expect(
+            dead_code,
+            reason = "Function used only on Windows for process monitoring"
+        )
+    )]
     fn is_monitored(app_id: &AppIdentifier, watch_list: &[MonitoredApp]) -> bool {
         match app_id {
             AppIdentifier::Win32(process_name) => watch_list.iter().any(|app| {
@@ -508,26 +544,27 @@ fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
 }
 
 /// Extract filename without extension and convert to lowercase.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(
+        dead_code,
+        reason = "Function used only on Windows for process name matching"
+    )
+)]
 fn extract_filename_without_extension(path: &str) -> String {
-    let filename = if let Some(pos) = path.rfind('\\') {
-        &path[pos + 1..]
-    } else if let Some(pos) = path.rfind('/') {
-        &path[pos + 1..]
-    } else {
-        path
-    };
+    // Use manual separator handling instead of std::path::Path to stay
+    // platform-agnostic: Path treats '\' as a separator only on Windows,
+    // but this function must parse Windows-style paths on any host.
+    let filename = path.rfind(['\\', '/']).map_or(path, |pos| &path[pos + 1..]);
 
-    let name_without_ext = if let Some(pos) = filename.rfind('.') {
-        &filename[..pos]
-    } else {
-        filename
-    };
-
-    name_without_ext.to_lowercase()
+    filename
+        .rfind('.')
+        .map_or(filename, |pos| &filename[..pos])
+        .to_lowercase()
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config::{MonitoredApp, Win32App};

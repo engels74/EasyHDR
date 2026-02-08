@@ -512,16 +512,15 @@ fn check_display_configuration_change() -> bool {
         if let Some(state) = cell.borrow().as_ref() {
             // Check debounce - don't refresh too frequently
             // None means never refreshed, so allow first refresh
-            if let Some(last_refresh) = *state.last_display_refresh.lock() {
-                if last_refresh.elapsed()
+            if let Some(last_refresh) = *state.last_display_refresh.lock()
+                && last_refresh.elapsed()
                     < std::time::Duration::from_millis(DISPLAY_REFRESH_DEBOUNCE_MS)
-                {
-                    debug!(
-                        "Display refresh debounced ({}ms since last)",
-                        last_refresh.elapsed().as_millis()
-                    );
-                    return false;
-                }
+            {
+                debug!(
+                    "Display refresh debounced ({}ms since last)",
+                    last_refresh.elapsed().as_millis()
+                );
+                return false;
             }
 
             // Re-enumerate displays

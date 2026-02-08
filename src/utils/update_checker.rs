@@ -204,6 +204,7 @@ impl UpdateChecker {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

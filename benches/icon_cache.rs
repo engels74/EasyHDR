@@ -8,8 +8,6 @@
 //! - 50 apps: <150ms
 //! - 100 apps: <250ms
 
-#![allow(missing_docs)]
-
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use easyhdr::utils::icon_cache::IconCache;
 use rayon::prelude::*;

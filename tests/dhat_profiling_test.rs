@@ -281,7 +281,6 @@ fn profile_config_access() {
 /// - Guideline compliance: Relaxed ordering for diagnostic counter (Line 96-100)
 #[test]
 #[cfg(windows)]
-#[allow(clippy::too_many_lines)]
 fn profile_production_allocation_patterns() {
     println!("\n=== DHAT Allocation Profiling Test ===");
     println!("This test will run for ~40 seconds total (up to 10s verification + 30s profiling)");

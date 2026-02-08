@@ -4,8 +4,6 @@
 //! measured via integration tests and profiling tools (cargo-flamegraph, DHAT).
 //! See `docs/performance_plan.md` for profiling instructions.
 
-#![allow(missing_docs)]
-
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use easyhdr::config::models::Win32App;
 use easyhdr::config::{AppConfig, MonitoredApp, UserPreferences, WindowState};

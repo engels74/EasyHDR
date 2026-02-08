@@ -5,7 +5,14 @@
 
 // Set Windows subsystem to hide console window
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-#![allow(missing_docs)] // Allow missing docs for Slint-generated code
+#![expect(
+    missing_docs,
+    reason = "Slint-generated code from include_modules! lacks doc comments"
+)]
+#![expect(
+    clippy::unwrap_used,
+    reason = "Slint-generated code from include_modules! uses .unwrap() extensively"
+)]
 
 // GUI module is only in the binary, not the library
 mod gui;
@@ -35,6 +42,10 @@ const MIN_WINDOWS_BUILD: u32 = 19044;
 ///
 /// Performs initialization including logging, version detection, single-instance
 /// enforcement, HDR capability detection, and multi-threaded component startup.
+#[expect(
+    clippy::too_many_lines,
+    reason = "Main function coordinates multi-phase application startup"
+)]
 fn main() -> Result<()> {
     use easyhdr::utils::startup_profiler::{self, StartupPhase};
     let profiler = startup_profiler::get_profiler();
@@ -89,7 +100,13 @@ fn main() -> Result<()> {
         config.monitored_apps.len()
     );
 
-    #[cfg_attr(not(windows), allow(unused_variables))]
+    #[cfg_attr(
+        not(windows),
+        expect(
+            unused_variables,
+            reason = "Components only used on Windows for HDR control and GUI"
+        )
+    )]
     let (process_monitor, gui_controller, should_show_hdr_warning) =
         match initialize_components(&config).context("Failed to initialize core components") {
             Ok(components) => components,

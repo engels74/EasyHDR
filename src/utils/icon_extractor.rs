@@ -38,7 +38,16 @@ const ICON_SIZE: usize = 32;
 ///
 /// Uses Windows Shell32 `ExtractIconExW` to extract the application icon and convert it to
 /// raw RGBA bytes (32x32 pixels). Returns an empty Vec on extraction failure or non-Windows platforms.
-pub fn extract_icon_from_exe(#[allow(unused_variables)] path: &Path) -> Result<Vec<u8>> {
+pub fn extract_icon_from_exe(
+    #[cfg_attr(
+        not(windows),
+        expect(
+            unused_variables,
+            reason = "Parameter used only on Windows; non-Windows returns stub"
+        )
+    )]
+    path: &Path,
+) -> Result<Vec<u8>> {
     #[cfg(windows)]
     {
         Ok(extract_icon_from_exe_windows(path))
@@ -495,11 +504,11 @@ fn extract_display_name_windows(path: &Path) -> String {
                     .position(|&c| c == 0)
                     .unwrap_or(description_slice.len());
 
-                if let Ok(description) = String::from_utf16(&description_slice[..len]) {
-                    if !description.is_empty() {
-                        debug!("Extracted display name: {}", description);
-                        return description;
-                    }
+                if let Ok(description) = String::from_utf16(&description_slice[..len])
+                    && !description.is_empty()
+                {
+                    debug!("Extracted display name: {}", description);
+                    return description;
                 }
             }
         }
@@ -520,6 +529,7 @@ fn get_filename_fallback(path: &Path) -> String {
 }
 
 #[cfg(test)]
+#[expect(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
