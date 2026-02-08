@@ -49,7 +49,13 @@ impl std::fmt::Display for DisplayTarget {
 /// HDR controller
 pub struct HdrController {
     /// Windows version
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        not(windows),
+        expect(
+            dead_code,
+            reason = "Field used only on Windows for version-specific HDR API dispatch"
+        )
+    )]
     windows_version: WindowsVersion,
     /// Cached display targets
     ///
@@ -276,7 +282,13 @@ impl HdrController {
     ///
     /// Structures initialized with correct size/type fields. IDs from validated `DisplayTarget`.
     /// Return codes checked before data access; failures trigger legacy fallback.
-    #[cfg_attr(not(windows), allow(unused_variables))]
+    #[cfg_attr(
+        not(windows),
+        expect(
+            unused_variables,
+            reason = "Parameters used only on Windows for HDR API calls"
+        )
+    )]
     #[cfg_attr(
         windows,
         expect(unsafe_code, reason = "Windows FFI for HDR capability detection")
@@ -456,7 +468,13 @@ impl HdrController {
     ///
     /// Same soundness as `is_hdr_supported`: structures initialized correctly, IDs validated,
     /// return codes checked before data access, failures trigger legacy fallback.
-    #[cfg_attr(not(windows), allow(unused_variables))]
+    #[cfg_attr(
+        not(windows),
+        expect(
+            unused_variables,
+            reason = "Parameters used only on Windows for HDR API calls"
+        )
+    )]
     #[cfg_attr(
         windows,
         expect(unsafe_code, reason = "Windows FFI for HDR state detection")
@@ -573,7 +591,13 @@ impl HdrController {
     ///
     /// Structures initialized correctly. IDs from validated `DisplayTarget`. Return codes checked.
     /// 100ms delay ensures state propagation before return.
-    #[cfg_attr(not(windows), allow(dead_code))]
+    #[cfg_attr(
+        not(windows),
+        expect(
+            dead_code,
+            reason = "Function used only on Windows for HDR state control"
+        )
+    )]
     #[cfg_attr(
         windows,
         expect(unsafe_code, reason = "Windows FFI for HDR state control")
@@ -763,6 +787,7 @@ impl HdrController {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

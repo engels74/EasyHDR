@@ -118,6 +118,7 @@ fn rotate_logs_on_startup(log_path: &PathBuf) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::fs;

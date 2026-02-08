@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! CPU usage profiling test for process monitoring thread
 //!
 //! This test measures the CPU usage of the process monitoring thread to ensure

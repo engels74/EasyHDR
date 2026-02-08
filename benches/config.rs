@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Benchmarks for configuration serialization and deserialization
 
 #![allow(missing_docs)]

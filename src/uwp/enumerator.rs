@@ -343,6 +343,7 @@ pub fn enumerate_packages() -> Result<Vec<UwpPackageInfo>> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

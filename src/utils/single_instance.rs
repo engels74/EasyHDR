@@ -79,6 +79,7 @@ impl SingleInstanceGuard {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     #[cfg(windows)]
     use super::SingleInstanceGuard;

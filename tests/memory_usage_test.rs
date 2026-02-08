@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Memory usage tests
 //!
 //! This test module verifies that the application uses less than 50MB RAM during monitoring.
@@ -125,7 +126,10 @@ fn test_memory_stats_within_limits() {
 
     assert!(stats.is_within_limits());
     // Allow exact float comparison: values are constructed to be exact multiples
-    #[allow(clippy::float_cmp)]
+    #[expect(
+        clippy::float_cmp,
+        reason = "Values are constructed as exact multiples of 1024*1024, so float comparison is precise"
+    )]
     {
         assert_eq!(stats.total_mb(), 40.0);
         assert_eq!(stats.icon_cache_mb(), 5.0);
@@ -145,7 +149,10 @@ fn test_memory_stats_exceeds_limits() {
 
     assert!(!stats.is_within_limits());
     // Allow exact float comparison: value is constructed to be exact multiple
-    #[allow(clippy::float_cmp)]
+    #[expect(
+        clippy::float_cmp,
+        reason = "Value is constructed as exact multiple of 1024*1024, so float comparison is precise"
+    )]
     {
         assert_eq!(stats.total_mb(), 60.0);
     }

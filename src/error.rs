@@ -310,6 +310,7 @@ pub fn get_user_friendly_error(error: &EasyHdrError) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

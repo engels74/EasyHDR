@@ -719,6 +719,7 @@ impl Default for DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

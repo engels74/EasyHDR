@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Benchmarks for icon cache parallel loading performance
 //!
 //! This benchmark measures the performance of parallel icon loading using Rayon.

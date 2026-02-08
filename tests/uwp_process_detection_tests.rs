@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Integration tests for UWP process detection
 //!
 //! Tests the `ProcessMonitor`'s ability to detect UWP applications using the
@@ -101,12 +102,12 @@ fn test_uwp_app_detection_calculator_started() {
     // Try to receive events for a short period
     let mut calculator_already_running = false;
     while let Ok(event) = rx.recv_timeout(Duration::from_millis(100)) {
-        if let ProcessEvent::Started(AppIdentifier::Uwp(ref family_name)) = event {
-            if family_name == CALCULATOR_FAMILY_NAME {
-                calculator_already_running = true;
-                tracing::info!("Calculator is already running");
-                break;
-            }
+        if let ProcessEvent::Started(AppIdentifier::Uwp(ref family_name)) = event
+            && family_name == CALCULATOR_FAMILY_NAME
+        {
+            calculator_already_running = true;
+            tracing::info!("Calculator is already running");
+            break;
         }
     }
 
@@ -143,15 +144,14 @@ fn test_uwp_app_detection_calculator_started() {
 
                             if let ProcessEvent::Started(AppIdentifier::Uwp(ref family_name)) =
                                 event
+                                && family_name == CALCULATOR_FAMILY_NAME
                             {
-                                if family_name == CALCULATOR_FAMILY_NAME {
-                                    tracing::info!(
-                                        "Successfully detected Calculator started: {}",
-                                        family_name
-                                    );
-                                    detected = true;
-                                    break;
-                                }
+                                tracing::info!(
+                                    "Successfully detected Calculator started: {}",
+                                    family_name
+                                );
+                                detected = true;
+                                break;
                             }
                         }
                     }
@@ -222,11 +222,11 @@ fn test_uwp_app_detection_calculator_stopped() {
         if let Ok(event) = rx.recv_timeout(Duration::from_millis(500)) {
             tracing::debug!("Received event: {:?}", event);
 
-            if let ProcessEvent::Started(AppIdentifier::Uwp(ref family_name)) = event {
-                if family_name == CALCULATOR_FAMILY_NAME {
-                    tracing::info!("Calculator detected as running");
-                    running_detected = true;
-                }
+            if let ProcessEvent::Started(AppIdentifier::Uwp(ref family_name)) = event
+                && family_name == CALCULATOR_FAMILY_NAME
+            {
+                tracing::info!("Calculator detected as running");
+                running_detected = true;
             }
         }
     }
@@ -263,15 +263,15 @@ fn test_uwp_app_detection_calculator_stopped() {
                     if let Ok(event) = rx.recv_timeout(Duration::from_millis(500)) {
                         tracing::debug!("Received event: {:?}", event);
 
-                        if let ProcessEvent::Stopped(AppIdentifier::Uwp(ref family_name)) = event {
-                            if family_name == CALCULATOR_FAMILY_NAME {
-                                tracing::info!(
-                                    "Successfully detected Calculator stopped: {}",
-                                    family_name
-                                );
-                                stopped_detected = true;
-                                break;
-                            }
+                        if let ProcessEvent::Stopped(AppIdentifier::Uwp(ref family_name)) = event
+                            && family_name == CALCULATOR_FAMILY_NAME
+                        {
+                            tracing::info!(
+                                "Successfully detected Calculator stopped: {}",
+                                family_name
+                            );
+                            stopped_detected = true;
+                            break;
                         }
                     }
                 }

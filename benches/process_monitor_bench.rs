@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Benchmarks for process monitoring hot paths
 //!
 //! Note: Direct process polling benchmarks require Windows APIs and are better

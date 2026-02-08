@@ -2,8 +2,7 @@
 name = "easyhdr"
 version = "0.1.12"
 edition = "2024"
-rust-version = "1.85"
-resolver = "2"
+rust-version = "1.93"
 authors = ["engels74"]
 description = "Automatic HDR management for Windows"
 license = "AGPL-3.0-only"
@@ -89,7 +88,7 @@ slint-build = "1.13"
 winres = "0.1"
 
 [dev-dependencies]
-proptest = "1.9"
+proptest = "1.10"
 criterion = "0.8"
 # Allocation profiling (Rust port of DHAT, works on Windows)
 dhat = "0.3"
@@ -119,11 +118,15 @@ harness = false
 opt-level = 3       # Optimize for performance
 lto = true          # Link-time optimization
 codegen-units = 1   # Better optimization
-strip = true        # Strip symbols
+strip = "symbols"   # Strip symbols
 panic = "abort"     # Smaller binary
 
 [profile.dev]
 opt-level = 1       # Some optimization for dev builds
+debug = "line-tables-only"  # Faster dev builds, useful backtraces
+
+[profile.dev.package."*"]
+debug = false       # Skip debug info for dependencies, faster incremental builds
 
 [profile.profiling]
 inherits = "release"
@@ -146,3 +149,4 @@ module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 must_use_candidate = "allow"
+unwrap_used = "warn"

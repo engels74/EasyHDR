@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Benchmarks for UWP detection and package family name extraction
 //!
 //! These benchmarks validate performance targets:
@@ -87,7 +88,10 @@ fn bench_extract_package_family_name_complexity(c: &mut Criterion) {
 /// This benchmark measures the overhead of calling `detect_uwp_process` on actual
 /// running processes.
 #[cfg(windows)]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Benchmark requires unsafe Windows API calls for process enumeration"
+)]
 fn bench_uwp_detection_on_real_processes(c: &mut Criterion) {
     use easyhdr::uwp::detect_uwp_process;
 
@@ -154,7 +158,10 @@ fn bench_uwp_detection_on_real_processes(c: &mut Criterion) {
 /// This benchmark compares the performance of Win32-only process detection
 /// against Win32+UWP detection to validate <2ms overhead.
 #[cfg(windows)]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Benchmark requires unsafe Windows API calls for process enumeration"
+)]
 fn bench_polling_cycle_comparison(c: &mut Criterion) {
     use easyhdr::uwp::detect_uwp_process;
 
@@ -240,7 +247,10 @@ fn bench_polling_cycle_comparison(c: &mut Criterion) {
 /// This benchmark measures detection performance at different scales to validate
 /// 150-250 processes within 1.25ms.
 #[cfg(windows)]
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "Benchmark requires unsafe Windows API calls for process enumeration"
+)]
 fn bench_uwp_detection_scaling(c: &mut Criterion) {
     use easyhdr::uwp::detect_uwp_process;
 
