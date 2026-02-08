@@ -102,12 +102,12 @@ pub struct ProcessMonitor {
     /// PID → (`AppIdentifier`, timestamp) cache; expires after 5s to handle PID reuse
     #[cfg_attr(
         not(windows),
-        expect(dead_code, reason = "Field used only on Windows for process detection")
+        allow(dead_code, reason = "Field used only on Windows for process detection")
     )]
     app_id_cache: HashMap<u32, (AppIdentifier, Instant)>,
     #[cfg_attr(
         not(windows),
-        expect(
+        allow(
             dead_code,
             reason = "Field used only on Windows for process event dispatch"
         )
@@ -117,12 +117,12 @@ pub struct ProcessMonitor {
     /// Previous snapshot for change detection
     #[cfg_attr(
         not(windows),
-        expect(dead_code, reason = "Field used only on Windows for change detection")
+        allow(dead_code, reason = "Field used only on Windows for change detection")
     )]
     running_processes: HashSet<AppIdentifier>,
     #[cfg_attr(
         not(windows),
-        expect(
+        allow(
             dead_code,
             reason = "Field used only on Windows for capacity estimation"
         )
@@ -400,7 +400,7 @@ impl ProcessMonitor {
     /// Detect changes between current and previous snapshots.
     #[cfg_attr(
         not(windows),
-        expect(
+        allow(
             dead_code,
             reason = "Function used only on Windows for process change detection"
         )
@@ -453,7 +453,7 @@ impl ProcessMonitor {
     /// Check if an app identifier is monitored.
     #[cfg_attr(
         not(windows),
-        expect(
+        allow(
             dead_code,
             reason = "Function used only on Windows for process monitoring"
         )
@@ -546,7 +546,7 @@ fn extract_process_name(sz_exe_file: &[u16; 260]) -> Option<String> {
 /// Extract filename without extension and convert to lowercase.
 #[cfg_attr(
     not(windows),
-    expect(
+    allow(
         dead_code,
         reason = "Function used only on Windows for process name matching"
     )

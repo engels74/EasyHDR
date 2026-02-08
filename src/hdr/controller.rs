@@ -49,13 +49,6 @@ impl std::fmt::Display for DisplayTarget {
 /// HDR controller
 pub struct HdrController {
     /// Windows version
-    #[cfg_attr(
-        not(windows),
-        expect(
-            dead_code,
-            reason = "Field used only on Windows for version-specific HDR API dispatch"
-        )
-    )]
     windows_version: WindowsVersion,
     /// Cached display targets
     ///
@@ -591,13 +584,6 @@ impl HdrController {
     ///
     /// Structures initialized correctly. IDs from validated `DisplayTarget`. Return codes checked.
     /// 100ms delay ensures state propagation before return.
-    #[cfg_attr(
-        not(windows),
-        expect(
-            dead_code,
-            reason = "Function used only on Windows for HDR state control"
-        )
-    )]
     #[cfg_attr(
         windows,
         expect(unsafe_code, reason = "Windows FFI for HDR state control")
