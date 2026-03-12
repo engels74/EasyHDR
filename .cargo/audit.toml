@@ -6,6 +6,6 @@ ignore = [
     # quinn-proto - optional transitive dependency from reqwest, not compiled.
     # EasyHDR uses reqwest for HTTPS update checks (blocking client, features=["blocking","json","rustls"]),
     # but does NOT enable the "http3" feature, so quinn/QUIC code is never compiled.
-    # Confirmed: `cargo tree -i quinn --target all` shows "nothing to print".
+    # Confirmed: `cargo tree -i quinn-proto --target all` shows "nothing to print".
     "RUSTSEC-2026-0037", # quinn-proto DoS via invalid QUIC transport parameters
 ]
