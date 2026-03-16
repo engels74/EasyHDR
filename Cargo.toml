@@ -75,7 +75,7 @@ windows = { version = "0.62", features = [
     "Storage_Streams",                # RandomAccessStreamReference, DataReader
     "Foundation",                     # Size type for GetLogo
 ] }
-winreg = "0.55"
+winreg = "0.56"
 tray-icon = "0.21"
 rfd = "0.17"  # File dialogs
 tauri-winrt-notification = "0.7"  # Windows toast notifications
