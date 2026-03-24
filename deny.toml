@@ -30,6 +30,50 @@ ignore = [
     # but does NOT enable the "http3" feature, so quinn/QUIC code is never compiled.
     # Confirmed: `cargo tree -i quinn-proto --target all` shows "nothing to print".
     "RUSTSEC-2026-0037", # quinn-proto
+
+    # AWS-LC advisories - transitive dependency via reqwest → rustls → aws-lc-rs 1.15.2.
+    # EasyHDR only makes outbound HTTPS GET requests to api.github.com for update checks.
+
+    # AES-CCM timing side-channel - not exploitable in EasyHDR.
+    # TLS 1.3 (used by rustls) negotiates AES-GCM or ChaCha20-Poly1305, never AES-CCM.
+    # AES-CCM is used in DTLS, CoAP, Bluetooth LE — none of which EasyHDR uses.
+    "RUSTSEC-2026-0045", # aws-lc-rs: Timing Side-Channel in AES-CCM Tag Verification
+
+    # X.509 Name Constraints bypass via Wildcard/Unicode CN - negligible risk in EasyHDR.
+    # While X.509 validation does run during the TLS handshake, exploitation requires:
+    # (1) a compromised intermediate CA with name constraints, (2) a MITM attack against
+    # api.github.com, and (3) the attacker crafting a wildcard/Unicode CN to bypass constraints.
+    # The only consequence would be a fake update-check response — no code execution or data leak.
+    # DigiCert's certs for api.github.com do not use restrictive name constraints.
+    "RUSTSEC-2026-0044", # aws-lc-rs: X.509 Name Constraints Bypass via Wildcard/Unicode CN
+
+    # PKCS7_verify vulnerabilities - not exploitable in EasyHDR.
+    # EasyHDR never calls PKCS7_verify. PKCS#7 is used for S/MIME, code signing, and CMS —
+    # none of which apply here. TLS certificate validation uses X.509 DER via rustls-webpki.
+    "RUSTSEC-2026-0046", # aws-lc-rs: PKCS7_verify Certificate Chain Validation Bypass
+    "RUSTSEC-2026-0047", # aws-lc-rs: PKCS7_verify Signature Validation Bypass
+
+    # CRL Distribution Point scope check error - not exploitable in EasyHDR.
+    # rustls does not enable CRL checking by default; it must be explicitly configured.
+    # EasyHDR's reqwest client uses no CRL/revocation APIs. On Windows, rustls-platform-verifier
+    # delegates to SChannel (OS verifier), bypassing aws-lc-rs CRL logic entirely.
+    "RUSTSEC-2026-0048", # aws-lc-rs: CRL Distribution Point Scope Check Logic Error
+
+    # rustls-webpki CRL Distribution Point matching bug - not exploitable in EasyHDR.
+    # CRL checking is not configured in the reqwest client (no CRL/revocation APIs used).
+    # On Windows, rustls-platform-verifier delegates to SChannel (OS verifier), bypassing
+    # rustls-webpki's CRL distribution point logic entirely. The only HTTPS connection is
+    # to api.github.com for update checks; no sensitive data or code execution is at risk.
+    "RUSTSEC-2026-0049", # rustls-webpki: CRL Distribution Point faulty matching logic
+
+    # tar-rs vulnerabilities - not exploitable in EasyHDR.
+    # tar 0.4.44 is a build-time-only transitive dependency pulled in exclusively by
+    # skia-bindings's build script (slint → skia-safe → skia-bindings [build]). It extracts
+    # pre-built Skia binary archives during `cargo build` only. The tar crate is never compiled
+    # into the final easyhdr binary. `cargo tree -i tar -p easyhdr` confirms it is absent from
+    # the runtime dependency graph. EasyHDR does not process tar archives at runtime.
+    "RUSTSEC-2026-0067", # tar-rs: unpack_in can chmod arbitrary directories via symlinks
+    "RUSTSEC-2026-0068", # tar-rs: incorrectly ignores PAX size headers
 ]
 
 [licenses]
