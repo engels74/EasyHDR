@@ -95,7 +95,7 @@ fn test_uwp_app_detection_calculator_started() {
     let _handle = monitor.start();
 
     // Wait for monitoring to stabilize
-    thread::sleep(Duration::from_millis(1000));
+    thread::sleep(Duration::from_secs(1));
 
     // Check if Calculator is already running
     // Try to receive events for a short period
@@ -206,7 +206,7 @@ fn test_uwp_app_detection_calculator_stopped() {
     let _handle = monitor.start();
 
     // Wait for monitoring to stabilize
-    thread::sleep(Duration::from_millis(1000));
+    thread::sleep(Duration::from_secs(1));
 
     tracing::info!(
         "This test requires Calculator to be running and then closed manually or programmatically"
@@ -317,7 +317,7 @@ fn test_mixed_win32_and_uwp_detection() {
     let _handle = monitor.start();
 
     // Wait for monitoring to stabilize
-    thread::sleep(Duration::from_millis(1000));
+    thread::sleep(Duration::from_secs(1));
 
     // Clear any initial events
     while rx.recv_timeout(Duration::from_millis(100)).is_ok() {}
@@ -339,17 +339,15 @@ fn test_mixed_win32_and_uwp_detection() {
             tracing::debug!("Received event: {:?}", event);
 
             match event {
-                ProcessEvent::Started(AppIdentifier::Win32(ref name)) => {
-                    if name == "notepad" {
-                        tracing::info!("Win32 app detected: {}", name);
-                        win32_detected = true;
-                    }
+                ProcessEvent::Started(AppIdentifier::Win32(ref name)) if name == "notepad" => {
+                    tracing::info!("Win32 app detected: {}", name);
+                    win32_detected = true;
                 }
-                ProcessEvent::Started(AppIdentifier::Uwp(ref family_name)) => {
-                    if family_name == CALCULATOR_FAMILY_NAME {
-                        tracing::info!("UWP app detected: {}", family_name);
-                        uwp_detected = true;
-                    }
+                ProcessEvent::Started(AppIdentifier::Uwp(ref family_name))
+                    if family_name == CALCULATOR_FAMILY_NAME =>
+                {
+                    tracing::info!("UWP app detected: {}", family_name);
+                    uwp_detected = true;
                 }
                 _ => {}
             }
@@ -414,7 +412,7 @@ fn test_app_identifier_discrimination() {
     let _handle = monitor.start();
 
     // Wait for monitoring to stabilize and collect events
-    thread::sleep(Duration::from_millis(2000));
+    thread::sleep(Duration::from_secs(2));
 
     // Collect events to verify correct identification
     let mut win32_apps = std::collections::HashSet::new();
