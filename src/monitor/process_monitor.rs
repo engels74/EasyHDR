@@ -619,7 +619,7 @@ mod tests {
     #[test]
     fn test_detect_changes_started() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         // Set up watch list
         monitor.update_watch_list(vec![
@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn test_detect_changes_stopped() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         // Set up watch list
         monitor.update_watch_list(vec![
@@ -684,7 +684,7 @@ mod tests {
     #[test]
     fn test_detect_changes_case_insensitive() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         // Watch list has lowercase
         monitor.update_watch_list(vec![create_test_win32_app("notepad", "Notepad")]);
@@ -710,7 +710,7 @@ mod tests {
     #[test]
     fn test_detect_changes_multiple_processes() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         // Watch multiple processes
         monitor.update_watch_list(vec![
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn test_multiple_state_transitions() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         monitor.update_watch_list(vec![
             create_test_win32_app("app1", "App 1"),
@@ -855,7 +855,7 @@ mod tests {
     #[test]
     fn test_no_events_when_no_state_change() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
 
@@ -874,7 +874,7 @@ mod tests {
     #[test]
     fn test_only_monitored_processes_trigger_events() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         // Only watch "game"
         monitor.update_watch_list(vec![create_test_win32_app("game", "Game")]);
@@ -905,7 +905,7 @@ mod tests {
     #[test]
     fn test_empty_watch_list() {
         let (tx, rx) = mpsc::sync_channel(32);
-        let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+        let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
         // Empty watch list
         monitor.update_watch_list(vec![]);
@@ -995,7 +995,7 @@ mod tests {
                 names in prop::collection::vec("[a-zA-Z0-9_-]+(\\.exe)?", 1..10)
             ) {
                 let (tx, _rx) = mpsc::sync_channel(32);
-                let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+                let monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
                 // Convert names to MonitoredApp objects
                 let apps: Vec<MonitoredApp> = names.iter().map(|name| {
@@ -1027,7 +1027,7 @@ mod tests {
                 const CACHE_EXPIRY: Duration = Duration::from_secs(5);
 
                 let (tx, _rx) = mpsc::sync_channel(32);
-                let mut monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+                let mut monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
                 // Create an AppIdentifier for testing
                 let app_id = AppIdentifier::Win32(app_name.clone());
