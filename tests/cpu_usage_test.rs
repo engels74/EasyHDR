@@ -28,7 +28,7 @@ fn test_process_monitor_cpu_usage() {
 
     // Create a process monitor with 1000ms interval (default)
     let (tx, rx) = mpsc::sync_channel(32);
-    let monitor = ProcessMonitor::new(Duration::from_millis(1000), tx);
+    let monitor = ProcessMonitor::new(Duration::from_secs(1), tx);
 
     // Get initial CPU times
     let cpu_start = get_process_cpu_time().expect("Failed to get initial CPU time");
@@ -136,8 +136,8 @@ fn test_process_monitor_cpu_usage_different_intervals() {
 
     let intervals = vec![
         Duration::from_millis(500),
-        Duration::from_millis(1000),
-        Duration::from_millis(2000),
+        Duration::from_secs(1),
+        Duration::from_secs(2),
     ];
 
     for interval in intervals {
