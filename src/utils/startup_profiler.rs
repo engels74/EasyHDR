@@ -170,7 +170,7 @@ impl StartupProfiler {
 
             // Identify slowest phases
             let mut sorted_timings = timings.clone();
-            sorted_timings.sort_by(|a, b| b.duration.cmp(&a.duration));
+            sorted_timings.sort_by_key(|timing| std::cmp::Reverse(timing.duration));
 
             warn!("Slowest phases:");
             for timing in sorted_timings.iter().take(3) {
