@@ -45,11 +45,102 @@ jobs:
         shell: pwsh
 
       - name: VirusTotal Scan
+        id: virustotal
         uses: crazy-max/ghaction-virustotal@v5
         with:
           vt_api_key: ${{ secrets.VT_API_KEY }}
-          update_release_body: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           files: |
             \.exe$
           request_rate: 4
+
+      - name: Generate VirusTotal results markdown
+        env:
+          VT_ANALYSIS: ${{ steps.virustotal.outputs.analysis }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:VT_ANALYSIS)) {
+            Write-Error "VirusTotal scan did not return analysis results"
+            exit 1
+          }
+
+          $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+          $results = @()
+
+          foreach ($entry in ($env:VT_ANALYSIS -split ',')) {
+            $trimmed = $entry.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) {
+              continue
+            }
+
+            $separatorIndex = $trimmed.IndexOf('=')
+            if ($separatorIndex -lt 1 -or $separatorIndex -eq ($trimmed.Length - 1)) {
+              Write-Error "Unable to parse VirusTotal analysis entry: $trimmed"
+              exit 1
+            }
+
+            $filename = $trimmed.Substring(0, $separatorIndex).Trim()
+            $reportUrl = $trimmed.Substring($separatorIndex + 1).Trim()
+            $results += [PSCustomObject]@{
+              Filename = $filename
+              ReportUrl = $reportUrl
+            }
+          }
+
+          if ($results.Count -eq 0) {
+            Write-Error "VirusTotal analysis output did not contain any parseable results"
+            exit 1
+          }
+
+          $markdown = @(
+            "### 🛡️ VirusTotal Scan Results"
+            ""
+            "Scan completed: $timestamp"
+            ""
+            "| File | Report |"
+            "| --- | --- |"
+          )
+
+          foreach ($result in $results) {
+            $markdown += "| $($result.Filename) | [View report]($($result.ReportUrl)) |"
+          }
+
+          $markdown += ""
+
+          $markdown | Out-File -FilePath virustotal-results.md -Encoding utf8
+          $markdown | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+        shell: pwsh
+
+      - name: Update release notes with VirusTotal results
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $startMarker = "<!-- virustotal-results:start -->"
+          $endMarker = "<!-- virustotal-results:end -->"
+          $vtMarkdown = Get-Content -Path virustotal-results.md -Raw
+          $vtBlock = "$startMarker`n$vtMarkdown$endMarker"
+
+          gh release view "$env:RELEASE_TAG" --json body --jq '.body // ""' |
+            Out-File -FilePath current-body.md -Encoding utf8
+
+          $currentBody = Get-Content -Path current-body.md -Raw
+          $pattern = "(?s)<!-- virustotal-results:start -->.*?<!-- virustotal-results:end -->"
+
+          if ($currentBody -match $pattern) {
+            $updatedBody = [regex]::Replace($currentBody, $pattern, { param($match) $vtBlock })
+          } elseif ([string]::IsNullOrWhiteSpace($currentBody)) {
+            $updatedBody = "$vtBlock`n"
+          } else {
+            $updatedBody = "$($currentBody.TrimEnd())`n`n$vtBlock`n"
+          }
+
+          $updatedBody | Out-File -FilePath updated-body.md -Encoding utf8
+          gh release edit "$env:RELEASE_TAG" --notes-file updated-body.md
+        shell: pwsh
+
+      - name: Upload VirusTotal results artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: virustotal-results
+          path: virustotal-results.md
+          retention-days: 90
+          if-no-files-found: error
