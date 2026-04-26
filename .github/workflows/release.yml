@@ -117,7 +117,7 @@ jobs:
           $startMarker = "<!-- virustotal-results:start -->"
           $endMarker = "<!-- virustotal-results:end -->"
           $vtMarkdown = Get-Content -Path virustotal-results.md -Raw
-          $vtBlock = "$startMarker`n$vtMarkdown$endMarker"
+          $vtBlock = "$startMarker`n---`n`n$vtMarkdown$endMarker"
 
           gh release view "$env:RELEASE_TAG" --json body --jq '.body // ""' |
             Out-File -FilePath current-body.md -Encoding utf8
