@@ -60,7 +60,7 @@ RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling
 
 CI (`.github/workflows/ci.yml`) runs the four commands in the first three sections on `windows-latest`. To approximate CI locally, run fmt-check, clippy, the release build, then unit + sequential integration tests in that order.
 
-`.pre-commit-config.yaml` enforces `cargo fmt --check` and `cargo clippy -D warnings` pre-commit, and `cargo test --lib` pre-push. On non-Windows hosts the pre-commit hooks fall back to `cargo xwin` against `x86_64-pc-windows-msvc`.
+`prek.toml` (run via [`prek`](https://prek.j178.dev), a drop-in pre-commit replacement) enforces `cargo fmt --check` and `cargo clippy -D warnings` pre-commit, and `cargo test --lib` pre-push. On non-Windows hosts the hooks fall back to `cargo xwin` against `x86_64-pc-windows-msvc`. Install hooks with `prek install`; run all hooks with `prek run --all-files`.
 
 ## High-level architecture
 
