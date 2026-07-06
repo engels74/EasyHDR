@@ -369,10 +369,10 @@ impl AppController {
 
                     let prev_count = self
                         .active_process_count
-                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                        .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                             Some(count.saturating_sub(1))
                         })
-                        .expect("fetch_update with Some(_) never fails");
+                        .expect("try_update with Some(_) never fails");
                     debug!(
                         "Active process count: {} -> {}",
                         prev_count,
