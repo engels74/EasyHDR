@@ -78,7 +78,7 @@ windows = { version = "0.62", features = [
 winreg = "0.56"
 tray-icon = "0.24"
 rfd = "0.17"  # File dialogs
-tauri-winrt-notification = "0.8"  # Windows toast notifications; 0.8 bumps quick-xml to a patched release (>=0.41)
+tauri-winrt-notification = "0.8"  # Windows toast notifications; 0.8 drops the quick-xml runtime dependency, unwinding quick-xml@0.37.5 from the Windows MSVC build and addressing RUSTSEC-2026-0194/0195 on the supported target.
 open = "5.3"  # Open URLs in default browser
 
 [build-dependencies]
