@@ -367,6 +367,8 @@ impl AppController {
                         }
                     }
 
+                    // Rust 1.95 renamed this to `try_update`, but EasyHDR's MSRV is 1.93.
+                    #[allow(deprecated)]
                     let prev_count = self
                         .active_process_count
                         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
