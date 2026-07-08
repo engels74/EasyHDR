@@ -367,12 +367,18 @@ impl AppController {
                         }
                     }
 
-                    let prev_count = self
-                        .active_process_count
-                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                            Some(count.saturating_sub(1))
-                        })
-                        .expect("fetch_update with Some(_) never fails");
+                    let prev_count = loop {
+                        let count = self.active_process_count.load(Ordering::SeqCst);
+                        let new_count = count.saturating_sub(1);
+                        if let Ok(previous) = self.active_process_count.compare_exchange_weak(
+                            count,
+                            new_count,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ) {
+                            break previous;
+                        }
+                    };
                     debug!(
                         "Active process count: {} -> {}",
                         prev_count,
