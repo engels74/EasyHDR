@@ -74,7 +74,54 @@ ignore = [
     # the runtime dependency graph. EasyHDR does not process tar archives at runtime.
     "RUSTSEC-2026-0067", # tar-rs: unpack_in can chmod arbitrary directories via symlinks
     "RUSTSEC-2026-0068", # tar-rs: incorrectly ignores PAX size headers
-]
+
+    # quinn-proto (newer advisory) - same justification as RUSTSEC-2026-0037 above.
+    # quinn-proto 0.11.13 reaches Cargo.lock only because reqwest-rustls pulls it in as an
+    # optional QUIC/HTTP3 transport. EasyHDR's reqwest is configured with
+    # `default-features = false` and only `["blocking", "json", "rustls"]` features, so the
+    # http3/QUIC code path is never compiled. `cargo tree --target x86_64-pc-windows-msvc
+    # -i quinn-proto` reports "nothing to print"; ditto for `--target all`. Like the existing
+    # 0037 ignore, this is a transitive-locked dep whose vulnerable code path is not built.
+    "RUSTSEC-2026-0185", # quinn-proto: remote memory exhaustion from unbounded out-of-order stream reassembly
+
+    # memmap2 0.9.8 - vulnerable APIs unreachable from EasyHDR.
+    # The advisory affects `Mmap::[unchecked_]advise_range`, `MmapMut::[unchecked_]advise_range`,
+    # and `MmapMut::flush[_async]_range`. The only transitive use of memmap2 reachable from
+    # easyhdr is `fontique 0.6.0 → memmap2 0.9.8`, which calls only `memmap2::Mmap::map(&file)`
+    # in `src/{font,scan,source_cache}.rs` - never any of the vulnerable range functions.
+    # On Windows MSVC (the only supported target), fontique's font discovery backend is
+    # DirectWrite (src/backend/dwrite.rs) and does not touch memmap2 at all. Bumping slint's
+    # pinned fontique version to one that updates memmap2 is an upstream-only change; no
+    # EasyHDR-side action can move this. Evidence: grep against fontique 0.6.0 sources in
+    # the cargo registry cache.
+    "RUSTSEC-2026-0186", # memmap2: unchecked pointer offset in advise/flush range APIs
+
+    # ttf-parser - unmaintained (status: unmaintained, not an active vulnerability).
+    # Reachable transitively from slint (1.14.1) via:
+    #   * femtovg -> ttf-parser 0.25.1 (slint's default FemtoVG renderer code path)
+    #   * fontdb -> ttf-parser 0.25.1 (slint's font database)
+    #   * rustybuzz -> ttf-parser 0.25.1 (text shaping used by slint)
+    #   * fontdue -> ttf-parser 0.21.1 (slint-build / i-slint-compiler at build time)
+    # The advisory's suggested replacement is `skrifa`; substituting it requires coordinated
+    # changes across slint and its text-stack crates, which EasyHDR cannot do unilaterally.
+    # Tracking the upstream migration is the only viable action; ttf-parser has no CVE-class
+    # vulnerability today, so the immediate security risk is nil.
+    "RUSTSEC-2026-0192", # ttf-parser: crate is unmaintained by upstream (harfbuzz/ttf-parser#217)
+
+    # quick-xml - vulnerable versions still pinned by Linux-only transitive deps.
+    # EasyHDR is Windows-only (MIN_WINDOWS_BUILD = 19044 per src/main.rs); on the shipped
+    # target x86_64-pc-windows-msvc, both quick-xml versions are unwound from the build
+    # because tauri-winrt-notification 0.7 -> 0.8 dropped its XML parsing. `cargo tree
+    # -i quick-xml@0.37.5 --target x86_64-pc-windows-msvc` and same for 0.36.2 both report
+    # "nothing to print". On Linux dev/CI targets the warnings remain reachable as
+    # proc-macro dependencies of the slint toolchain (wayland-scanner -> quick-xml 0.37.5;
+    # zbus_xml -> quick-xml 0.36.2 via accesskit/atspi). cargo-deny reports on Cargo.lock
+    # without target awareness, so we ignore the Linux-only entries with the Windows
+    # non-reachability rationale. Upstream bump to quick-xml >=0.41.0 requires the slint
+    # project's Wl/atspi/zbus-crate stack to move first.
+    "RUSTSEC-2026-0194", # quick-xml: quadratic run time on duplicate-attribute-name check
+    "RUSTSEC-2026-0195", # quick-xml: unbounded namespace-declaration allocation in NsReader
+] # end of advisories.ignore
 
 [licenses]
 # Use version 2 configuration format
