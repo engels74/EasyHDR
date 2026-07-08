@@ -74,6 +74,16 @@ ignore = [
     # the runtime dependency graph. EasyHDR does not process tar archives at runtime.
     "RUSTSEC-2026-0067", # tar-rs: unpack_in can chmod arbitrary directories via symlinks
     "RUSTSEC-2026-0068", # tar-rs: incorrectly ignores PAX size headers
+    # quick-xml advisories are currently only reachable through Linux/Wayland code generation
+    # dependencies (zbus_xml via Slint accessibility and wayland-scanner proc macros). No
+    # patched compatible releases are available in the current dependency graph; Windows
+    # notifications were moved to tauri-winrt-notification 0.8 to remove its quick-xml edge.
+    "RUSTSEC-2026-0194", # quick-xml duplicate attribute check DoS
+    "RUSTSEC-2026-0195", # quick-xml NsReader namespace allocation DoS
+
+    # ttf-parser is pulled transitively by Slint/font rendering crates. cargo-deny reports
+    # that no safe upgrade is available, so this remains an inherited GUI-stack advisory.
+    "RUSTSEC-2026-0192", # ttf-parser unmaintained
 ]
 
 [licenses]

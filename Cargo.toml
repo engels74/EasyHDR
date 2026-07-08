@@ -78,7 +78,7 @@ windows = { version = "0.62", features = [
 winreg = "0.56"
 tray-icon = "0.24"
 rfd = "0.17"  # File dialogs
-tauri-winrt-notification = "0.7"  # Windows toast notifications
+tauri-winrt-notification = "0.8"  # Windows toast notifications
 open = "5.3"  # Open URLs in default browser
 
 [build-dependencies]
