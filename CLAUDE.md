@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to AI coding agents when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project overview
 
@@ -32,7 +32,7 @@ Run from the repo root. Rust 2024 edition, MSRV 1.93 (see `Cargo.toml`).
 cargo build                       # dev (opt-level=1, line-tables-only debug)
 cargo build --release             # LTO, codegen-units=1, strip, panic=abort
 
-# Format / lint / docs (these are what CI enforces)
+# Format / lint (these are what CI enforces)
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 
@@ -58,9 +58,9 @@ cargo bench --bench config         # or: hdr_detection | icon_cache | process_mo
 RUSTFLAGS="-C force-frame-pointers=yes" cargo build --profile profiling
 ```
 
-CI (`.github/workflows/ci.yml`) runs the four commands in the first three sections on `windows-latest`. To approximate CI locally, run fmt-check, clippy, the release build, then unit + sequential integration tests in that order.
+CI (`.github/workflows/ci.yml`, `windows-latest`) runs, in order: fmt-check, clippy `-D warnings`, `cargo build --release`, `cargo test --lib --release`, then the five integration tests above each with `--test-threads=1`. To approximate CI locally, run those steps in that order.
 
-`prek.toml` (run via [`prek`](https://prek.j178.dev), a drop-in pre-commit replacement) enforces `cargo fmt --check` and `cargo clippy -D warnings` pre-commit, and `cargo test --lib` pre-push. On non-Windows hosts the hooks fall back to `cargo xwin` against `x86_64-pc-windows-msvc`. Install hooks with `prek install`; run all hooks with `prek run --all-files`.
+`prek.toml` (run via [`prek`](https://prek.j178.dev), a drop-in pre-commit replacement) enforces `cargo fmt --check` and `cargo clippy -D warnings` pre-commit, `cargo test --lib` pre-push, plus conventional-commit message linting and gitleaks. On non-Windows hosts the Rust hooks fall back to `cargo xwin` against `x86_64-pc-windows-msvc`. Install hooks with `prek install`; run all hooks with `prek run --all-files`.
 
 ## High-level architecture
 
@@ -99,7 +99,7 @@ UWP/AppX support (`src/uwp/`) is Windows-only and uses WinRT `Management.Deploym
 
 ### Adding configuration
 
-1. Add fields to `src/config/models.rs` with `serde` defaults so older configs still deserialize.
+1. Add fields to `src/config/models.rs` with `#[serde(default)]` so older `config.json` files still deserialize.
 2. Read/write through `ConfigManager` in `src/config/manager.rs` — it owns the `%APPDATA%\EasyHDR\config.json` path and atomic-write semantics. Don't open the file directly.
 
 ### Adding a benchmark
@@ -140,16 +140,7 @@ pub struct TrayIcon { /* ... */ }
 pub struct TrayIcon;
 ```
 
-Shared state lives behind `Arc<parking_lot::*>`; the event loop takes the controller lock only while handling a single event (`src/controller/app_controller.rs`):
-
-```rust
-pub fn spawn_event_loop(controller: Arc<Mutex<AppController>>) -> JoinHandle<()> {
-    // ... take receivers under one lock, then release ...
-    std::thread::spawn(move || { /* per-event lock */ })
-}
-```
-
-Lints to expect (`Cargo.toml [lints]`): `unsafe_code = "warn"`, `missing_docs = "warn"`, `clippy::pedantic` and `clippy::all` at warn, `clippy::unwrap_used = "warn"`. New public items need a `///` doc comment; new `unsafe` blocks need a `SAFETY:` comment.
+Lints to expect (`Cargo.toml [lints]`): `unsafe_code = "warn"`, `missing_docs = "warn"`, `clippy::all` and `clippy::pedantic` at warn (priority -1), `clippy::unwrap_used = "warn"`. New public items need a `///` doc comment; new `unsafe` blocks need a `SAFETY:` comment.
 
 ## Project-specific rules
 
@@ -159,7 +150,7 @@ Lints to expect (`Cargo.toml [lints]`): `unsafe_code = "warn"`, `missing_docs = 
 - `anyhow` is only for the top-level binary startup in `main.rs` (`Context`/`Result`). Library code returns `easyhdr::Result<T>`.
 - Slint UI changes don't take effect without re-running `cargo build` — `build.rs` regenerates the bindings.
 - Configuration migrations: add new fields with `#[serde(default)]` so older `config.json` files keep deserializing.
-- Single-instance enforcement uses a named mutex (`src/utils/single_instance.rs`); don't add competing locks.
+- Single-instance enforcement uses a named mutex `Global\EasyHDR_SingleInstance_Mutex` (`src/utils/single_instance.rs`); don't add competing locks.
 - The release profile uses `panic = "abort"` and `strip = "symbols"`; don't rely on `catch_unwind` or symbolicated backtraces in release builds.
 
 ## References
