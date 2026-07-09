@@ -38,10 +38,7 @@ slint::include_modules!();
 /// Minimum supported Windows build number (Windows 10 21H2)
 const MIN_WINDOWS_BUILD: u32 = 19044;
 
-/// Main entry point for the application
-///
-/// Performs initialization including logging, version detection, single-instance
-/// enforcement, HDR capability detection, and multi-threaded component startup.
+/// Initializes EasyHDR and runs the application event loop.
 #[expect(
     clippy::too_many_lines,
     reason = "Main function coordinates multi-phase application startup"
