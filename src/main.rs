@@ -38,7 +38,7 @@ slint::include_modules!();
 /// Minimum supported Windows build number (Windows 10 21H2)
 const MIN_WINDOWS_BUILD: u32 = 19044;
 
-/// Initializes EasyHDR and runs the application event loop.
+/// Initializes `EasyHDR` and runs the application event loop.
 #[expect(
     clippy::too_many_lines,
     reason = "Main function coordinates multi-phase application startup"
