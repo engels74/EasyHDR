@@ -156,6 +156,12 @@ allow = [
     "NCSA",
     "OpenSSL",
     "Unicode-3.0",
+    # Public-domain dedication (OSI approved, FSF Free/Libre) - strictly more
+    # permissive than MIT/BSD above and compatible with AGPL-3.0. Reached via
+    # ksni (Linux StatusNotifierItem tray backend behind Slint 1.17's new
+    # SystemTrayIcon element); `cargo tree -i ksni --target x86_64-pc-windows-msvc`
+    # reports "nothing to print", so it is not in the shipped Windows build.
+    "Unlicense",
     "Zlib",
     # Slint custom licenses
     "LicenseRef-Slint-Royalty-free-2.0",
