@@ -99,4 +99,17 @@ ignore = [
     # project's Wl/atspi/zbus-crate stack to move first.
     "RUSTSEC-2026-0194", # quick-xml: quadratic run time on duplicate-attribute-name check
     "RUSTSEC-2026-0195", # quick-xml: unbounded namespace-declaration allocation in NsReader
+
+    # rustybuzz - unmaintained (status: unmaintained, not an active vulnerability).
+    # Upstream declared the crate unmaintained on 2026-07-11 and published no patched
+    # release (`patched = []`), so there is no version to upgrade to. It is reachable only
+    # through the Slint text stack: rustybuzz 0.20.1 <- usvg 0.45.1 <- resvg 0.45.1 <-
+    # i-slint-compiler (build time, via slint-build and slint-macros) and i-slint-core
+    # (runtime). Confirmed with `cargo tree -i rustybuzz --target x86_64-pc-windows-msvc`,
+    # which shows both paths on the shipped target. The advisory's suggested replacement is
+    # `harfrust`; adopting it requires resvg and slint to migrate first, which EasyHDR cannot
+    # do unilaterally. This is the same upstream text stack as RUSTSEC-2026-0192 (ttf-parser)
+    # above, whose rationale already lists rustybuzz as one of its consumers. There is no
+    # CVE-class vulnerability today, so the immediate security risk is nil.
+    "RUSTSEC-2026-0206", # rustybuzz: crate is unmaintained by upstream (harfbuzz/rustybuzz#166)
 ] # end of audit ignore list
