@@ -21,7 +21,7 @@ bench = false  # Disable libtest benchmark harness to allow Criterion args (--sa
 # GUI
 # Use Skia renderer for better font rendering quality on Windows
 # The default FemtoVG renderer has poor font rasterization (see: https://github.com/slint-ui/slint/issues/6365)
-slint = { version = "1.13", features = ["renderer-skia"] }
+slint = { version = "1.17", features = ["renderer-skia"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -82,7 +82,7 @@ tauri-winrt-notification = "0.8"  # Windows toast notifications; 0.8 drops the q
 open = "5.3"  # Open URLs in default browser
 
 [build-dependencies]
-slint-build = "1.13"
+slint-build = "1.17"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
