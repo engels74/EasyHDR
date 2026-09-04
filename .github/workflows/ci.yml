@@ -17,6 +17,9 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: windows-latest
+    env:
+      # Exercise the same portable CPU baseline as the distributed release.
+      RUSTFLAGS: "-C target-cpu=x86-64"
 
     steps:
       - name: Checkout repository
@@ -36,7 +39,11 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Build release executable
-        run: cargo build --release --verbose
+        run: cargo build --release --locked --verbose
+
+      - name: Verify release startup and restart
+        run: ./scripts/Test-ReleaseStartup.ps1 -Executable target/release/easyhdr.exe
+        shell: pwsh
 
       - name: Run unit tests (parallel)
         run: cargo test --lib --release

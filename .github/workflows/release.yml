@@ -12,6 +12,9 @@ jobs:
   build-and-scan:
     name: Build, Scan, and Upload Release Asset
     runs-on: windows-latest
+    env:
+      # Release assets must run on users' CPUs, not just the hosted runner's CPU.
+      RUSTFLAGS: "-C target-cpu=x86-64"
 
     steps:
       - name: Checkout repository
@@ -24,9 +27,11 @@ jobs:
           cache: true
 
       - name: Build optimized release executable
-        run: cargo build --release --verbose
-        env:
-          RUSTFLAGS: "-C target-cpu=native"
+        run: cargo build --release --locked --verbose
+
+      - name: Verify release startup and restart
+        run: ./scripts/Test-ReleaseStartup.ps1 -Executable target/release/easyhdr.exe
+        shell: pwsh
 
       - name: Verify executable exists
         run: |
