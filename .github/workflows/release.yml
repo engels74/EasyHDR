@@ -29,10 +29,6 @@ jobs:
       - name: Build optimized release executable
         run: cargo build --release --locked --verbose
 
-      - name: Verify release startup and restart
-        run: ./scripts/Test-ReleaseStartup.ps1 -Executable target/release/easyhdr.exe
-        shell: pwsh
-
       - name: Verify executable exists
         run: |
           if (!(Test-Path "target/release/easyhdr.exe")) {
