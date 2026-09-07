@@ -31,7 +31,7 @@ jobs:
           sudo apt-get install -y libfontconfig1-dev
 
       - name: Setup Rust nightly with Miri
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: nightly
           components: miri
@@ -70,7 +70,7 @@ jobs:
           sudo apt-get install -y libfontconfig1-dev
 
       - name: Setup Rust nightly with Miri
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@v2
         with:
           toolchain: nightly
           components: miri
