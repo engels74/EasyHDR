@@ -25,6 +25,12 @@ jobs:
         toolchain: nightly-2026-09-07
         components: miri
         cache: true
+    # Miri's generated sysroot manifest has an unused dependency. Build only
+    # that upstream sysroot with warnings visible; project tests still deny them.
+    - name: Prepare Miri sysroot
+      run: cargo +nightly-2026-09-07 miri setup
+      env:
+        CARGO_BUILD_WARNINGS: warn
     - name: Run Miri on portable code (error module)
       run: |
         cargo +nightly-2026-09-07 miri test --locked --lib error -- --test-threads=1
@@ -49,6 +55,12 @@ jobs:
         toolchain: nightly-2026-09-07
         components: miri
         cache: true
+    # Miri's generated sysroot manifest has an unused dependency. Build only
+    # that upstream sysroot with warnings visible; project tests still deny them.
+    - name: Prepare Miri sysroot
+      run: cargo +nightly-2026-09-07 miri setup
+      env:
+        CARGO_BUILD_WARNINGS: warn
     - name: Run Miri on all library tests
       run: cargo +nightly-2026-09-07 miri test --locked --lib -- --test-threads=1
       env:
