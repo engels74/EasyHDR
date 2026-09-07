@@ -1,392 +1,371 @@
----
 name: Performance Profiling
-
-# Run on demand or when performance-related files change
-"on":
+'on':
   workflow_dispatch:
     inputs:
       enable_cpu_profiling:
-        description: 'Enable CPU profiling with flamegraph'
+        description: Enable CPU profiling with flamegraph
         required: false
         type: boolean
         default: true
       enable_allocation_profiling:
-        description: 'Enable allocation profiling with DHAT'
+        description: Enable allocation profiling with DHAT
         required: false
         type: boolean
         default: true
   push:
     branches:
-      - main
-      - 'feat/perf-**'
+    - main
+    - feat/perf-**
     paths:
-      - 'src/monitor/**'
-      - 'src/controller/**'
-      - 'benches/**'
-      - 'docs/performance_plan.md'
+    - src/monitor/**
+    - src/controller/**
+    - benches/**
+    - docs/performance_plan.md
   pull_request:
     paths:
-      - 'src/monitor/**'
-      - 'src/controller/**'
-      - 'benches/**'
-
+    - src/monitor/**
+    - src/controller/**
+    - benches/**
 permissions:
   contents: read
-
 env:
   RUST_BACKTRACE: 1
-  # Enable frame pointers for accurate profiling
-  RUSTFLAGS: "-C force-frame-pointers=yes"
-
+  RUSTFLAGS: -C force-frame-pointers=yes
 jobs:
   criterion-benchmarks:
     name: Criterion Benchmarks
-    runs-on: windows-latest
-
+    runs-on: windows-2025
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          cache: true
-
-      - name: Run benchmarks
-        run: |
-          # Run all benchmarks including the new process_monitor_bench
-          # Note: cargo bench always uses release mode, no --profile flag needed
-          # Cargo.toml has bench = false for [lib] to prevent libtest harness conflicts
-          cargo bench -- --save-baseline ci-baseline
-
-      - name: Generate benchmark report
-        run: |
-          echo "# Criterion Benchmark Results" > benchmark-summary.md
-          echo "" >> benchmark-summary.md
-          echo "**Commit:** ${{ github.sha }}" >> benchmark-summary.md
-          echo "**Branch:** ${{ github.ref_name }}" >> benchmark-summary.md
-          echo "**Date:** $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")" >> benchmark-summary.md
-          echo "" >> benchmark-summary.md
-          echo "See attached artifacts for detailed Criterion reports." >> benchmark-summary.md
-
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v7
-        with:
-          name: criterion-benchmarks-${{ github.sha }}
-          path: |
-            target/criterion/
-            benchmark-summary.md
-          retention-days: 30
-          if-no-files-found: error
-
-      - name: Add benchmark summary to job summary
-        run: |
-          Get-Content benchmark-summary.md >> $env:GITHUB_STEP_SUMMARY
-
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Setup Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+      with:
+        cache: true
+    - name: Run benchmarks
+      run: |
+        # Run all benchmarks including the new process_monitor_bench
+        # Note: cargo bench always uses release mode, no --profile flag needed
+        # Cargo.toml has bench = false for [lib] to prevent libtest harness conflicts
+        cargo bench --locked -- --save-baseline ci-baseline
+    - name: Generate benchmark report
+      run: |
+        echo "# Criterion Benchmark Results" > benchmark-summary.md
+        echo "" >> benchmark-summary.md
+        echo "**Commit:** ${{ github.sha }}" >> benchmark-summary.md
+        echo "**Branch:** $env:PROFILE_REF" >> benchmark-summary.md
+        echo "**Date:** $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")" >> benchmark-summary.md
+        echo "" >> benchmark-summary.md
+        echo "See attached artifacts for detailed Criterion reports." >> benchmark-summary.md
+      env:
+        PROFILE_REF: ${{ github.ref_name }}
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: criterion-benchmarks-${{ github.sha }}
+        path: |
+          target/criterion/
+          benchmark-summary.md
+        retention-days: 30
+        if-no-files-found: error
+    - name: Add benchmark summary to job summary
+      run: |
+        Get-Content benchmark-summary.md >> $env:GITHUB_STEP_SUMMARY
+    timeout-minutes: 45
   cpu-profiling:
     name: CPU Profiling (flamegraph)
-    runs-on: windows-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_cpu_profiling == 'true' || github.event_name != 'workflow_dispatch' }}
-
+    runs-on: windows-2025
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_cpu_profiling == 'true' || github.event_name
+      != 'workflow_dispatch' }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Setup Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+      with:
+        cache: true
+    - uses: taiki-e/install-action@v2.87.8
+      with:
+        tool: flamegraph@0.6.14
+    - name: Run CPU profiling with flamegraph
+      run: |
+        # Create output directory
+        New-Item -ItemType Directory -Force -Path profiling-results
 
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          cache: true
+        Write-Host "Running CPU profiling with flamegraph..."
+        Write-Host "This will exercise poll_processes and handle_process_event for 30 seconds"
+        Write-Host ""
 
-      - name: Install flamegraph
-        run: cargo install flamegraph
+        # Force cargo-flamegraph to use blondie backend instead of dtrace
+        # Windows Server 2025 has dtrace installed, but it doesn't collect stack samples properly in CI
+        # The blondie backend uses ETW and works reliably on Windows
+        # Setting DTRACE to a non-existent command forces cargo-flamegraph to skip dtrace and use blondie
+        Write-Host "Disabling dtrace backend to force blondie (ETW) backend..."
+        $env:DTRACE = "dtrace-disabled"
 
-      - name: Run CPU profiling with flamegraph
-        run: |
-          # Create output directory
-          New-Item -ItemType Directory -Force -Path profiling-results
+        # Generate flamegraph with profiling profile (includes debug symbols)
+        # RUSTFLAGS is already set globally with force-frame-pointers
+        # The test runs for 30 seconds and exercises the hot paths
+        # blondie backend will be used automatically since DTRACE points to non-existent command
+        cargo flamegraph --profile profiling --test cpu_profiling_test --output profiling-results/cpu-flamegraph.svg -- --exact --nocapture profile_process_monitoring_hot_paths
 
-          Write-Host "Running CPU profiling with flamegraph..."
-          Write-Host "This will exercise poll_processes and handle_process_event for 30 seconds"
-          Write-Host ""
+        Write-Host ""
 
-          # Force cargo-flamegraph to use blondie backend instead of dtrace
-          # Windows Server 2025 has dtrace installed, but it doesn't collect stack samples properly in CI
-          # The blondie backend uses ETW and works reliably on Windows
-          # Setting DTRACE to a non-existent command forces cargo-flamegraph to skip dtrace and use blondie
-          Write-Host "Disabling dtrace backend to force blondie (ETW) backend..."
-          $env:DTRACE = "dtrace-disabled"
-
-          # Generate flamegraph with profiling profile (includes debug symbols)
-          # RUSTFLAGS is already set globally with force-frame-pointers
-          # The test runs for 30 seconds and exercises the hot paths
-          # blondie backend will be used automatically since DTRACE points to non-existent command
-          cargo flamegraph --profile profiling --test cpu_profiling_test --output profiling-results/cpu-flamegraph.svg -- --exact --nocapture profile_process_monitoring_hot_paths
-
-          Write-Host ""
-
-          # Verify flamegraph was generated and has meaningful content
-          if (Test-Path profiling-results/cpu-flamegraph.svg) {
-            $size = (Get-Item profiling-results/cpu-flamegraph.svg).Length / 1KB
-            # A valid flamegraph should be larger than 1KB (empty/error flamegraphs are ~0.6KB)
-            if ($size -gt 1.0) {
-              Write-Host "✓ Flamegraph generated successfully: $([math]::Round($size, 1)) KB"
-              Write-Host ""
-              Write-Host "The flamegraph contains symbolicated function names and can be viewed in any browser."
-              Write-Host "Look for: easyhdr::monitor::process_monitor::poll_processes (>20% CPU expected)"
-            } else {
-              Write-Error "Flamegraph generated but appears empty (${size} KB). This indicates profiling failed to collect samples."
-              exit 1
-            }
+        # Verify flamegraph was generated and has meaningful content
+        if (Test-Path profiling-results/cpu-flamegraph.svg) {
+          $size = (Get-Item profiling-results/cpu-flamegraph.svg).Length / 1KB
+          # A valid flamegraph should be larger than 1KB (empty/error flamegraphs are ~0.6KB)
+          if ($size -gt 1.0) {
+            Write-Host "✓ Flamegraph generated successfully: $([math]::Round($size, 1)) KB"
+            Write-Host ""
+            Write-Host "The flamegraph contains symbolicated function names and can be viewed in any browser."
+            Write-Host "Look for: easyhdr::monitor::process_monitor::poll_processes (>20% CPU expected)"
           } else {
-            Write-Error "Flamegraph generation failed - no output file created"
+            Write-Error "Flamegraph generated but appears empty (${size} KB). This indicates profiling failed to collect samples."
             exit 1
           }
+        } else {
+          Write-Error "Flamegraph generation failed - no output file created"
+          exit 1
+        }
+    - name: Generate profiling report
+      run: |
+        Write-Host "Generating profiling report README..."
 
-      - name: Generate profiling report
-        run: |
-          Write-Host "Generating profiling report README..."
+        $readmeContent = @"
+        # CPU Profiling Results (flamegraph)
 
-          $readmeContent = @"
-          # CPU Profiling Results (flamegraph)
+        **Commit:** ${{ github.sha }}
+        **Branch:** $env:PROFILE_REF
 
-          **Commit:** ${{ github.sha }}
-          **Branch:** ${{ github.ref_name }}
+        ## Profile Details
 
-          ## Profile Details
+        This flamegraph was generated by running the dedicated CPU profiling test (``tests/cpu_profiling_test.rs``) which exercises the hot paths in process monitoring and event handling for 30 seconds.
 
-          This flamegraph was generated by running the dedicated CPU profiling test (``tests/cpu_profiling_test.rs``) which exercises the hot paths in process monitoring and event handling for 30 seconds.
+        **Test workload:**
+        - Process monitor polling at 500ms intervals (aggressive for profiling)
+        - Monitors 5 common Windows applications (Chrome, Firefox, OBS, VS Code, Notepad)
+        - Exercises both ``poll_processes`` (process enumeration) and ``handle_process_event`` (event handling)
 
-          **Test workload:**
-          - Process monitor polling at 500ms intervals (aggressive for profiling)
-          - Monitors 5 common Windows applications (Chrome, Firefox, OBS, VS Code, Notepad)
-          - Exercises both ``poll_processes`` (process enumeration) and ``handle_process_event`` (event handling)
+        **Expected to show symbolicated function names** like:
+        - ``easyhdr::monitor::process_monitor::poll_processes``
+        - ``easyhdr::controller::app_controller::handle_process_event``
+        - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot``
 
-          **Expected to show symbolicated function names** like:
-          - ``easyhdr::monitor::process_monitor::poll_processes``
-          - ``easyhdr::controller::app_controller::handle_process_event``
-          - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot``
+        ## Viewing the Flamegraph
 
-          ## Viewing the Flamegraph
+        This artifact contains a self-contained **SVG flamegraph** with full debug symbols from the 30-second CPU profiling test.
 
-          This artifact contains a self-contained **SVG flamegraph** with full debug symbols from the 30-second CPU profiling test.
+        ### How to View
 
-          ### How to View
+        1. **Download this artifact** and extract ``cpu-flamegraph.svg``
+        2. **Open in any web browser** (Chrome, Firefox, Edge, Safari)
+        3. **Interact with the flamegraph:**
+           - **Click any box** to zoom into that call stack
+           - **Click the top box** to reset zoom
+           - **Search** using the search box (top right) - try "poll_processes" or "handle_process_event"
+           - **Hover over boxes** to see full function names and percentages
+           - **Box width = CPU time** - wider boxes consumed more CPU
 
-          1. **Download this artifact** and extract ``cpu-flamegraph.svg``
-          2. **Open in any web browser** (Chrome, Firefox, Edge, Safari)
-          3. **Interact with the flamegraph:**
-             - **Click any box** to zoom into that call stack
-             - **Click the top box** to reset zoom
-             - **Search** using the search box (top right) - try "poll_processes" or "handle_process_event"
-             - **Hover over boxes** to see full function names and percentages
-             - **Box width = CPU time** - wider boxes consumed more CPU
+        ### Color Key
 
-          ### Color Key
+        - **Red/orange colors:** User code (EasyHDR functions)
+        - **Yellow colors:** System libraries (Windows APIs)
+        - **Green colors:** Kernel functions
 
-          - **Red/orange colors:** User code (EasyHDR functions)
-          - **Yellow colors:** System libraries (Windows APIs)
-          - **Green colors:** Kernel functions
+        ## What to Look For
 
-          ## What to Look For
+        **The flamegraph should show actual Rust function names, NOT raw memory addresses!**
 
-          **The flamegraph should show actual Rust function names, NOT raw memory addresses!**
+        ✅ **Expected hotspots:**
+        - ``easyhdr::monitor::process_monitor::poll_processes`` should be **>20% of flamegraph width**
+        - ``easyhdr::controller::app_controller::handle_process_event`` should be **>5% visible**
+        - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot`` (Windows API)
+        - ``alloc::string::String`` (string allocations)
 
-          ✅ **Expected hotspots:**
-          - ``easyhdr::monitor::process_monitor::poll_processes`` should be **>20% of flamegraph width**
-          - ``easyhdr::controller::app_controller::handle_process_event`` should be **>5% visible**
-          - ``windows::Win32::System::Diagnostics::ToolHelp::CreateToolhelp32Snapshot`` (Windows API)
-          - ``alloc::string::String`` (string allocations)
+        ❌ **If you see raw addresses** (like ``0xadd297``, ``0x7ff6abc12345``):
+        - Symbolication failed - check that test was built with ``--profile profiling``
+        - Verify ``RUSTFLAGS="-C force-frame-pointers=yes"`` was set
 
-          ❌ **If you see raw addresses** (like ``0xadd297``, ``0x7ff6abc12345``):
-          - Symbolication failed - check that test was built with ``--profile profiling``
-          - Verify ``RUSTFLAGS="-C force-frame-pointers=yes"`` was set
+        ### Analysis Tips
 
-          ### Analysis Tips
+        - **Windows API calls:** Search for "CreateToolhelp32Snapshot", "Process32FirstW", "Process32NextW"
+        - **String allocations:** Search for "String::from" or "alloc::string"
+        - **Lock contention:** Search for "parking_lot::Mutex::lock" or "RwLock"
+        - **Hot paths:** The widest boxes at the bottom are the most expensive leaf functions
 
-          - **Windows API calls:** Search for "CreateToolhelp32Snapshot", "Process32FirstW", "Process32NextW"
-          - **String allocations:** Search for "String::from" or "alloc::string"
-          - **Lock contention:** Search for "parking_lot::Mutex::lock" or "RwLock"
-          - **Hot paths:** The widest boxes at the bottom are the most expensive leaf functions
+        ## Note on CI Generation
 
-          ## Note on CI Generation
+        This flamegraph was generated in CI using ``cargo flamegraph --profile profiling``, which automatically symbolicates function names during generation. No manual conversion or symbol loading required.
 
-          This flamegraph was generated in CI using ``cargo flamegraph --profile profiling``, which automatically symbolicates function names during generation. No manual conversion or symbol loading required.
+        ## Troubleshooting
 
-          ## Troubleshooting
+        If the flamegraph shows raw addresses instead of function names:
+        1. Verify the test binary was built with ``--profile profiling`` (includes ``debug = 2``)
+        2. Check that ``RUSTFLAGS="-C force-frame-pointers=yes"`` was set during build
+        3. Ensure flamegraph has access to PDB files (should be in ``target/profiling/deps/``)
 
-          If the flamegraph shows raw addresses instead of function names:
-          1. Verify the test binary was built with ``--profile profiling`` (includes ``debug = 2``)
-          2. Check that ``RUSTFLAGS="-C force-frame-pointers=yes"`` was set during build
-          3. Ensure flamegraph has access to PDB files (should be in ``target/profiling/deps/``)
+        ## Next Steps
 
-          ## Next Steps
+        Use the flamegraph to:
+        1. Confirm ``poll_processes`` is the main CPU hotspot
+        2. Identify allocation-heavy paths (complement with DHAT profiling)
+        3. Document baseline metrics in ``docs/performance_plan.md``
+        "@
 
-          Use the flamegraph to:
-          1. Confirm ``poll_processes`` is the main CPU hotspot
-          2. Identify allocation-heavy paths (complement with DHAT profiling)
-          3. Document baseline metrics in ``docs/performance_plan.md``
-          "@
+        $readmeContent | Out-File -FilePath profiling-results/README.md -Encoding UTF8
 
-          $readmeContent | Out-File -FilePath profiling-results/README.md -Encoding UTF8
-
-          Write-Host "✓ Profiling report generated successfully"
-
-      - name: Upload CPU profiling artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: cpu-profiling-flamegraph-${{ github.sha }}
-          path: profiling-results/
-          retention-days: 30
-          if-no-files-found: error
-
+        Write-Host "✓ Profiling report generated successfully"
+      env:
+        PROFILE_REF: ${{ github.ref_name }}
+    - name: Upload CPU profiling artifacts
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: cpu-profiling-flamegraph-${{ github.sha }}
+        path: profiling-results/
+        retention-days: 30
+        if-no-files-found: error
+    timeout-minutes: 45
   allocation-profiling:
     name: Allocation Profiling (DHAT)
-    runs-on: windows-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_allocation_profiling == 'true' || github.event_name != 'workflow_dispatch' }}
-
+    runs-on: windows-2025
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enable_allocation_profiling == 'true'
+      || github.event_name != 'workflow_dispatch' }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Setup Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+      with:
+        cache: true
+    - name: Run allocation profiling
+      run: |
+        # Run production allocation profiling
+        # This test exercises ProcessMonitor + AppController for 30 seconds
+        # to capture realistic allocation patterns from production code
+        # See tests/dhat_profiling_test.rs for implementation details
+        # Note: --exact flag ensures precise test name matching for cfg-gated tests
+        # Mock HDR controller allows this to succeed in CI without real displays
+        cargo test --locked --test dhat_profiling_test --release -- profile_production_allocation_patterns --exact --nocapture
+    - name: Generate DHAT report
+      run: |
+        New-Item -ItemType Directory -Force -Path dhat-results
 
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          cache: true
+        # Move DHAT output if it exists
+        if (Test-Path dhat-heap.json) {
+          Move-Item dhat-heap.json dhat-results/
+        }
 
-      - name: Run allocation profiling
-        run: |
-          # Run production allocation profiling
-          # This test exercises ProcessMonitor + AppController for 30 seconds
-          # to capture realistic allocation patterns from production code
-          # See tests/dhat_profiling_test.rs for implementation details
-          # Note: --exact flag ensures precise test name matching for cfg-gated tests
-          # Mock HDR controller allows this to succeed in CI without real displays
-          cargo test --test dhat_profiling_test --release -- profile_production_allocation_patterns --exact --nocapture
+        @"
+        # Allocation Profiling Results (DHAT)
 
-      - name: Generate DHAT report
-        run: |
-          New-Item -ItemType Directory -Force -Path dhat-results
+        **Commit:** ${{ github.sha }}
+        **Branch:** $env:PROFILE_REF
 
-          # Move DHAT output if it exists
-          if (Test-Path dhat-heap.json) {
-            Move-Item dhat-heap.json dhat-results/
-          }
+        ## Profile Details
 
-          @"
-          # Allocation Profiling Results (DHAT)
+        This DHAT profile was generated by running the production allocation profiling test (``tests/dhat_profiling_test.rs::profile_production_allocation_patterns``) which exercises the full ProcessMonitor and AppController workload for 30 seconds.
 
-          **Commit:** ${{ github.sha }}
-          **Branch:** ${{ github.ref_name }}
+        **Test workload:**
+        - Process monitor polling at 500ms intervals (aggressive for profiling)
+        - Monitors 5 common Windows applications (Chrome, Firefox, OBS, VS Code, Notepad)
+        - Exercises both ``poll_processes`` (process enumeration) and ``handle_process_event`` (event handling)
+        - **Runtime:** ~30 seconds (not microseconds - verify in DHAT viewer)
 
-          ## Profile Details
+        ## Viewing the Profile
 
-          This DHAT profile was generated by running the production allocation profiling test (``tests/dhat_profiling_test.rs::profile_production_allocation_patterns``) which exercises the full ProcessMonitor and AppController workload for 30 seconds.
+        1. Download the ``dhat-heap.json`` artifact from this workflow run
+        2. Open [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)
+        3. Load ``dhat-heap.json`` in the viewer
+        4. Explore allocation patterns and stack traces
 
-          **Test workload:**
-          - Process monitor polling at 500ms intervals (aggressive for profiling)
-          - Monitors 5 common Windows applications (Chrome, Firefox, OBS, VS Code, Notepad)
-          - Exercises both ``poll_processes`` (process enumeration) and ``handle_process_event`` (event handling)
-          - **Runtime:** ~30 seconds (not microseconds - verify in DHAT viewer)
+        ## What to Look For
 
-          ## Viewing the Profile
+        **Critical validation - verify these metrics in the DHAT viewer:**
 
-          1. Download the ``dhat-heap.json`` artifact from this workflow run
-          2. Open [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)
-          3. Load ``dhat-heap.json`` in the viewer
-          4. Explore allocation patterns and stack traces
+        - **Thread verification success**: Check test output for "✓ ProcessMonitor verified"
+        - **Total runtime**: Should show ~30 seconds (``t-end`` field), NOT microseconds
+        - **Poll cycles**: Test output should show "Total poll cycles: 60+" (500ms interval = 60 cycles/30s)
+        - **Allocation rate**: Calculate: total blocks ÷ runtime in seconds = 200-500 allocs/sec
+        - **Hot allocation paths (look for these in the call stacks):**
+          - ``easyhdr::monitor::process_monitor::poll_processes``
+          - ``alloc::string::String::from`` (process name extraction)
+          - ``easyhdr::monitor::uwp::detect_uwp_process``
+          - ``alloc::vec::Vec::clone`` (watch list cloning)
+          - ``easyhdr::monitor::AppIdentifier`` creation
+          - ``easyhdr::controller::app_controller::handle_process_event``
 
-          ## What to Look For
+        **Expected allocation hotspots:**
+        1. Process name string allocations (~250 per poll)
+        2. AppIdentifier creation in poll_processes
+        3. Watch list cloning overhead (AppController event handling)
+        4. UWP detection allocations
 
-          **Critical validation - verify these metrics in the DHAT viewer:**
+        ## Troubleshooting
 
-          - **Thread verification success**: Check test output for "✓ ProcessMonitor verified"
-          - **Total runtime**: Should show ~30 seconds (``t-end`` field), NOT microseconds
-          - **Poll cycles**: Test output should show "Total poll cycles: 60+" (500ms interval = 60 cycles/30s)
-          - **Allocation rate**: Calculate: total blocks ÷ runtime in seconds = 200-500 allocs/sec
-          - **Hot allocation paths (look for these in the call stacks):**
-            - ``easyhdr::monitor::process_monitor::poll_processes``
-            - ``alloc::string::String::from`` (process name extraction)
-            - ``easyhdr::monitor::uwp::detect_uwp_process``
-            - ``alloc::vec::Vec::clone`` (watch list cloning)
-            - ``easyhdr::monitor::AppIdentifier`` creation
-            - ``easyhdr::controller::app_controller::handle_process_event``
+        **If test panics with "ProcessMonitor failed to complete 3 poll cycles":**
+        - Windows APIs (CreateToolhelp32Snapshot) are not available in CI
+        - Check CI logs for Windows API errors
+        - Verify mock HDR controller is being used (should be)
 
-          **Expected allocation hotspots:**
-          1. Process name string allocations (~250 per poll)
-          2. AppIdentifier creation in poll_processes
-          3. Watch list cloning overhead (AppController event handling)
-          4. UWP detection allocations
+        **If runtime shows microseconds instead of 30 seconds:**
+        - The test didn't run long enough - check CI logs for panic/errors
+        - Verify the test name in the workflow matches ``profile_production_allocation_patterns``
 
-          ## Troubleshooting
+        **If allocation rate is >1000 allocs/sec:**
+        - May indicate test infrastructure overhead instead of production code
+        - Verify stack traces show actual EasyHDR functions, not test harness
 
-          **If test panics with "ProcessMonitor failed to complete 3 poll cycles":**
-          - Windows APIs (CreateToolhelp32Snapshot) are not available in CI
-          - Check CI logs for Windows API errors
-          - Verify mock HDR controller is being used (should be)
+        ## Next Steps
 
-          **If runtime shows microseconds instead of 30 seconds:**
-          - The test didn't run long enough - check CI logs for panic/errors
-          - Verify the test name in the workflow matches ``profile_production_allocation_patterns``
-
-          **If allocation rate is >1000 allocs/sec:**
-          - May indicate test infrastructure overhead instead of production code
-          - Verify stack traces show actual EasyHDR functions, not test harness
-
-          ## Next Steps
-
-          Use this baseline to:
-          1. Document allocation rate in ``docs/performance_plan.md``
-          2. Identify optimization opportunities
-          3. Validate allocation improvements after optimizations
-          "@ | Out-File -FilePath dhat-results/README.md -Encoding UTF8
-
-      - name: Upload DHAT profiling artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: allocation-profiling-dhat-${{ github.sha }}
-          path: dhat-results/
-          retention-days: 30
-          if-no-files-found: warn
-
+        Use this baseline to:
+        1. Document allocation rate in ``docs/performance_plan.md``
+        2. Identify optimization opportunities
+        3. Validate allocation improvements after optimizations
+        "@ | Out-File -FilePath dhat-results/README.md -Encoding UTF8
+      env:
+        PROFILE_REF: ${{ github.ref_name }}
+    - name: Upload DHAT profiling artifacts
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: allocation-profiling-dhat-${{ github.sha }}
+        path: dhat-results/
+        retention-days: 30
+        if-no-files-found: warn
+    timeout-minutes: 45
   profiling-summary:
     name: Generate Profiling Summary
-    runs-on: ubuntu-latest
-    needs: [criterion-benchmarks, cpu-profiling, allocation-profiling]
+    runs-on: ubuntu-24.04
+    needs:
+    - criterion-benchmarks
+    - cpu-profiling
+    - allocation-profiling
     if: always()
-
     steps:
-      - name: Generate summary
-        run: |
-          echo "# Performance Profiling Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "## Profiling Jobs Status" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Criterion Benchmarks:** ${{ needs.criterion-benchmarks.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **CPU Profiling (flamegraph):** ${{ needs.cpu-profiling.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Allocation Profiling (DHAT):** ${{ needs.allocation-profiling.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. Download profiling artifacts from the workflow run" >> $GITHUB_STEP_SUMMARY
-          echo "2. Review Criterion benchmark reports in \`target/criterion/\`" >> $GITHUB_STEP_SUMMARY
-          echo "3. View CPU flamegraph (SVG) in any web browser" >> $GITHUB_STEP_SUMMARY
-          echo "4. View allocation profile at [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)" >> $GITHUB_STEP_SUMMARY
-          echo "5. Document baseline metrics in \`docs/performance_plan.md\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          echo "## Success Criteria" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- [ ] Flamegraph identifies \`poll_processes\` as hotspot (>20% CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- [ ] Flamegraph shows \`handle_process_event\` contribution (>5% CPU)" >> $GITHUB_STEP_SUMMARY
-          echo "- [ ] DHAT confirms 200-500 allocations/sec baseline" >> $GITHUB_STEP_SUMMARY
-          echo "- [ ] Criterion baseline captured for regression detection" >> $GITHUB_STEP_SUMMARY
-          echo "- [ ] Benchmarks run with varying workloads documented" >> $GITHUB_STEP_SUMMARY
+    - name: Generate summary
+      run: "{\n  echo \"# Performance Profiling Summary\"\n  echo \"\"\n  echo \"**Commit:** ${{ github.sha }}\"\
+        \n  echo \"**Branch:** $PROFILE_REF\"\n  echo \"**Triggered by:** ${{ github.event_name }}\"\n  echo \"\"\
+        \n  \n  echo \"## Profiling Jobs Status\"\n  echo \"\"\n  echo \"- **Criterion Benchmarks:** ${{ needs.criterion-benchmarks.result\
+        \ }}\"\n  echo \"- **CPU Profiling (flamegraph):** ${{ needs.cpu-profiling.result }}\"\n  echo \"- **Allocation\
+        \ Profiling (DHAT):** ${{ needs.allocation-profiling.result }}\"\n  echo \"\"\n  \n  echo \"## Next Steps\"\
+        \n  echo \"\"\n  echo \"1. Download profiling artifacts from the workflow run\"\n  echo \"2. Review Criterion\
+        \ benchmark reports in \\`target/criterion/\\`\"\n  echo \"3. View CPU flamegraph (SVG) in any web browser\"\
+        \n  echo \"4. View allocation profile at [DHAT Viewer](https://nnethercote.github.io/dh_view/dh_view.html)\"\
+        \n  echo \"5. Document baseline metrics in \\`docs/performance_plan.md\\`\"\n  echo \"\"\n  \n  echo \"\
+        ## Success Criteria\"\n  echo \"\"\n  echo \"- [ ] Flamegraph identifies \\`poll_processes\\` as hotspot\
+        \ (>20% CPU)\"\n  echo \"- [ ] Flamegraph shows \\`handle_process_event\\` contribution (>5% CPU)\"\n  echo\
+        \ \"- [ ] DHAT confirms 200-500 allocations/sec baseline\"\n  echo \"- [ ] Criterion baseline captured for\
+        \ regression detection\"\n  echo \"- [ ] Benchmarks run with varying workloads documented\"\n} >> \"$GITHUB_STEP_SUMMARY\"\
+        \n"
+      env:
+        PROFILE_REF: ${{ github.ref_name }}
+    timeout-minutes: 45
+concurrency:
+  group: profiling-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true

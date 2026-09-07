@@ -1,95 +1,66 @@
----
 name: Miri
-
-"on":
-  push:
-    branches:
-      - '**'
-  pull_request:
-    branches:
-      - '**'
-  workflow_dispatch:
-
+'on':
+  workflow_call: {}
+  workflow_dispatch: {}
+  schedule:
+  - cron: 30 0 * * 1
 permissions:
   contents: read
-
 jobs:
   miri-portable:
     name: Miri Portable Code
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-
-      - name: Install fontconfig development headers
-        # Slint 1.17 upgraded fontique to 0.10, which links the system fontconfig
-        # on Linux via yeslogic-fontconfig-sys. Not needed for the Windows target
-        # we ship, but this job builds the dependency graph on Linux.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev
-
-      - name: Setup Rust nightly with Miri
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
-          components: miri
-          cache: true
-
-      - name: Run Miri on portable code (error module)
-        run: |
-          cargo miri test --lib error -- --test-threads=1
-        env:
-          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check
-        # --test-threads=1 is used for Miri to ensure deterministic execution and better UB detection
-        # This is a Miri-specific requirement, not related to test isolation
-        # No continue-on-error: These tests should pass and will fail CI if UB is detected
-        #
-        # Note: The config module is NOT tested here because it triggers rayon initialization
-        # (via slint → image → rayon dependency chain), which uses crossbeam-epoch 0.9.18.
-        # crossbeam-epoch 0.9.18 has known Stacked Borrows violations that cause Miri to fail,
-        # even without strict provenance checking. These are fixed in crossbeam-epoch 0.10.x
-        # but rayon 1.11 hasn't updated yet. The config module is still tested in the
-        # "best effort" full coverage job below (which allows failures for FFI/dependency issues).
-
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Install fontconfig development headers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfontconfig1-dev
+    - name: Setup Rust nightly with Miri
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+      with:
+        toolchain: nightly-2026-09-07
+        components: miri
+        cache: true
+    - name: Run Miri on portable code (error module)
+      run: |
+        cargo +nightly-2026-09-07 miri test --locked --lib error -- --test-threads=1
+      env:
+        MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-symbolic-alignment-check
+    timeout-minutes: 45
   miri-full:
     name: Miri Full Coverage (Best Effort)
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-
-      - name: Install fontconfig development headers
-        # Slint 1.17 upgraded fontique to 0.10, which links the system fontconfig
-        # on Linux via yeslogic-fontconfig-sys. Not needed for the Windows target
-        # we ship, but this job builds the dependency graph on Linux.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev
-
-      - name: Setup Rust nightly with Miri
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
-          components: miri
-          cache: true
-
-      - name: Run Miri on all library tests
-        run: cargo miri test --lib -- --test-threads=1
-        env:
-          MIRIFLAGS: -Zmiri-disable-isolation
-        continue-on-error: true
-        # --test-threads=1 is used for Miri to ensure deterministic execution and better UB detection
-        # This is a Miri-specific requirement, not related to test isolation
-        # Continue-on-error: Windows FFI calls will fail on Linux Miri
-        # but this still validates pure Rust code in other modules
-
-      - name: Run Miri with strict checking on all tests
-        run: cargo miri test --lib -- --test-threads=1
-        env:
-          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check
-        continue-on-error: true
-        # --test-threads=1 is used for Miri to ensure deterministic execution and better UB detection
-        # Strict mode catches additional provenance and alignment issues
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Install fontconfig development headers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfontconfig1-dev
+    - name: Setup Rust nightly with Miri
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+      with:
+        toolchain: nightly-2026-09-07
+        components: miri
+        cache: true
+    - name: Run Miri on all library tests
+      run: cargo +nightly-2026-09-07 miri test --locked --lib -- --test-threads=1
+      env:
+        MIRIFLAGS: -Zmiri-disable-isolation
+      continue-on-error: true
+    - name: Run Miri with strict checking on all tests
+      run: cargo +nightly-2026-09-07 miri test --locked --lib -- --test-threads=1
+      env:
+        MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check
+      continue-on-error: true
+    timeout-minutes: 45
+    if: github.event_name == 'schedule'
+concurrency:
+  group: miri-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true

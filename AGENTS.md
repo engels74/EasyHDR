@@ -25,7 +25,7 @@ run on macOS/Linux is not coverage of those paths.
 
 ## Commands
 
-CI (`.github/workflows/ci.yml`, `windows-latest`) runs, in order:
+CI (`.github/workflows/ci.yml`, `windows-2025`, pinned Rust 1.98.0) runs, in order:
 
 ```bash
 cargo fmt --all -- --check
@@ -41,8 +41,8 @@ cargo test --test integration_tests --release -- --test-threads=1
 # repeat for: version_detection_tests memory_usage_test startup_time_test cpu_usage_test
 ```
 
-`icon_cache_tests` and `uwp_process_detection_tests` also need `--test-threads=1` but are **not
-in CI** — run them by hand after touching icon caching or UWP detection.
+`icon_cache_tests` also runs in CI with `--test-threads=1`.
+`uwp_process_detection_tests` remains manual after touching UWP detection.
 `uwp_process_detection_tests` additionally requires Microsoft.WindowsCalculator installed.
 
 Single test case:
@@ -125,6 +125,8 @@ branch has to be added at all three.
 `main` / `master`. Hooks are not installed in a fresh clone; run `prek install`.
 
 ## Reference
+
+- `CI.md` — required gates, locked local commands, automation policy and native coverage limits.
 
 - `.agents/rules/rust-dev-guidelines.md` — 763-line Rust 2024 / 1.93 feature and idiom
   reference, marked `agent_requested`. Read on demand when reaching for a modern-Rust API you
