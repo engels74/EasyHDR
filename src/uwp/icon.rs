@@ -202,11 +202,9 @@ pub fn extract_icon(_logo_path: &Path) -> Result<Vec<u8>> {
 ///
 /// ```no_run
 /// # #[cfg(windows)]
-/// # fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// use windows::Storage::Streams::RandomAccessStreamReference;
-///
-/// let stream_ref: RandomAccessStreamReference = /* obtained from AppListEntry */;
-/// let icon_data = easyhdr::uwp::extract_icon_from_stream(&stream_ref)?;
+/// # fn example(stream_ref: &windows::Storage::Streams::RandomAccessStreamReference)
+/// #     -> Result<(), Box<dyn std::error::Error>> {
+/// let icon_data = easyhdr::uwp::extract_icon_from_stream(stream_ref)?;
 /// assert_eq!(icon_data.len(), 32 * 32 * 4); // 4096 bytes (RGBA)
 /// # Ok(())
 /// # }
