@@ -163,6 +163,10 @@ mod tests {
     #[cfg(windows)]
     use super::{APP_NAME, AutoStartManager, RUN_KEY_PATH};
 
+    // These tests share the same HKCU Run entry; keep each lifecycle atomic.
+    #[cfg(windows)]
+    static AUTOSTART_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// Test that auto-start can be enabled and disabled
     ///
     /// This test verifies the complete lifecycle:
@@ -175,6 +179,10 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_autostart_lifecycle() {
+        let _registry_guard = AUTOSTART_LOCK
+            .lock()
+            .expect("auto-start test lock poisoned");
+
         // Cleanup: ensure auto-start is disabled before we start
         let _ = AutoStartManager::disable();
 
@@ -209,6 +217,10 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_disable_when_already_disabled() {
+        let _registry_guard = AUTOSTART_LOCK
+            .lock()
+            .expect("auto-start test lock poisoned");
+
         // Ensure it's disabled first
         let _ = AutoStartManager::disable();
 
@@ -228,6 +240,10 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_enable_idempotent() {
+        let _registry_guard = AUTOSTART_LOCK
+            .lock()
+            .expect("auto-start test lock poisoned");
+
         // Cleanup
         let _ = AutoStartManager::disable();
 
@@ -252,6 +268,10 @@ mod tests {
     fn test_autostart_handles_paths_with_spaces() {
         use winreg::RegKey;
         use winreg::enums::HKEY_CURRENT_USER;
+
+        let _registry_guard = AUTOSTART_LOCK
+            .lock()
+            .expect("auto-start test lock poisoned");
 
         // Cleanup: ensure auto-start is disabled before we start
         let _ = AutoStartManager::disable();

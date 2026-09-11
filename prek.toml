@@ -27,10 +27,10 @@ hooks = [
     { id = "cargo-fmt", name = "Cargo Fmt", entry = "cargo fmt --all -- --check", language = "system", pass_filenames = false, types = ["rust"] },
 
     # Commit-stage: clippy. On Windows host run native; on other hosts (dev convenience) fall back to cargo-xwin against the MSVC target.
-    { id = "cargo-clippy", name = "Cargo Clippy", entry = "bash -c 'if [ \"$OS\" = \"Windows_NT\" ]; then cargo clippy --all-targets --all-features -- -D warnings; else cargo xwin clippy --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings; fi'", language = "system", pass_filenames = false, types = ["rust"] },
+    { id = "cargo-clippy", name = "Cargo Clippy", entry = "bash -c 'if [ \"$OS\" = \"Windows_NT\" ]; then cargo clippy --locked --all-targets --all-features -- -D warnings; else cargo xwin clippy --locked --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings; fi'", language = "system", pass_filenames = false, types = ["rust"] },
 
     # Push-stage: library tests on Windows; check-only on non-Windows hosts.
-    { id = "cargo-test", name = "Cargo Test", entry = "bash -c 'if [ \"$OS\" = \"Windows_NT\" ]; then cargo test --lib; else cargo xwin check --lib --target x86_64-pc-windows-msvc; fi'", language = "system", pass_filenames = false, stages = ["pre-push"] },
+    { id = "cargo-test", name = "Cargo Test", entry = "bash -c 'if [ \"$OS\" = \"Windows_NT\" ]; then cargo test --locked --lib; else cargo xwin check --locked --lib --target x86_64-pc-windows-msvc; fi'", language = "system", pass_filenames = false, stages = ["pre-push"] },
 ]
 
 # ── Conventional Commits (commit message linting) ──────────────────────────

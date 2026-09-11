@@ -1,147 +1,146 @@
----
 name: Release
-
-"on":
+'on':
   release:
-    types: [published]
-
+    types:
+    - published
 permissions:
-  contents: write
-
+  contents: read
+  pull-requests: read
 jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
   build-and-scan:
     name: Build, Scan, and Upload Release Asset
-    runs-on: windows-latest
+    runs-on: windows-2025
     env:
-      # Release assets must run on users' CPUs, not just the hosted runner's CPU.
-      RUSTFLAGS: "-C target-cpu=x86-64"
-
+      RUSTFLAGS: -C target-cpu=x86-64
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Setup Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+      with:
+        cache: true
+    - name: Build optimized release executable
+      run: cargo build --release --locked --verbose
+    - name: Verify executable exists
+      run: |
+        if (!(Test-Path "target/release/easyhdr.exe")) {
+          Write-Error "Executable not found"
+          exit 1
+        }
+        $size = (Get-Item target/release/easyhdr.exe).Length
+        Write-Host "Executable found: $size bytes"
+      shell: pwsh
+    - name: Upload release asset
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: ${{ github.event.release.tag_name }}
+      run: gh release upload "$env:RELEASE_TAG" target/release/easyhdr.exe --clobber
+      shell: pwsh
+    - name: VirusTotal Scan
+      id: virustotal
+      uses: crazy-max/ghaction-virustotal@v5.0.0
+      with:
+        vt_api_key: ${{ secrets.VT_API_KEY }}
+        files: |
+          \.exe$
+        request_rate: 4
+    - name: Generate VirusTotal results markdown
+      env:
+        VT_ANALYSIS: ${{ steps.virustotal.outputs.analysis }}
+      run: |
+        if ([string]::IsNullOrWhiteSpace($env:VT_ANALYSIS)) {
+          Write-Error "VirusTotal scan did not return analysis results"
+          exit 1
+        }
 
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          cache: true
+        $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+        $results = @()
 
-      - name: Build optimized release executable
-        run: cargo build --release --locked --verbose
-
-      - name: Verify executable exists
-        run: |
-          if (!(Test-Path "target/release/easyhdr.exe")) {
-            Write-Error "Executable not found"
-            exit 1
-          }
-          $size = (Get-Item target/release/easyhdr.exe).Length
-          Write-Host "Executable found: $size bytes"
-        shell: pwsh
-
-      - name: Upload release asset
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.event.release.tag_name }} target/release/easyhdr.exe --clobber
-        shell: pwsh
-
-      - name: VirusTotal Scan
-        id: virustotal
-        uses: crazy-max/ghaction-virustotal@v5
-        with:
-          vt_api_key: ${{ secrets.VT_API_KEY }}
-          files: |
-            \.exe$
-          request_rate: 4
-
-      - name: Generate VirusTotal results markdown
-        env:
-          VT_ANALYSIS: ${{ steps.virustotal.outputs.analysis }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:VT_ANALYSIS)) {
-            Write-Error "VirusTotal scan did not return analysis results"
-            exit 1
-          }
-
-          $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
-          $results = @()
-
-          foreach ($entry in ($env:VT_ANALYSIS -split ',')) {
-            $trimmed = $entry.Trim()
-            if ([string]::IsNullOrWhiteSpace($trimmed)) {
-              continue
-            }
-
-            $separatorIndex = $trimmed.IndexOf('=')
-            if ($separatorIndex -lt 1 -or $separatorIndex -eq ($trimmed.Length - 1)) {
-              Write-Error "Unable to parse VirusTotal analysis entry: $trimmed"
-              exit 1
-            }
-
-            $filename = $trimmed.Substring(0, $separatorIndex).Trim()
-            $reportUrl = $trimmed.Substring($separatorIndex + 1).Trim()
-            $results += [PSCustomObject]@{
-              Filename = $filename
-              ReportUrl = $reportUrl
-            }
+        foreach ($entry in ($env:VT_ANALYSIS -split ',')) {
+          $trimmed = $entry.Trim()
+          if ([string]::IsNullOrWhiteSpace($trimmed)) {
+            continue
           }
 
-          if ($results.Count -eq 0) {
-            Write-Error "VirusTotal analysis output did not contain any parseable results"
+          $separatorIndex = $trimmed.IndexOf('=')
+          if ($separatorIndex -lt 1 -or $separatorIndex -eq ($trimmed.Length - 1)) {
+            Write-Error "Unable to parse VirusTotal analysis entry: $trimmed"
             exit 1
           }
 
-          $markdown = @(
-            "### 🛡️ VirusTotal Scan Results"
-            ""
-            "Scan completed: $timestamp"
-            ""
-            "| File | Report |"
-            "| --- | --- |"
-          )
-
-          foreach ($result in $results) {
-            $markdown += "| $($result.Filename) | [View report]($($result.ReportUrl)) |"
+          $filename = $trimmed.Substring(0, $separatorIndex).Trim()
+          $reportUrl = $trimmed.Substring($separatorIndex + 1).Trim()
+          $results += [PSCustomObject]@{
+            Filename = $filename
+            ReportUrl = $reportUrl
           }
+        }
 
-          $markdown += ""
+        if ($results.Count -eq 0) {
+          Write-Error "VirusTotal analysis output did not contain any parseable results"
+          exit 1
+        }
 
-          $markdown | Out-File -FilePath virustotal-results.md -Encoding utf8
-          $markdown | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-        shell: pwsh
+        $markdown = @(
+          "### 🛡️ VirusTotal Scan Results"
+          ""
+          "Scan completed: $timestamp"
+          ""
+          "| File | Report |"
+          "| --- | --- |"
+        )
 
-      - name: Update release notes with VirusTotal results
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          $startMarker = "<!-- virustotal-results:start -->"
-          $endMarker = "<!-- virustotal-results:end -->"
-          $vtMarkdown = Get-Content -Path virustotal-results.md -Raw
-          $vtBlock = "$startMarker`n---`n`n$vtMarkdown$endMarker"
+        foreach ($result in $results) {
+          $markdown += "| $($result.Filename) | [View report]($($result.ReportUrl)) |"
+        }
 
-          gh release view "$env:RELEASE_TAG" --json body --jq '.body // ""' |
-            Out-File -FilePath current-body.md -Encoding utf8
+        $markdown += ""
 
-          $currentBody = Get-Content -Path current-body.md -Raw
-          $pattern = "(?s)<!-- virustotal-results:start -->.*?<!-- virustotal-results:end -->"
+        $markdown | Out-File -FilePath virustotal-results.md -Encoding utf8
+        $markdown | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+      shell: pwsh
+    - name: Update release notes with VirusTotal results
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: ${{ github.event.release.tag_name }}
+      run: |
+        $startMarker = "<!-- virustotal-results:start -->"
+        $endMarker = "<!-- virustotal-results:end -->"
+        $vtMarkdown = Get-Content -Path virustotal-results.md -Raw
+        $vtBlock = "$startMarker`n---`n`n$vtMarkdown$endMarker"
 
-          if ($currentBody -match $pattern) {
-            $updatedBody = [regex]::Replace($currentBody, $pattern, { param($match) $vtBlock })
-          } elseif ([string]::IsNullOrWhiteSpace($currentBody)) {
-            $updatedBody = "$vtBlock`n"
-          } else {
-            $updatedBody = "$($currentBody.TrimEnd())`n`n$vtBlock`n"
-          }
+        gh release view "$env:RELEASE_TAG" --json body --jq '.body // ""' |
+          Out-File -FilePath current-body.md -Encoding utf8
 
-          $updatedBody | Out-File -FilePath updated-body.md -Encoding utf8
-          gh release edit "$env:RELEASE_TAG" --notes-file updated-body.md
-        shell: pwsh
+        $currentBody = Get-Content -Path current-body.md -Raw
+        $pattern = "(?s)<!-- virustotal-results:start -->.*?<!-- virustotal-results:end -->"
 
-      - name: Upload VirusTotal results artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: virustotal-results
-          path: virustotal-results.md
-          retention-days: 90
-          if-no-files-found: error
+        if ($currentBody -match $pattern) {
+          $updatedBody = [regex]::Replace($currentBody, $pattern, { param($match) $vtBlock })
+        } elseif ([string]::IsNullOrWhiteSpace($currentBody)) {
+          $updatedBody = "$vtBlock`n"
+        } else {
+          $updatedBody = "$($currentBody.TrimEnd())`n`n$vtBlock`n"
+        }
+
+        $updatedBody | Out-File -FilePath updated-body.md -Encoding utf8
+        gh release edit "$env:RELEASE_TAG" --notes-file updated-body.md
+      shell: pwsh
+    - name: Upload VirusTotal results artifact
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: virustotal-results
+        path: virustotal-results.md
+        retention-days: 90
+        if-no-files-found: error
+    timeout-minutes: 45
+    needs: checks
+    permissions:
+      contents: write
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false

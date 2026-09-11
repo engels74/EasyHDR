@@ -1,152 +1,188 @@
----
-name: CI
-
-"on":
-  workflow_dispatch:
+name: ci
+'on':
+  pull_request: {}
   push:
     branches:
-      - '**'
-  pull_request:
-    branches:
-      - '**'
-
+    - main
+  workflow_call: {}
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: PR number for a repair dispatch
+        type: string
+        default: ''
+      expected-head-sha:
+        description: Exact repaired PR commit
+        type: string
+        default: ''
 permissions:
   contents: read
-
+  pull-requests: read
 jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+    - uses: edbfi/automation/actions/dispatch-guard@v1.0.0
+      with:
+        token: ${{ github.token }}
+        pr-number: ${{ inputs.pr-number }}
+        expected-head-sha: ${{ inputs.expected-head-sha }}
   build-and-test:
     name: Build and Test
-    runs-on: windows-latest
+    runs-on: windows-2025
     env:
-      # Exercise the same portable CPU baseline as the distributed release.
-      RUSTFLAGS: "-C target-cpu=x86-64"
-
+      RUSTFLAGS: -C target-cpu=x86-64
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - name: Checkout repository
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Setup Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+      with:
+        components: clippy, rustfmt
+        cache: true
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+    - name: Run Clippy
+      run: cargo clippy --locked --all-targets --all-features -- -D warnings
+    - name: Build release executable
+      run: cargo build --release --locked --verbose
+    - name: Run unit tests (parallel)
+      run: cargo test --locked --lib --release
+      env:
+        RUST_BACKTRACE: 1
+    - name: Run integration tests (sequential - Windows API global state)
+      run: |-
+        cargo test --locked --test integration_tests --release -- --test-threads=1
+        cargo test --locked --test version_detection_tests --release -- --test-threads=1
+        cargo test --locked --test memory_usage_test --release -- --test-threads=1
+        cargo test --locked --test startup_time_test --release -- --test-threads=1
+        cargo test --locked --test cpu_usage_test --release -- --test-threads=1
 
-      - name: Setup Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: clippy, rustfmt
-          cache: true
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Run Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Build release executable
-        run: cargo build --release --locked --verbose
-
-      - name: Run unit tests (parallel)
-        run: cargo test --lib --release
-        env:
-          RUST_BACKTRACE: 1
-
-      - name: Run integration tests (sequential - Windows API global state)
-        run: |
-          cargo test --test integration_tests --release -- --test-threads=1
-          cargo test --test version_detection_tests --release -- --test-threads=1
-          cargo test --test memory_usage_test --release -- --test-threads=1
-          cargo test --test startup_time_test --release -- --test-threads=1
-          cargo test --test cpu_usage_test --release -- --test-threads=1
-        env:
-          RUST_BACKTRACE: 1
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: easyhdr-${{ github.sha }}
-          path: target/release/easyhdr.exe
-          retention-days: 7
-          if-no-files-found: error
-
+        cargo test --locked --test icon_cache_tests --release -- --test-threads=1
+        cargo test --locked --doc --release
+      env:
+        RUST_BACKTRACE: 1
+    - name: Reject tracked-file mutation
+      run: git diff --exit-code HEAD
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: easyhdr-${{ github.sha }}
+        path: target/release/easyhdr.exe
+        retention-days: 7
+        if-no-files-found: error
+    timeout-minutes: 45
+    needs: guard
+    defaults:
+      run:
+        shell: bash
+  security:
+    needs: guard
+    uses: ./.github/workflows/security.yml
+  miri:
+    needs: guard
+    uses: ./.github/workflows/miri.yml
+  hygiene:
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: j178/prek-action@v3.0.0
+      with:
+        prek-version: 0.5.2
+        extra-args: --all-files --hook-stage manual
+      env:
+        SKIP: no-commit-to-branch,cargo-fmt,cargo-clippy,cargo-test
+    - run: git diff --exit-code HEAD
+  required:
+    name: ci / required
+    if: always()
+    needs:
+    - guard
+    - build-and-test
+    - security
+    - miri
+    - hygiene
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+    - uses: edbfi/automation/actions/dispatch-guard@v1.0.0
+      with:
+        token: ${{ github.token }}
+        pr-number: ${{ inputs.pr-number }}
+        expected-head-sha: ${{ inputs.expected-head-sha }}
+    - uses: edbfi/automation/actions/gate@v1.0.0
+      with:
+        needs: ${{ toJSON(needs) }}
+        required: guard build-and-test security miri hygiene
   virustotal-scan:
     name: VirusTotal Scan
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    if: success()
-
+    runs-on: ubuntu-24.04
+    needs:
+    - build-and-test
+    - required
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.HAS_VT_KEY == 'true'
     steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: easyhdr-${{ github.sha }}
-          path: ./artifacts
-
-      - name: VirusTotal Scan
-        id: vt_scan
-        uses: crazy-max/ghaction-virustotal@v5
-        with:
-          vt_api_key: ${{ secrets.VT_API_KEY }}
-          files: |
-            ./artifacts/easyhdr.exe
-          request_rate: 4
-
-      - name: Display VirusTotal Results
-        if: always()
-        run: |
-          echo "## VirusTotal Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Parse the analysis output (format: filename=url)
-          ANALYSIS="${{ steps.vt_scan.outputs.analysis }}"
-
-          if [ -n "$ANALYSIS" ]; then
-            # Split by comma if multiple files
-            IFS=',' read -ra RESULTS <<< "$ANALYSIS"
-
-            for result in "${RESULTS[@]}"; do
-              # Extract filename and URL
-              FILENAME=$(echo "$result" | cut -d'=' -f1)
-              VT_URL=$(echo "$result" | cut -d'=' -f2-)
-
-              echo "### 🔍 $FILENAME" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**VirusTotal Analysis:** [$VT_URL]($VT_URL)" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-
-              # Also output to logs for easy copying
-              echo "::notice title=VirusTotal Scan Complete::$FILENAME scanned - View results at $VT_URL"
-            done
-          else
-            echo "⚠️ No scan results available" >> $GITHUB_STEP_SUMMARY
-            echo "::warning::VirusTotal scan did not return analysis results"
-          fi
-
-      - name: Save VirusTotal URL to artifact
-        if: steps.vt_scan.outputs.analysis != ''
-        run: |
-          mkdir -p ./vt-results
-          echo "${{ steps.vt_scan.outputs.analysis }}" > ./vt-results/scan-url.txt
-
-          # Parse and create a markdown file with clickable link
-          ANALYSIS="${{ steps.vt_scan.outputs.analysis }}"
-          IFS=',' read -ra RESULTS <<< "$ANALYSIS"
-
-          echo "# VirusTotal Scan Results" > ./vt-results/RESULTS.md
-          echo "" >> ./vt-results/RESULTS.md
-          echo "Scan Date: $(date -u)" >> ./vt-results/RESULTS.md
-          echo "Commit: ${{ github.sha }}" >> ./vt-results/RESULTS.md
-          echo "" >> ./vt-results/RESULTS.md
-
+    - name: Download build artifact
+      uses: actions/download-artifact@v8.0.1
+      with:
+        name: easyhdr-${{ github.sha }}
+        path: ./artifacts
+    - name: VirusTotal Scan
+      id: vt_scan
+      uses: crazy-max/ghaction-virustotal@v5.0.0
+      with:
+        vt_api_key: ${{ secrets.VT_API_KEY }}
+        files: |
+          ./artifacts/easyhdr.exe
+        request_rate: 4
+    - name: Display VirusTotal Results
+      if: always()
+      run: "{\n  echo \"## VirusTotal Scan Results\"\n  echo \"\"\n  \n  # Parse the analysis output (format: filename=url)\n\
+        \  ANALYSIS=\"$VT_ANALYSIS\"\n  \n  if [ -n \"$ANALYSIS\" ]; then\n    # Split by comma if multiple files\n\
+        \    IFS=',' read -ra RESULTS <<< \"$ANALYSIS\"\n  \n    for result in \"${RESULTS[@]}\"; do\n      # Extract\
+        \ filename and URL\n      FILENAME=$(echo \"$result\" | cut -d'=' -f1)\n      VT_URL=$(echo \"$result\"\
+        \ | cut -d'=' -f2-)\n  \n      echo \"### \U0001F50D $FILENAME\"\n      echo \"\"\n      echo \"**VirusTotal\
+        \ Analysis:** [$VT_URL]($VT_URL)\"\n      echo \"\"\n  \n      # Also output to logs for easy copying\n\
+        \      echo \"::notice title=VirusTotal Scan Complete::$FILENAME scanned - View results at $VT_URL\"\n \
+        \   done\n  else\n    echo \"⚠️ No scan results available\"\n    echo \"::warning::VirusTotal scan did not\
+        \ return analysis results\"\n  fi\n} >> \"$GITHUB_STEP_SUMMARY\"\n"
+      env:
+        VT_ANALYSIS: ${{ steps.vt_scan.outputs.analysis }}
+    - name: Save VirusTotal URL to artifact
+      if: steps.vt_scan.outputs.analysis != ''
+      run: |-
+        mkdir -p ./vt-results
+        printf '%s\n' "$VT_ANALYSIS" > ./vt-results/scan-url.txt
+        {
+          echo "# VirusTotal Scan Results"
+          echo ""
+          echo "Scan Date: $(date -u)"
+          echo "Commit: $GITHUB_SHA"
+          IFS=',' read -ra RESULTS <<< "$VT_ANALYSIS"
           for result in "${RESULTS[@]}"; do
-            FILENAME=$(echo "$result" | cut -d'=' -f1)
-            VT_URL=$(echo "$result" | cut -d'=' -f2-)
-            echo "## $FILENAME" >> ./vt-results/RESULTS.md
-            echo "" >> ./vt-results/RESULTS.md
-            echo "**View Analysis:** $VT_URL" >> ./vt-results/RESULTS.md
-            echo "" >> ./vt-results/RESULTS.md
+            echo ""
+            echo "## ${result%%=*}"
+            echo "View analysis: ${result#*=}"
           done
-
-      - name: Upload VirusTotal results artifact
-        if: steps.vt_scan.outputs.analysis != ''
-        uses: actions/upload-artifact@v7
-        with:
-          name: virustotal-results-${{ github.sha }}
-          path: ./vt-results/
-          retention-days: 90
-          if-no-files-found: warn
+        } > ./vt-results/RESULTS.md
+      env:
+        VT_ANALYSIS: ${{ steps.vt_scan.outputs.analysis }}
+    - name: Upload VirusTotal results artifact
+      if: steps.vt_scan.outputs.analysis != ''
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: virustotal-results-${{ github.sha }}
+        path: ./vt-results/
+        retention-days: 90
+        if-no-files-found: warn
+    timeout-minutes: 20
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true

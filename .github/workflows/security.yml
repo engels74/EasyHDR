@@ -1,86 +1,69 @@
----
 name: Security Audit
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    # Run security audit daily at 00:00 UTC
-    - cron: '0 0 * * *'
-  workflow_dispatch:
-
 jobs:
   cargo-audit:
     name: Cargo Audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-
-      - name: Run cargo-audit
-        uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: taiki-e/install-action@v2.87.8
+      with:
+        tool: cargo-audit@0.22.2
+    - run: cargo audit
+    timeout-minutes: 45
   cargo-deny:
     name: Cargo Deny
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-deny
-        run: cargo install --locked cargo-deny
-
-      - name: Run cargo-deny
-        run: cargo deny check
-
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+    - uses: taiki-e/install-action@v2.87.8
+      with:
+        tool: cargo-deny@0.20.2
+    - run: cargo deny --locked check
+    timeout-minutes: 45
   cargo-geiger:
     name: Cargo Geiger (Unsafe Code Check)
-    runs-on: ubuntu-latest
-    continue-on-error: true  # Informational only - unsafe code is expected in Windows APIs and low-level dependencies
+    runs-on: ubuntu-24.04
+    continue-on-error: true
     steps:
-      - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-
-      - name: Install fontconfig development headers
-        # Slint 1.17 upgraded fontique to 0.10, which links the system fontconfig
-        # on Linux via yeslogic-fontconfig-sys. Not needed for the Windows target
-        # we ship, but this job builds the dependency graph on Linux.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-geiger
-        run: cargo install --locked cargo-geiger
-
-      - name: Run cargo-geiger
-        id: geiger
-        continue-on-error: true  # Allow this step to fail without failing the job
-        run: |
-          echo "## Unsafe Code Analysis" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "This is an informational check only. Unsafe code is expected and justified in:" >> $GITHUB_STEP_SUMMARY
-          echo "- Windows FFI calls (Display Configuration API, Toolhelp32)" >> $GITHUB_STEP_SUMMARY
-          echo "- Low-level system integrations" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          cargo geiger --all-features --output-format GitHubMarkdown 2>&1 || cargo geiger --all-features 2>&1 || true
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-      - name: Report Status
-        if: always()
-        run: |
-          if [ "${{ steps.geiger.outcome }}" == "failure" ]; then
-            echo "⚠️ Cargo geiger detected issues (informational only)"
-          else
-            echo "✅ Cargo geiger scan completed"
-          fi
+    - name: Checkout code
+      uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - name: Install fontconfig development headers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfontconfig1-dev
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v2.0.0
+    - uses: taiki-e/install-action@v2.87.8
+      with:
+        tool: cargo-geiger@0.13.0
+    - name: Run cargo-geiger
+      id: geiger
+      continue-on-error: true
+      run: cargo geiger --all-features --output-format GitHubMarkdown | tee -a "$GITHUB_STEP_SUMMARY"
+    - name: Report Status
+      if: always()
+      run: |
+        if [ "${{ steps.geiger.outcome }}" == "failure" ]; then
+          echo "⚠️ Cargo geiger detected issues (informational only)"
+        else
+          echo "✅ Cargo geiger scan completed"
+        fi
+    timeout-minutes: 45
+    if: github.event_name == 'schedule'
+'on':
+  workflow_call: {}
+  workflow_dispatch: {}
+  schedule:
+  - cron: 0 0 * * *
+permissions:
+  contents: read
+concurrency:
+  group: security-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true

@@ -51,7 +51,7 @@ impl UpdateChecker {
     ///
     /// # Arguments
     ///
-    /// * `repo_owner` - GitHub repository owner (e.g., "engels74")
+    /// * `repo_owner` - GitHub repository owner (e.g., "edbfi")
     /// * `repo_name` - GitHub repository name (e.g., "`EasyHDR`")
     /// * `current_version` - Current application version
     /// * `min_check_interval_secs` - Minimum time between checks in seconds (default: 60)
@@ -210,8 +210,7 @@ mod tests {
 
     #[test]
     fn test_should_check_never_checked() {
-        let checker =
-            UpdateChecker::new("engels74", "EasyHDR", Version::parse("0.1.0").unwrap(), 60);
+        let checker = UpdateChecker::new("edbfi", "EasyHDR", Version::parse("0.1.0").unwrap(), 60);
 
         // Should check if never checked before (last_check_time = 0)
         assert!(checker.should_check(0));
@@ -219,8 +218,7 @@ mod tests {
 
     #[test]
     fn test_should_check_rate_limiting() {
-        let checker =
-            UpdateChecker::new("engels74", "EasyHDR", Version::parse("0.1.0").unwrap(), 60);
+        let checker = UpdateChecker::new("edbfi", "EasyHDR", Version::parse("0.1.0").unwrap(), 60);
 
         let now = UpdateChecker::current_timestamp();
 
