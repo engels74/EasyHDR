@@ -981,7 +981,7 @@ impl GuiController {
             drop(controller_guard);
 
             let checker = UpdateChecker::new(
-                "engels74",
+                "edbfi",
                 "EasyHDR",
                 Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
                 60, // Minimum 60 seconds between checks
@@ -1014,7 +1014,7 @@ impl GuiController {
             info!("Starting update check in background thread");
 
             let checker = UpdateChecker::new(
-                "engels74",
+                "edbfi",
                 "EasyHDR",
                 Version::parse(env!("CARGO_PKG_VERSION")).unwrap(),
                 60,

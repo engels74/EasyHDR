@@ -3,9 +3,11 @@
 All PRs, default-branch pushes and exact-commit repair dispatches run the same
 required gate. `ci / required` requires the dispatch guard, native Windows build
 and tests, security workflow, portable Miri workflow and repository hygiene.
-Missing, skipped, cancelled or failed required jobs block merging. Configure this
-GitHub Actions status with up-to-date branches, administrator enforcement and no
-force pushes or deletion. Actions and shared workflows use full release tags.
+Missing, skipped, cancelled or failed required jobs block merging. Review the exact
+head and base, full diff, authorship, all expected CI jobs and native artifacts
+before merging with the maintainer's `ghmerge` function. Repository protections and
+rulesets are intentionally disabled; the manual review remains mandatory. Actions
+and shared workflows use full release tags.
 
 ## Native validation and local parity
 
@@ -55,9 +57,8 @@ when newer Miri/compiler behavior is adopted.
 
 The shared Renovate preset retains non-major grouping, manages Cargo, actions,
 hooks and the stable toolchain, and keeps immutable shared workflow references
-current through PRs. Cargo automerge remains disabled until renderer, hardware and
-UWP integration coverage justify it. Other automerge activation waits for corrected
-shared policy and required-check settings. Numbering alone is not a safety signal.
+current through PRs. Automerge stays disabled for all updates. Renderer, hardware and UWP integration
+still require manual acceptance. Numbering alone is not a safety signal.
 
 Release publishing waits for the full development pipeline. VirusTotal uses release
 credentials only in trusted release jobs; optional default-branch scans require

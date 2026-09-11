@@ -1,11 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>engels74/automation:default#v1.0.0"
-  ],
-  "gitIgnoredAuthors": [
-    "41898282+github-actions[bot]@users.noreply.github.com",
-    "300104067+engels74-bot@users.noreply.github.com"
+    "github>edbfi/automation//default.json#v1.0.0"
   ],
   "packageRules": [
     {

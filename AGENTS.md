@@ -128,7 +128,7 @@ branch has to be added at all three.
 
 - `CI.md` — required gates, locked local commands, automation policy and native coverage limits.
 
-- `.agents/rules/rust-dev-guidelines.md` — 763-line Rust 2024 / 1.93 feature and idiom
+- `.agents/rules/rust-1_98-core.md` — Rust 2024 / 1.98 feature and idiom
   reference, marked `agent_requested`. Read on demand when reaching for a modern-Rust API you
   are unsure is stable; it is not background reading.
 - `README.md` — end-user install, Criterion performance baselines, and the

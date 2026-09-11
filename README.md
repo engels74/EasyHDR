@@ -5,10 +5,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/engels74/EasyHDR/releases"><img src="https://img.shields.io/github/v/tag/engels74/EasyHDR?sort=semver" alt="GitHub tag (SemVer)"></a>
-  <a href="https://github.com/engels74/EasyHDR/blob/main/LICENSE"><img src="https://img.shields.io/github/license/engels74/EasyHDR" alt="License"></a>
-  <a href="https://github.com/engels74/EasyHDR/stargazers"><img src="https://img.shields.io/github/stars/engels74/EasyHDR.svg" alt="GitHub Stars"></a>
-  <a href="https://deepwiki.com/engels74/EasyHDR"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/edbfi/EasyHDR/releases"><img src="https://img.shields.io/github/v/tag/edbfi/EasyHDR?sort=semver" alt="GitHub tag (SemVer)"></a>
+  <a href="https://github.com/edbfi/EasyHDR/blob/main/LICENSE"><img src="https://img.shields.io/github/license/edbfi/EasyHDR" alt="License"></a>
+  <a href="https://github.com/edbfi/EasyHDR/stargazers"><img src="https://img.shields.io/github/stars/edbfi/EasyHDR.svg" alt="GitHub Stars"></a>
+  <a href="https://deepwiki.com/edbfi/EasyHDR"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 </p>
 
 A lightweight Windows utility that automatically enables HDR when you launch configured applications and disables it when you close them.
@@ -42,7 +42,7 @@ The application uses Windows Display Configuration APIs to control HDR state, wi
 - HDR-capable display
 
 **Steps:**
-1. Download the latest release from the [Releases](https://github.com/engels74/EasyHDR/releases) page
+1. Download the latest release from the [Releases](https://github.com/edbfi/EasyHDR/releases) page
 2. Extract `easyhdr.exe` to a folder of your choice
 3. Run `easyhdr.exe`
 4. On first launch, Windows Defender SmartScreen will appear - click "More info" then "Run anyway"

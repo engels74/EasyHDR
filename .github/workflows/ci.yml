@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-    - uses: engels74/automation/actions/dispatch-guard@v1.0.0
+    - uses: edbfi/automation/actions/dispatch-guard@v1.0.0
       with:
         token: ${{ github.token }}
         pr-number: ${{ inputs.pr-number }}
@@ -112,12 +112,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-    - uses: engels74/automation/actions/dispatch-guard@v1.0.0
+    - uses: edbfi/automation/actions/dispatch-guard@v1.0.0
       with:
         token: ${{ github.token }}
         pr-number: ${{ inputs.pr-number }}
         expected-head-sha: ${{ inputs.expected-head-sha }}
-    - uses: engels74/automation/actions/gate@v1.0.0
+    - uses: edbfi/automation/actions/gate@v1.0.0
       with:
         needs: ${{ toJSON(needs) }}
         required: guard build-and-test security miri hygiene
