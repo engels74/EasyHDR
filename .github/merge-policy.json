@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "enabled": true,
+  "ci_workflow": "ci.yml",
+  "required_checks": [
+    "guard",
+    "hygiene",
+    "Build and Test",
+    "security / Cargo Audit",
+    "security / Cargo Deny",
+    "miri / Miri Portable Code",
+    "ci / required"
+  ],
+  "optional_checks": [
+    "security / Cargo Geiger (Unsafe Code Check)",
+    "miri / Miri Full Coverage (Best Effort)",
+    "VirusTotal Scan"
+  ],
+  "check_app_id": 15368,
+  "renovate": {
+    "login": "renovate[bot]",
+    "id": 29139614
+  },
+  "renovate_comment": "/merge-when-green",
+  "minimum_approvals": 0,
+  "deploy_workflows": []
+}
