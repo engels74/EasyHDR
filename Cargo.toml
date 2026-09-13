@@ -76,7 +76,7 @@ windows = { version = "0.62", features = [
     "Foundation",                     # Size type for GetLogo
 ] }
 winreg = "0.56"
-tray-icon = "0.24"
+tray-icon = "0.25"
 rfd = "0.17"  # File dialogs
 tauri-winrt-notification = "0.8"  # Windows toast notifications; 0.8 drops the quick-xml runtime dependency, unwinding quick-xml@0.37.5 from the Windows MSVC build and addressing RUSTSEC-2026-0194/0195 on the supported target.
 open = "5.3"  # Open URLs in default browser
