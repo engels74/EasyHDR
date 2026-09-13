@@ -15,6 +15,10 @@ name: ci
         description: Exact repaired PR commit
         type: string
         default: ''
+      expected-default-sha:
+        description: Exact default-branch commit requested after a checked merge
+        type: string
+        default: ''
 permissions:
   contents: read
   pull-requests: read
@@ -28,6 +32,7 @@ jobs:
         token: ${{ github.token }}
         pr-number: ${{ inputs.pr-number }}
         expected-head-sha: ${{ inputs.expected-head-sha }}
+        expected-default-sha: ${{ inputs.expected-default-sha }}
   build-and-test:
     name: Build and Test
     runs-on: windows-2025
@@ -117,6 +122,7 @@ jobs:
         token: ${{ github.token }}
         pr-number: ${{ inputs.pr-number }}
         expected-head-sha: ${{ inputs.expected-head-sha }}
+        expected-default-sha: ${{ inputs.expected-default-sha }}
     - uses: edbfi/automation/actions/gate@v1.0.0
       with:
         needs: ${{ toJSON(needs) }}
